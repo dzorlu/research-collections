@@ -163,7 +163,7 @@ A `glm5_next.py` strategy for the token-space processor: each `<|image|>` expand
 
 GPU pass criteria: first-turn images reach the engine; `start_len` equals the stored engine view every turn, with no HTTP 502 or 400; each image's expanded length equals `grid.prod() // merge_size**2` for its own grid; samples equal the engine prompt plus reply; the trainer's image build succeeds; step 0 is finite and close to earlier runs (Qwen mean log-prob gap 0.0128, K3 KL 5.2e-4). GLM also: R3 rows equal tokens minus 1, replay mismatch 0, step-0 KL to the reference near 0.
 
-## 6. Questions for Rockdu (draft comment for #4272, not posted)
+## 6. Open questions for the token-space design
 
 1. What does [4/4] cover? If it includes the session server, we would fold our work into his.
 2. Should the session-server branch go into `rockdu/vlm-02-token-space`, or follow after #4272 merges?
