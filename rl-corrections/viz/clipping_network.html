@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clipping methods on a tiny network</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --up: #2a78d6;      /* diverging pole: weight goes up */
+  --down: #e34948;    /* diverging pole: weight goes down */
+  --mid: #f0efec;     /* diverging midpoint */
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --warning: #fab219;
+  --dropped-bg: #ecebe6;
+  --wash: rgba(42,120,214,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --text-primary: #f0efec; --text-secondary: #c3c2b7;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --up: #3987e5; --down: #e66767; --mid: #383835;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --dropped-bg: #252523; --wash: rgba(57,135,229,0.12);
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19; --text-primary: #f0efec; --text-secondary: #c3c2b7;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --up: #3987e5; --down: #e66767; --mid: #383835;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --dropped-bg: #252523; --wash: rgba(57,135,229,0.12);
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root { background: var(--page); color: var(--text-primary); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; padding: 0 0 40px; }
+header { padding: 20px 24px 8px; max-width: 1500px; margin: 0 auto; }
+h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+.sub { color: var(--text-secondary); margin: 0; max-width: 980px; }
+.controls { position: sticky; top: 0; z-index: 5; background: var(--page); border-bottom: 1px solid var(--grid); padding: 10px 24px; }
+.controls .row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-end; max-width: 1500px; margin: 0 auto 8px; }
+.controls .row:last-child { margin-bottom: 0; }
+.ctl { display: flex; flex-direction: column; gap: 2px; }
+.ctl label, .ctl .lab { font-size: 12px; color: var(--text-secondary); }
+.ctl.unused { opacity: 0.4; }
+.ctl input[type=number] { width: 78px; }
+input, select, button { font: inherit; color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; }
+button { cursor: pointer; }
+button.primary { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
+button:hover { filter: brightness(0.95); }
+.seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: var(--surface-1); }
+.seg button.on { background: var(--text-primary); color: var(--surface-1); }
+.stepcount { font-variant-numeric: tabular-nums; color: var(--text-secondary); padding-bottom: 5px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; color: var(--text-secondary); font-size: 12px; max-width: 1500px; margin: 10px auto 0; padding: 0 24px; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.key .ln { width: 22px; height: 0; border-top: 3px solid; border-radius: 2px; display: inline-block; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--border); color: var(--text-secondary); white-space: nowrap; }
+.badge .ic { font-weight: 700; }
+.badge.kept .ic { color: var(--up); }
+.badge.capped .ic { color: var(--warning); }
+.badge.dropped .ic { color: var(--text-muted); }
+main { max-width: 1500px; margin: 0 auto; padding: 12px 24px; display: grid; gap: 16px; }
+main.n1 { grid-template-columns: minmax(0, 1fr); }
+main.n2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 1100px) { main.n2 { grid-template-columns: minmax(0,1fr); } }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.card h2 { font-size: 16px; margin: 0 0 2px; font-weight: 600; }
+.card .expl { color: var(--text-secondary); margin: 0 0 10px; min-height: 40px; }
+.card .body { display: grid; gap: 14px; }
+main.n1 .card .body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.figcap { font-size: 12px; color: var(--text-secondary); margin: 4px 0 0; }
+.figcap b { color: var(--text-primary); font-weight: 600; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+.edge-base { stroke: var(--grid); stroke-width: 1; }
+.edge { stroke-linecap: round; transition: stroke-width 0.25s ease, opacity 0.25s ease; }
+.edge-hit { stroke: transparent; stroke-width: 14; cursor: default; }
+.node { stroke: var(--surface-1); stroke-width: 2; }
+.nodelab { font-size: 12px; fill: var(--text-primary); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.collab { font-size: 11px; fill: var(--text-muted); text-anchor: middle; }
+.pulse { animation: pulse 0.45s ease-out; }
+@keyframes pulse { 0% { opacity: 1; filter: brightness(1.6); } 100% { opacity: 1; filter: none; } }
+.grid-tokens { display: grid; grid-template-columns: 140px repeat(4, minmax(0,1fr)); gap: 2px; }
+.rowhead { font-size: 12px; color: var(--text-secondary); padding: 6px 4px; }
+.rowhead b { color: var(--text-primary); }
+.rowhead .seq { margin-top: 3px; font-size: 11px; }
+.colhead { font-size: 11px; color: var(--text-muted); text-align: center; }
+.cell { border-radius: 6px; padding: 6px 6px 5px; background: var(--wash); border: 1px solid transparent; font-variant-numeric: tabular-nums; font-size: 12px; cursor: default; }
+.cell:hover, .cell:focus { border-color: var(--text-secondary); outline: none; }
+.cell.capped { background: color-mix(in srgb, var(--warning) 18%, transparent); }
+.cell.dropped { background: var(--dropped-bg); color: var(--text-muted); }
+.cell.dropped .tok { text-decoration: line-through; }
+.cell .tok { font-weight: 600; font-size: 13px; }
+.cell .nums { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; color: var(--text-secondary); font-size: 11px; }
+.cell.dropped .nums { color: var(--text-muted); }
+.cell .nums span:nth-child(even) { text-align: right; }
+.cell .wv { font-weight: 600; color: var(--text-primary); }
+.cell.dropped .wv { color: var(--text-muted); }
+.cell .badge { margin-top: 4px; }
+.why { font-size: 12px; color: var(--text-secondary); min-height: 36px; margin-top: 6px; }
+.summary { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+.charts { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+.axis text { font-size: 10px; fill: var(--text-muted); }
+.axis line, .axis path { stroke: var(--axis); }
+.gridline { stroke: var(--grid); stroke-width: 1; }
+.series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.cross { stroke: var(--text-muted); stroke-width: 1; }
+#tip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); padding: 8px 10px; font-size: 12px; max-width: 320px; display: none; color: var(--text-secondary); }
+#tip .v { color: var(--text-primary); font-weight: 600; }
+#tip .row { display: flex; align-items: center; gap: 6px; }
+#tip .ln { width: 14px; border-top: 2px solid; display: inline-block; }
+details { max-width: 1500px; margin: 0 auto; padding: 0 24px; color: var(--text-secondary); font-size: 13px; }
+details table { border-collapse: collapse; font-variant-numeric: tabular-nums; margin: 6px 0; }
+details td, details th { border-bottom: 1px solid var(--grid); padding: 2px 8px; text-align: right; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<header>
+  <h1>How each clipping method changes a tiny network</h1>
+  <p class="sub">A 2-4-3 network writes 2 responses of 4 tokens. Each method gives every token a weight <i>w</i>; the gradient on that token's logits is <i>w</i> &middot; A &middot; (p &minus; e<sub>y</sub>) / 8. Press Step to apply one optimizer step on the same rollout and watch which connections move and which tokens stop counting.</p>
+</header>
+
+<div class="controls" id="controls">
+  <div class="row">
+    <div class="ctl"><label for="method">Method</label><select id="method"></select></div>
+    <div class="ctl"><label for="compare">Compare with</label><select id="compare"></select></div>
+    <div class="ctl"><span class="lab">&nbsp;</span>
+      <div style="display:flex; gap:6px">
+        <button id="btnStep" class="primary">Step</button>
+        <button id="btnPlay">Play</button>
+        <button id="btnReset">Reset</button>
+      </div>
+    </div>
+    <div class="stepcount" id="stepcount">step 0</div>
+    <div class="ctl"><span class="lab">Connections show</span>
+      <div class="seg" id="viewSeg"><button data-v="next" class="on">Next step's change</button><button data-v="cum">Change since reset</button></div>
+    </div>
+    <div class="ctl"><span class="lab">Weights at step 0</span>
+      <div class="seg" id="startSeg"><button data-v="drift" class="on">After drift</button><button data-v="onpolicy">On-policy (r = 1)</button></div>
+    </div>
+    <div class="ctl"><span class="lab">Scenario</span>
+      <div style="display:flex; gap:6px; align-items:center">
+        <button id="btnDefault">Notebook batch</button>
+        <button id="btnRandom">Random</button>
+        <input type="number" id="seed" value="1" min="0" step="1" title="random seed" style="width:64px">
+      </div>
+    </div>
+  </div>
+  <div class="row" id="params"></div>
+</div>
+
+<div class="legend">
+  <span class="key"><span class="ln" style="border-color:var(--up)"></span>weight goes up</span>
+  <span class="key"><span class="ln" style="border-color:var(--down)"></span>weight goes down</span>
+  <span class="key"><span class="ln" style="border-color:var(--grid); border-top-width:1px"></span>no change</span>
+  <span>Line width: size of the change. <span id="scaleNote"></span></span>
+  <span class="badge kept"><span class="ic">&#9679;</span>kept</span>
+  <span class="badge capped"><span class="ic">&#9650;</span>capped</span>
+  <span class="badge dropped"><span class="ic">&#10005;</span>dropped (w = 0)</span>
+  <span id="scenarioNote"></span>
+</div>
+
+<main id="panels" class="n1"></main>
+
+<details>
+  <summary>Definitions and data</summary>
+  <p>r = p_now / p_old: the trainer now vs the trainer at rollout (drift). &rho; = p_old / p_engine: the trainer vs the engine that sampled the token, same weights (mismatch). p_now is the probability of the sampled token under the current weights; p_old under the rollout weights W_old; p_engine under the engine's distribution q. The rollout (tokens, q, W_old) never changes; only the current weights move. The update is plain gradient descent: W &larr; W &minus; lr &middot; dW, with dW summed over all 8 positions. Hover a token to see only its part of the update on the network. Hover a connection for its numbers.</p>
+  <p>Notebook batch: rl-corrections/corrections.ipynb, torch seed 0, float64. "After drift" weights are W_old plus 0.25 &times; Gaussian noise, as in the notebook. Random: a seeded JavaScript generator with the same recipe.</p>
+  <div id="dataTable"></div>
+</details>
+
+<div id="tip"></div>
+
+<script id="scenario-data" type="application/json">{"X":[[[-2.3104118002341765,-0.3732508612577643],[-1.0608166785462863,0.9995093547811761],[-0.8840250045832653,-1.2755469302148053],[-0.623224579866079,-0.8664416019125772]],[[-1.2956271403277857,1.52363162310635],[0.3236605664983738,2.0177260314861085],[1.1357423400213507,-1.226881339001083],[0.07138847120511693,0.3380174030507378]]],"W1_old":[[-0.5663174751548545,0.37311463418249957,-0.8919953148065625,-1.509107744632202],[0.3703935333738153,1.4565026067903366,0.9398099079535257,0.7748488177844168]],"W2_old":[[0.19186942747902466,1.2637947253235853,-1.29043510317847],[-0.7911026902762878,-0.020879472995974358,-0.7184800423600348],[0.5186367489510352,-1.3125219619835629,0.19199507185683629],[0.5427713494727768,-2.2187793699300005,0.2589845413662202]],"q":[[[0.5969977774125241,0.009140513160776046,0.39386170942669974],[0.8551206119477277,0.037296891058662206,0.10758249699361008],[0.3444951168615063,0.1230730745376966,0.5324318086007973],[0.3328568174581949,0.13435698363485407,0.5327861989069511]],[[0.5934896960867604,0.05987816280653219,0.34663214110670737],[0.7160408467313615,0.09595383647487925,0.18800531679375942],[0.05925968796223457,0.20586502420381914,0.7348752878339463],[0.17560427547297255,0.16889825283224777,0.6554974716947796]]],"y":[[0,0,2,2],[0,2,2,0]],"W1":[[-0.230299911001775,0.9689194826372562,-1.0336112877907313,-1.7975119376272293],[-0.255181701491888,1.6753920454397302,0.2716686824981669,0.7670156679419641]],"W2":[[0.31656596682922494,1.132963909037487,-1.3533049780697288],[-1.0549856428134616,-0.16069478940193796,-0.7484071927945425],[0.4777503178339287,-1.3751377744566018,-0.08006105852124973],[0.5438731609553142,-2.1605821506842973,0.05394914442606524]],"A":[1.0,-1.0]}</script>
+
+<script id="core">
+// Pure math: no DOM. Extracted and run by node for verification.
+(function (root) {
+  const TOK = ["yes", "no", "maybe"];
+  const METHODS = [
+    { id: "reinforce", name: "REINFORCE", params: [] },
+    { id: "ppo", name: "PPO clip", params: ["epsLow", "epsHigh"] },
+    { id: "cispo_paper", name: "CISPO (paper)", params: ["cispoCap"] },
+    { id: "cispo_miles", name: "CISPO (miles)", params: ["cispoCap"] },
+    { id: "tis", name: "TIS = decoupled PPO", params: ["epsLow", "epsHigh", "tisCap"] },
+    { id: "mis", name: "MIS", params: ["epsLow", "epsHigh", "misLo", "misHi"] },
+    { id: "icepop", name: "IcePop", params: ["epsLow", "epsHigh", "icepopHi"] },
+    { id: "opsm", name: "OPSM", params: ["epsLow", "epsHigh", "opsmDelta"] },
+    { id: "gspo", name: "GSPO", params: ["epsLow", "epsHigh"] },
+    { id: "score_centering", name: "Score centering", params: [] },
+  ];
+  const DEFAULTS = { epsLow: 0.2, epsHigh: 0.28, cispoCap: 4, tisCap: 2, misLo: 0.5, misHi: 2, icepopHi: 2, opsmDelta: 1e-4, A0: 1, A1: -1, lr: 1 };
+
+  function f(x) {
+    if (!isFinite(x)) return String(x);
+    if (x !== 0 && Math.abs(x) < 0.01) return x.toExponential(1);
+    return x.toFixed(2);
+  }
+  function dims(S) { return { B: S.X.length, T: S.X[0].length, D: S.X[0][0].length, H: S.W1_old[0].length, V: S.W2_old[0].length }; }
+
+  // h = tanh(x W1), z = h W2, logp = log_softmax(z). Returns per-position arrays.
+  function forward(S, W1, W2) {
+    const { B, T, D, H, V } = dims(S);
+    const h = [], logp = [], p = [];
+    for (let b = 0; b < B; b++) {
+      h.push([]); logp.push([]); p.push([]);
+      for (let t = 0; t < T; t++) {
+        const x = S.X[b][t];
+        const hh = new Array(H);
+        for (let j = 0; j < H; j++) { let s = 0; for (let d = 0; d < D; d++) s += x[d] * W1[d][j]; hh[j] = Math.tanh(s); }
+        const z = new Array(V);
+        for (let k = 0; k < V; k++) { let s = 0; for (let j = 0; j < H; j++) s += hh[j] * W2[j][k]; z[k] = s; }
+        const m = Math.max(...z);
+        let lse = 0; for (let k = 0; k < V; k++) lse += Math.exp(z[k] - m);
+        lse = m + Math.log(lse);
+        const lp = z.map(v => v - lse);
+        h[b].push(hh); logp[b].push(lp); p[b].push(lp.map(Math.exp));
+      }
+    }
+    return { h, logp, p };
+  }
+
+  // PPO clip on ratio x with advantage a: w = x, or 0 where the clamp wins.
+  function ppoW(x, a, P, name) {
+    const hi = 1 + P.epsHigh, lo = 1 - P.epsLow;
+    if (a > 0 && x > hi) return { w: 0, state: "dropped", reason: `PPO: A > 0 and ${name} = ${f(x)} > ${f(hi)}` };
+    if (a < 0 && x < lo) return { w: 0, state: "dropped", reason: `PPO: A < 0 and ${name} = ${f(x)} < ${f(lo)}` };
+    let reason = `PPO: ${name} = ${f(x)} is inside the band on the side A pushes, so w = ${name}`;
+    if (a > 0 && x < lo) reason = `PPO: A > 0, ${name} = ${f(x)} < ${f(lo)} but PPO only clips the upper side when A > 0, so w = ${name}`;
+    if (a < 0 && x > hi) reason = `PPO: A < 0, ${name} = ${f(x)} > ${f(hi)} but PPO only clips the lower side when A < 0, so w = ${name}`;
+    return { w: x, state: "kept", reason };
+  }
+
+  // Per-token weights, states and reasons for one method at the current weights.
+  function weights(S, cache, W1, W2, method, P) {
+    const { B, T } = dims(S);
+    const fw = forward(S, W1, W2);
+    const A = [P.A0, P.A1].slice(0, B);
+    const out = { w: [], state: [], reason: [], r: [], rho: [], pNow: [], seq: [], fw, A };
+    for (let b = 0; b < B; b++) {
+      const lpNow = [], lpOld = [], lpEng = [];
+      for (let t = 0; t < T; t++) {
+        const y = S.y[b][t];
+        lpNow.push(fw.logp[b][t][y]); lpOld.push(cache.logpOld[b][t]); lpEng.push(Math.log(S.q[b][t][y]));
+      }
+      const r = lpNow.map((v, t) => Math.exp(v - lpOld[t]));
+      const rho = lpOld.map((v, t) => Math.exp(v - lpEng[t]));
+      const a = A[b];
+      const wRow = [], sRow = [], rRow = [];
+      let seq = null;
+      if (method === "opsm") {
+        const kl = lpOld.reduce((s, v, t) => s + v - lpNow[t], 0) / T;
+        const drop = a < 0 && kl > P.opsmDelta;
+        seq = { label: `avg log-prob drop = ${kl.toExponential(1)} (δ = ${P.opsmDelta})`, decision: drop ? "dropped" : "kept",
+                text: drop ? `A < 0 and ${kl.toExponential(2)} > δ = ${P.opsmDelta}: whole response dropped` :
+                      (a < 0 ? `${kl.toExponential(2)} ≤ δ = ${P.opsmDelta}: response kept, PPO w per token` : `A ≥ 0: response kept, PPO w per token`) };
+      }
+      let sRatio = null, sRes = null;
+      if (method === "gspo") {
+        sRatio = Math.exp(lpNow.reduce((s, v, t) => s + v - lpOld[t], 0) / T);
+        sRes = ppoW(sRatio, a, P, "s");
+        seq = { label: `response ratio s = ${f(sRatio)}`, decision: sRes.state,
+                text: sRes.state === "dropped" ? sRes.reason.replace("PPO", "GSPO") + ": whole response dropped" : `GSPO: s = ${f(sRatio)} is not clipped: every token gets w = s` };
+      }
+      for (let t = 0; t < T; t++) {
+        let res;
+        const pe = S.q[b][t][S.y[b][t]], pn = Math.exp(lpNow[t]);
+        switch (method) {
+          case "reinforce": res = { w: 1, state: "kept", reason: "REINFORCE: every token gets w = 1" }; break;
+          case "ppo": res = ppoW(r[t], a, P, "r"); break;
+          case "cispo_paper":
+            res = r[t] > P.cispoCap ? { w: P.cispoCap, state: "capped", reason: `CISPO: r = ${f(r[t])} > cap ${f(P.cispoCap)}, w held at the cap` }
+                                    : { w: r[t], state: "kept", reason: `CISPO: w = r = ${f(r[t])} (below cap ${f(P.cispoCap)})` };
+            break;
+          case "cispo_miles": {
+            const x = pn / pe;
+            res = x > P.cispoCap ? { w: P.cispoCap, state: "capped", reason: `CISPO (miles): p_now / p_engine = ${f(x)} > cap ${f(P.cispoCap)}, w held at the cap` }
+                                 : { w: x, state: "kept", reason: `CISPO (miles): w = p_now / p_engine = ${f(pn)} / ${f(pe)} = ${f(x)}` };
+            break;
+          }
+          case "tis": {
+            const pp = ppoW(r[t], a, P, "r");
+            if (pp.state === "dropped") { res = pp; break; }
+            if (rho[t] > P.tisCap) res = { w: pp.w * P.tisCap, state: "capped", reason: `TIS: ρ = ${f(rho[t])} > cap ${f(P.tisCap)}, so w = r × ${f(P.tisCap)} = ${f(pp.w * P.tisCap)}` };
+            else res = { w: pp.w * rho[t], state: "kept", reason: `TIS: PPO kept it; w = r × ρ = ${f(r[t])} × ${f(rho[t])} = ${f(pp.w * rho[t])}` };
+            break;
+          }
+          case "mis": {
+            const pp = ppoW(r[t], a, P, "r");
+            if (pp.state === "dropped") { res = pp; break; }
+            if (rho[t] < P.misLo || rho[t] > P.misHi) res = { w: 0, state: "dropped", reason: `MIS: ρ = ${f(rho[t])} is outside [${f(P.misLo)}, ${f(P.misHi)}]` };
+            else res = { w: pp.w * rho[t], state: "kept", reason: `MIS: PPO kept it and ρ = ${f(rho[t])} is inside [${f(P.misLo)}, ${f(P.misHi)}]; w = r × ρ = ${f(pp.w * rho[t])}` };
+            break;
+          }
+          case "icepop": {
+            const pp = ppoW(r[t], a, P, "r");
+            if (pp.state === "dropped") { res = pp; break; }
+            if (rho[t] > P.icepopHi) res = { w: 0, state: "dropped", reason: `IcePop: ρ = ${f(rho[t])} > ${f(P.icepopHi)}` };
+            else res = { w: pp.w * rho[t], state: "kept", reason: `IcePop: PPO kept it and ρ = ${f(rho[t])} ≤ ${f(P.icepopHi)}; w = r × ρ = ${f(pp.w * rho[t])}` };
+            break;
+          }
+          case "opsm":
+            if (seq.decision === "dropped") res = { w: 0, state: "dropped", reason: `OPSM: ${seq.text}` };
+            else res = ppoW(r[t], a, P, "r");
+            break;
+          case "gspo":
+            res = sRes.state === "dropped" ? { w: 0, state: "dropped", reason: seq.text } : { w: sRatio, state: "kept", reason: seq.text };
+            break;
+          case "score_centering":
+            res = { w: 1, state: "kept", reason: `Score centering: no w; the logits get A (q − e_y) / N, q = engine probs [${S.q[b][t].map(f).join(", ")}]` };
+            break;
+          default: throw new Error("unknown method " + method);
+        }
+        wRow.push(res.w); sRow.push(res.state); rRow.push(res.reason);
+      }
+      out.w.push(wRow); out.state.push(sRow); out.reason.push(rRow); out.r.push(r); out.rho.push(rho);
+      out.pNow.push(lpNow.map(Math.exp)); out.seq.push(seq);
+    }
+    return out;
+  }
+
+  // Hand-written backward. dz = w A (p - e_y) / N (score centering: A (q - e_y) / N).
+  // dW2 = h^T dz, dh = dz W2^T, dz1 = (1 - h^2) dh, dW1 = x^T dz1, summed over positions.
+  function gradient(S, cache, W1, W2, method, P) {
+    const { B, T, D, H, V } = dims(S);
+    const N = B * T;
+    const info = weights(S, cache, W1, W2, method, P);
+    const zeros = (r, c) => Array.from({ length: r }, () => new Array(c).fill(0));
+    const dW1 = zeros(D, H), dW2 = zeros(H, V);
+    const perPos = [];
+    for (let b = 0; b < B; b++) {
+      perPos.push([]);
+      for (let t = 0; t < T; t++) {
+        const pW1 = zeros(D, H), pW2 = zeros(H, V);
+        const hh = info.fw.h[b][t], x = S.X[b][t], y = S.y[b][t];
+        const base = method === "score_centering" ? S.q[b][t] : info.fw.p[b][t];
+        const coef = (method === "score_centering" ? 1 : info.w[b][t]) * info.A[b] / N;
+        const dz = base.map((v, k) => coef * (v - (k === y ? 1 : 0)));
+        const dh = new Array(H).fill(0);
+        for (let j = 0; j < H; j++) for (let k = 0; k < V; k++) { pW2[j][k] = hh[j] * dz[k]; dh[j] += dz[k] * W2[j][k]; }
+        for (let j = 0; j < H; j++) { const dz1 = (1 - hh[j] * hh[j]) * dh[j]; for (let d = 0; d < D; d++) pW1[d][j] = x[d] * dz1; }
+        for (let d = 0; d < D; d++) for (let j = 0; j < H; j++) dW1[d][j] += pW1[d][j];
+        for (let j = 0; j < H; j++) for (let k = 0; k < V; k++) dW2[j][k] += pW2[j][k];
+        perPos[b].push({ dW1: pW1, dW2: pW2 });
+      }
+    }
+    return { dW1, dW2, perPos, info };
+  }
+
+  function prepare(S) {
+    const fw = forward(S, S.W1_old, S.W2_old);
+    return { logpOld: S.y.map((row, b) => row.map((y, t) => fw.logp[b][t][y])) };
+  }
+
+  // Seeded scenario with the notebook's recipe.
+  function randomScenario(seed) {
+    let a = (seed >>> 0) + 0x9e3779b9;
+    const u = () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const n = () => { let x = 0; while (x === 0) x = u(); return Math.sqrt(-2 * Math.log(x)) * Math.cos(2 * Math.PI * u()); };
+    const B = 2, T = 4, D = 2, H = 4, V = 3;
+    const mat = (r, c, s = 1) => Array.from({ length: r }, () => Array.from({ length: c }, () => s * n()));
+    const X = Array.from({ length: B }, () => mat(T, D));
+    const W1_old = mat(D, H), W2_old = mat(H, V);
+    const S0 = { X, W1_old, W2_old, q: [], y: [] };
+    const fw = forward(S0, W1_old, W2_old);
+    const q = [], y = [];
+    for (let b = 0; b < B; b++) {
+      q.push([]); y.push([]);
+      for (let t = 0; t < T; t++) {
+        const z = fw.logp[b][t].map(v => v + 0.6 * n());
+        const m = Math.max(...z); const e = z.map(v => Math.exp(v - m)); const s = e.reduce((x1, x2) => x1 + x2, 0);
+        const qq = e.map(v => v / s); q[b].push(qq);
+        let c = u(), k = 0; while (k < V - 1 && c > qq[k]) { c -= qq[k]; k++; }
+        y[b].push(k);
+      }
+    }
+    const W1 = W1_old.map(r => r.map(v => v + 0.25 * n()));
+    const W2 = W2_old.map(r => r.map(v => v + 0.25 * n()));
+    return { X, W1_old, W2_old, q, y, W1, W2, A: [1, -1] };
+  }
+
+  root.Core = { TOK, METHODS, DEFAULTS, forward, weights, gradient, prepare, randomScenario, fmt: f };
+})(typeof window !== "undefined" ? window : globalThis);
+</script>
+
+<script>
+(function () {
+  const C = window.Core;
+  const EXPL = {
+    reinforce: "Every token gets w = 1. Nothing limits how far repeated steps on one rollout can push the weights, so connections keep lighting up on every step.",
+    ppo: "w = r = p_now / p_old. A token is dropped (w = 0) once r leaves the band on the side A pushes: A > 0 and r > 1 + eps_high, or A < 0 and r < 1 − eps_low. On the other side r is not capped.",
+    cispo_paper: "w = min(r, cap), held fixed during backward. No token is ever dropped. A token whose r passes the cap is trained at the cap instead.",
+    cispo_miles: "Like CISPO, but the ratio is p_now / p_engine, so the weight also absorbs the engine vs trainer gap. w = min(p_now / p_engine, cap).",
+    tis: "PPO's w times min(ρ, TIS cap), ρ = p_old / p_engine. The PPO clip limits drift; the ρ factor corrects the engine gap and is capped. miles --use-tis computes this.",
+    mis: "PPO's w times ρ, but a token whose ρ is outside [lo, hi] is dropped. PPO's own drops still apply.",
+    icepop: "PPO's w times ρ, but a token whose ρ is above the upper bound is dropped. PPO's own drops still apply.",
+    opsm: "PPO's w per token, plus one check per response: a response with A < 0 is dropped whole once its average log-prob drop, mean_t(log p_old − log p_now), is above δ.",
+    gspo: "One ratio per response, s = exp(mean_t(log p_now − log p_old)), and PPO's clip on s. All 4 tokens of a response get w = s, or all are dropped together.",
+    score_centering: "No w. The gradient on the logits is A (q − e_y) / N, with the engine's probs q in place of the trainer's p. It removes the pull toward the engine. It does not stop drift: the push on each token's logits, A (q − e_y) / N, does not depend on the current weights, so repeated steps keep moving them."
+  };
+  const PARAMS = [
+    { k: "epsLow", label: "eps_low", step: 0.01 }, { k: "epsHigh", label: "eps_high", step: 0.01 },
+    { k: "cispoCap", label: "CISPO cap", step: 0.1 }, { k: "tisCap", label: "TIS cap", step: 0.1 },
+    { k: "misLo", label: "MIS low", step: 0.05 }, { k: "misHi", label: "MIS high", step: 0.1 },
+    { k: "icepopHi", label: "IcePop upper", step: 0.1 }, { k: "opsmDelta", label: "OPSM δ", step: 0.0001 },
+    { k: "A0", label: "A, response 0", step: 0.1 }, { k: "A1", label: "A, response 1", step: 0.1 },
+    { k: "lr", label: "learning rate", step: 0.1 },
+  ];
+  const DEFAULT_S = JSON.parse(document.getElementById("scenario-data").textContent);
+  const P = Object.assign({}, C.DEFAULTS);
+  const st = { S: DEFAULT_S, scenario: "default", seed: 1, cache: null, start: "drift", view: "next", step: 0, panels: [], play: null, hover: null, gRef: 1 };
+  const SERIES = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"];
+  const NS = "http://www.w3.org/2000/svg";
+  const clone = M => M.map(r => r.slice());
+  const fmt = C.fmt;
+  const el = (tag, attrs = {}, parent) => { const e = tag.startsWith("svg:") ? document.createElementNS(NS, tag.slice(4)) : document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === "text") e.textContent = v; else if (k === "class") e.setAttribute("class", v); else e.setAttribute(k, v); } if (parent) parent.appendChild(e); return e; };
+
+  // ---------- controls ----------
+  const selM = document.getElementById("method"), selC = document.getElementById("compare");
+  C.METHODS.forEach(m => { el("option", { value: m.id, text: m.name }, selM); });
+  el("option", { value: "", text: "none" }, selC);
+  C.METHODS.forEach(m => { el("option", { value: m.id, text: m.name }, selC); });
+  selM.value = "ppo"; selC.value = "";
+  const prow = document.getElementById("params");
+  const pInputs = {};
+  PARAMS.forEach(p => {
+    const d = el("div", { class: "ctl", id: "ctl-" + p.k }, prow);
+    el("label", { for: "p-" + p.k, text: p.label }, d);
+    const i = el("input", { type: "number", id: "p-" + p.k, step: p.step, value: P[p.k] }, d);
+    i.addEventListener("input", () => { const v = parseFloat(i.value); if (isFinite(v)) { P[p.k] = v; refresh(); } });
+    pInputs[p.k] = d;
+  });
+  function markUsed() {
+    const used = new Set(["A0", "A1", "lr"]);
+    st.panels.forEach(pn => C.METHODS.find(m => m.id === pn.method).params.forEach(k => used.add(k)));
+    PARAMS.forEach(p => pInputs[p.k].classList.toggle("unused", !used.has(p.k)));
+  }
+  function segment(id, cb) {
+    const seg = document.getElementById(id);
+    seg.querySelectorAll("button").forEach(b => b.addEventListener("click", () => { seg.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); cb(b.dataset.v); }));
+  }
+  segment("viewSeg", v => { st.view = v; render(); });
+  segment("startSeg", v => { st.start = v; reset(); });
+  selM.addEventListener("change", () => buildPanels());
+  selC.addEventListener("change", () => buildPanels());
+  document.getElementById("btnStep").addEventListener("click", () => { stopPlay(); doStep(); });
+  document.getElementById("btnPlay").addEventListener("click", togglePlay);
+  document.getElementById("btnReset").addEventListener("click", () => { stopPlay(); reset(); });
+  document.getElementById("btnDefault").addEventListener("click", () => { st.S = DEFAULT_S; st.scenario = "default"; P.A0 = DEFAULT_S.A[0]; P.A1 = DEFAULT_S.A[1]; syncInputs(); reset(); });
+  document.getElementById("btnRandom").addEventListener("click", () => { const sd = document.getElementById("seed"); st.seed = (parseInt(sd.value, 10) || 0); st.S = C.randomScenario(st.seed); st.scenario = "random"; sd.value = st.seed + 1; reset(); });
+  function syncInputs() { PARAMS.forEach(p => { document.getElementById("p-" + p.k).value = P[p.k]; }); }
+
+  function stopPlay() { if (st.play) { clearInterval(st.play); st.play = null; document.getElementById("btnPlay").textContent = "Play"; } }
+  function togglePlay() { if (st.play) return stopPlay(); st.play = setInterval(() => { if (st.step >= 400) return stopPlay(); doStep(); }, 280); document.getElementById("btnPlay").textContent = "Pause"; }
+
+  // ---------- state ----------
+  function startWeights() { return st.start === "onpolicy" ? [clone(st.S.W1_old), clone(st.S.W2_old)] : [clone(st.S.W1), clone(st.S.W2)]; }
+  function buildPanels() {
+    const ids = [selM.value]; if (selC.value && selC.value !== selM.value) ids.push(selC.value);
+    st.panels = ids.map(id => ({ method: id }));
+    reset();
+  }
+  function reset() {
+    st.cache = C.prepare(st.S); st.step = 0;
+    const [W1, W2] = startWeights();
+    st.W1start = W1; st.W2start = W2;
+    st.panels.forEach(pn => { pn.W1 = clone(W1); pn.W2 = clone(W2); pn.hist = []; });
+    layout(); refresh();
+  }
+  function refresh() {
+    // gRef: largest REINFORCE gradient entry at the step-0 weights; fixes the "full width" for "next step" view.
+    const g = C.gradient(st.S, st.cache, st.W1start, st.W2start, "reinforce", P);
+    st.gRef = Math.max(1e-12, ...g.dW1.flat().map(Math.abs), ...g.dW2.flat().map(Math.abs));
+    st.panels.forEach(pn => { pn.g = C.gradient(st.S, st.cache, pn.W1, pn.W2, pn.method, P); pn.hist[st.step] = pn.g.info.pNow.map(r => r.slice()); pn.hist.length = st.step + 1; });
+    markUsed(); render();
+  }
+  function doStep() {
+    st.panels.forEach(pn => {
+      const g = pn.g;
+      pn.W1 = pn.W1.map((r, d) => r.map((v, j) => v - P.lr * g.dW1[d][j]));
+      pn.W2 = pn.W2.map((r, j) => r.map((v, k) => v - P.lr * g.dW2[j][k]));
+    });
+    st.step++;
+    st.pulse = true; refresh(); st.pulse = false;
+  }
+
+  // ---------- layout ----------
+  const tip = document.getElementById("tip");
+  function showTip(evt, nodes) { tip.replaceChildren(...nodes); tip.style.display = "block"; const x = evt.clientX + 14, y = evt.clientY + 14; const w = tip.offsetWidth, h = tip.offsetHeight; tip.style.left = Math.min(x, innerWidth - w - 8) + "px"; tip.style.top = Math.min(y, innerHeight - h - 8) + "px"; }
+  function hideTip() { tip.style.display = "none"; }
+  const tline = (txt, cls) => el("div", { class: cls || "", text: txt });
+
+  const NET = { W: 580, H: 300, xIn: 70, xHid: 260, xOut: 450, r: 17 };
+  const nodeY = (n, i) => { const gap = 62; return NET.H / 2 + (i - (n - 1) / 2) * gap + 8; };
+
+  function layout() {
+    const main = document.getElementById("panels");
+    main.className = st.panels.length === 2 ? "n2" : "n1";
+    main.replaceChildren();
+    const { D, H, V, B, T } = { D: st.S.X[0][0].length, H: st.S.W1_old[0].length, V: st.S.W2_old[0].length, B: st.S.X.length, T: st.S.X[0].length };
+    st.panels.forEach((pn, pi) => {
+      const card = el("section", { class: "card" }, main);
+      pn.title = el("h2", {}, card);
+      pn.expl = el("p", { class: "expl" }, card);
+      const body = el("div", { class: "body" }, card);
+      const left = el("div", {}, body), right = el("div", {}, body);
+      // network
+      const svg = el("svg:svg", { viewBox: `0 0 ${NET.W} ${NET.H + 10}`, role: "img", "aria-label": "network weight changes" }, left);
+      el("svg:text", { class: "collab", x: NET.xIn, y: 12, text: "input x" }, svg);
+      el("svg:text", { class: "collab", x: NET.xHid, y: 12, text: "hidden h = tanh(x W1)" }, svg);
+      el("svg:text", { class: "collab", x: NET.xOut, y: 12, text: "logits z = h W2" }, svg);
+      const gBase = el("svg:g", {}, svg), gEdge = el("svg:g", {}, svg), gHit = el("svg:g", {}, svg), gNode = el("svg:g", {}, svg);
+      pn.edges = [];
+      const addEdge = (layer, a, b, x1, y1, x2, y2, name) => {
+        el("svg:line", { class: "edge-base", x1, y1, x2, y2 }, gBase);
+        const line = el("svg:line", { class: "edge", x1, y1, x2, y2 }, gEdge);
+        const hit = el("svg:line", { class: "edge-hit", x1, y1, x2, y2 }, gHit);
+        const E = { layer, a, b, line, name };
+        hit.addEventListener("pointermove", e => edgeTip(e, pn, E));
+        hit.addEventListener("pointerleave", () => { hideTip(); line.style.filter = ""; });
+        pn.edges.push(E);
+      };
+      for (let d = 0; d < D; d++) for (let j = 0; j < H; j++) addEdge(1, d, j, NET.xIn, nodeY(D, d), NET.xHid, nodeY(H, j), `W1[x${d + 1} → h${j + 1}]`);
+      for (let j = 0; j < H; j++) for (let k = 0; k < V; k++) addEdge(2, j, k, NET.xHid, nodeY(H, j), NET.xOut, nodeY(V, k), `W2[h${j + 1} → ${C.TOK[k]}]`);
+      pn.nodes = { in: [], hid: [], out: [] };
+      for (let d = 0; d < D; d++) { const c = el("svg:circle", { class: "node", cx: NET.xIn, cy: nodeY(D, d), r: NET.r }, gNode); pn.nodes.in.push(c); pn.nodes.inT = pn.nodes.inT || []; pn.nodes.inT.push(el("svg:text", { class: "nodelab", x: NET.xIn, y: nodeY(D, d), text: `x${d + 1}` }, gNode)); }
+      for (let j = 0; j < H; j++) { pn.nodes.hid.push(el("svg:circle", { class: "node", cx: NET.xHid, cy: nodeY(H, j), r: NET.r }, gNode)); el("svg:text", { class: "nodelab", x: NET.xHid, y: nodeY(H, j), text: `h${j + 1}` }, gNode); }
+      pn.outVal = [];
+      for (let k = 0; k < V; k++) { pn.nodes.out.push(el("svg:circle", { class: "node", cx: NET.xOut, cy: nodeY(V, k), r: NET.r }, gNode)); el("svg:text", { class: "nodelab", x: NET.xOut + NET.r + 6, y: nodeY(V, k), text: C.TOK[k], "text-anchor": "start", style: "text-anchor:start" }, gNode); pn.outVal.push(el("svg:text", { class: "collab", x: NET.xOut + NET.r + 6, y: nodeY(V, k) + 16, style: "text-anchor:start" }, gNode)); }
+      pn.netcap = el("p", { class: "figcap" }, left);
+      // token grid
+      const grid = el("div", { class: "grid-tokens" }, right);
+      el("div", {}, grid);
+      for (let t = 0; t < T; t++) el("div", { class: "colhead", text: `token ${t + 1}` }, grid);
+      pn.cells = []; pn.rowheads = [];
+      for (let b = 0; b < B; b++) {
+        pn.rowheads.push(el("div", { class: "rowhead" }, grid));
+        pn.cells.push([]);
+        for (let t = 0; t < T; t++) {
+          const c = el("div", { class: "cell", tabindex: "0" }, grid);
+          const enter = () => { st.hover = { pi, b, t }; renderPanel(pn, pi); pn.why.textContent = pn.g.info.reason[b][t]; };
+          const leave = () => { st.hover = null; renderPanel(pn, pi); pn.why.textContent = "Hover a token to see why it got its w, and its part of the update on the network."; };
+          c.addEventListener("pointerenter", enter); c.addEventListener("focus", enter);
+          c.addEventListener("pointerleave", leave); c.addEventListener("blur", leave);
+          pn.cells[b].push(c);
+        }
+      }
+      pn.why = el("div", { class: "why", text: "Hover a token to see why it got its w, and its part of the update on the network." }, right);
+      pn.summary = el("div", { class: "summary" }, right);
+      // charts
+      const charts = el("div", { class: "charts" }, right);
+      pn.charts = [];
+      for (let b = 0; b < B; b++) {
+        const wrap = el("div", {}, charts);
+        const svgc = el("svg:svg", { viewBox: "0 0 260 150" }, wrap);
+        const cap = el("p", { class: "figcap" }, wrap);
+        pn.charts.push({ svg: svgc, cap, b });
+      }
+      pn.chartLegend = el("div", { class: "legend", style: "padding:0; margin:4px 0 0" }, right);
+      for (let t = 0; t < T; t++) { const k = el("span", { class: "key" }, pn.chartLegend); el("span", { class: "ln", style: `border-color:${SERIES[t]}` }, k); k.appendChild(document.createTextNode(`token ${t + 1}`)); }
+      el("span", { text: "Dashed line: the token is dropped at this step." }, pn.chartLegend);
+    });
+    renderDataTable();
+  }
+
+  // ---------- rendering ----------
+  function edgeDelta(pn, E) {
+    const pick = (o) => E.layer === 1 ? o.dW1[E.a][E.b] : o.dW2[E.a][E.b];
+    let g;
+    if (st.hover && st.panels[st.hover.pi] === pn) g = pick(pn.g.perPos[st.hover.b][st.hover.t]); else g = pick(pn.g);
+    const next = -P.lr * g;
+    const cur = E.layer === 1 ? pn.W1[E.a][E.b] : pn.W2[E.a][E.b];
+    const start = E.layer === 1 ? st.W1start[E.a][E.b] : st.W2start[E.a][E.b];
+    return { next, cum: cur - start, cur, start };
+  }
+  function edgeTip(e, pn, E) {
+    const d = edgeDelta(pn, E);
+    E.line.style.filter = "brightness(1.3)";
+    const scope = st.hover ? ` (token ${st.hover.t + 1} of response ${st.hover.b} only)` : "";
+    showTip(e, [tline(E.name, "v"), tline(`weight now ${fmt(d.cur)}`), tline(`next step's change ${d.next >= 0 ? "+" : ""}${fmt(d.next)}${scope}`), tline(`change since reset ${d.cum >= 0 ? "+" : ""}${fmt(d.cum)}`)]);
+  }
+  function cumMax() { let m = 1e-9; st.panels.forEach(pn => pn.edges.forEach(E => { m = Math.max(m, Math.abs(edgeDelta(pn, E).cum)); })); return m; }
+
+  function render() {
+    document.getElementById("stepcount").textContent = `step ${st.step}`;
+    document.getElementById("scaleNote").textContent = st.view === "next"
+      ? "Full width = the largest single change REINFORCE makes at step 0 with this learning rate."
+      : "Full width = the largest change since reset across the panels shown.";
+    document.getElementById("scenarioNote").textContent = st.scenario === "default" ? "Batch: notebook (seed 0)" : `Batch: random (seed ${st.seed})`;
+    st.cmax = cumMax();
+    st.panels.forEach((pn, pi) => renderPanel(pn, pi));
+  }
+
+  function renderPanel(pn, pi) {
+    const m = C.METHODS.find(x => x.id === pn.method);
+    const info = pn.g.info;
+    pn.title.textContent = m.name;
+    pn.expl.textContent = EXPL[pn.method];
+    const hov = st.hover && st.panels[st.hover.pi] === pn ? st.hover : null;
+    // edges
+    let moving = 0;
+    pn.edges.forEach(E => {
+      const d = edgeDelta(pn, E);
+      const v = st.view === "next" ? d.next : d.cum;
+      const ref = st.view === "next" ? P.lr * st.gRef : st.cmax;
+      const frac = Math.min(1, Math.abs(v) / Math.max(ref, 1e-12));
+      const tiny = frac < 1e-3;
+      if (!tiny) moving++;
+      E.line.setAttribute("stroke", v >= 0 ? "var(--up)" : "var(--down)");
+      E.line.style.strokeWidth = tiny ? 0 : (0.8 + 11 * Math.sqrt(frac)).toFixed(2);
+      E.line.style.opacity = tiny ? 0 : 1;
+      if (st.pulse && !tiny) { E.line.classList.remove("pulse"); void E.line.getBBox; E.line.classList.add("pulse"); }
+    });
+    // nodes: activations of the hovered token, else neutral
+    const div = (v) => { const a = Math.min(1, Math.abs(v)); const c = v >= 0 ? "var(--up)" : "var(--down)"; return `color-mix(in srgb, ${c} ${Math.round(15 + 70 * a)}%, var(--mid))`; };
+    pn.nodes.in.forEach((c, d) => c.setAttribute("fill", hov ? div(st.S.X[hov.b][hov.t][d] / 2.5) : "var(--mid)"));
+    pn.nodes.hid.forEach((c, j) => c.setAttribute("fill", hov ? div(info.fw.h[hov.b][hov.t][j]) : "var(--mid)"));
+    pn.nodes.out.forEach((c, k) => {
+      const isY = hov && st.S.y[hov.b][hov.t] === k;
+      c.setAttribute("fill", "var(--mid)");
+      c.setAttribute("stroke", isY ? "var(--text-primary)" : "var(--surface-1)");
+      pn.outVal[k].textContent = hov ? `p ${fmt(info.fw.p[hov.b][hov.t][k])}${isY ? ", sampled" : ""}` : "";
+    });
+    const viewTxt = st.view === "next" ? "the change the next Step applies, −lr · dW" : "the total change since Reset";
+    pn.netcap.replaceChildren();
+    el("b", { text: `Figure ${pi * 3 + 1}. ` }, pn.netcap);
+    pn.netcap.appendChild(document.createTextNode(hov
+      ? `Network: only the part of the next step's change that comes from token ${hov.t + 1} of response ${hov.b}. Node fill: activation for this token (blue positive, red negative). The sampled output has a dark ring.`
+      : `Network at step ${st.step}: each connection shows ${viewTxt}. ${moving} of ${pn.edges.length} connections move.`));
+    // grid
+    const { B, T } = { B: info.w.length, T: info.w[0].length };
+    let kept = 0, capped = 0, dropped = 0;
+    for (let b = 0; b < B; b++) {
+      const rh = pn.rowheads[b]; rh.replaceChildren();
+      const top = el("div", {}, rh); el("b", { text: `response ${b}` }, top);
+      el("div", { text: `A = ${fmt(info.A[b])}` }, rh);
+      if (info.seq[b]) {
+        const s = el("div", { class: "seq" }, rh);
+        const bd = el("span", { class: `badge ${info.seq[b].decision}` }, s);
+        el("span", { class: "ic", text: info.seq[b].decision === "dropped" ? "✕" : "●" }, bd);
+        bd.appendChild(document.createTextNode(info.seq[b].decision === "dropped" ? "response dropped" : "response kept"));
+        el("div", { text: info.seq[b].label }, s);
+      }
+      for (let t = 0; t < T; t++) {
+        const c = pn.cells[b][t]; const state = info.state[b][t];
+        if (state === "kept") kept++; else if (state === "capped") capped++; else dropped++;
+        c.className = "cell " + state;
+        c.replaceChildren();
+        el("div", { class: "tok", text: C.TOK[st.S.y[b][t]] }, c);
+        const nums = el("div", { class: "nums" }, c);
+        const add = (k, v, cls) => { el("span", { text: k }, nums); el("span", { text: v, class: cls || "" }, nums); };
+        add("p_now", fmt(info.pNow[b][t]));
+        add("r", fmt(info.r[b][t]));
+        add("ρ", fmt(info.rho[b][t]));
+        add("w", pn.method === "score_centering" ? "–" : fmt(info.w[b][t]), "wv");
+        const bd = el("span", { class: `badge ${state}` }, c);
+        el("span", { class: "ic", text: state === "kept" ? "●" : state === "capped" ? "▲" : "✕" }, bd);
+        bd.appendChild(document.createTextNode(state));
+        c.setAttribute("title", info.reason[b][t]);
+        c.setAttribute("aria-label", `response ${b} token ${t + 1}: ${info.reason[b][t]}`);
+      }
+    }
+    pn.summary.replaceChildren();
+    el("b", { text: `Table ${pi + 1}. ` }, pn.summary);
+    pn.summary.appendChild(document.createTextNode(`Tokens at step ${st.step}: ${kept} kept, ${capped} capped, ${dropped} dropped. p_now: trainer prob of the sampled token now; r = p_now / p_old; ρ = p_old / p_engine.`));
+    if (hov) pn.why.textContent = info.reason[hov.b][hov.t];
+    // charts
+    pn.charts.forEach((ch, ci) => drawChart(pn, ch, pi * 3 + 2 + ci));
+  }
+
+  function drawChart(pn, ch, figNo) {
+    const svg = ch.svg; svg.replaceChildren();
+    const W = 260, H = 150, m = { l: 28, r: 8, t: 8, b: 20 };
+    const n = pn.hist.length, xmax = Math.max(10, n - 1);
+    const X = i => m.l + (W - m.l - m.r) * i / xmax, Y = v => m.t + (H - m.t - m.b) * (1 - v);
+    const ax = el("svg:g", { class: "axis" }, svg);
+    [0, 0.5, 1].forEach(v => { el("svg:line", { class: "gridline", x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v) }, ax); el("svg:text", { x: m.l - 4, y: Y(v) + 3, "text-anchor": "end", style: "text-anchor:end", text: v.toFixed(1) }, ax); });
+    el("svg:line", { x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0) }, ax);
+    [0, Math.round(xmax / 2), xmax].forEach(i => el("svg:text", { x: X(i), y: H - 6, "text-anchor": "middle", style: "text-anchor:middle", text: String(i) }, ax));
+    const b = ch.b, T = pn.hist[0][b].length;
+    const st0 = pn.g.info.state[b];
+    for (let t = 0; t < T; t++) {
+      const d = pn.hist.map((h, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(h[b][t]).toFixed(1)}`).join("");
+      const path = el("svg:path", { class: "series", d, stroke: SERIES[t] }, svg);
+      if (st0[t] === "dropped") path.setAttribute("stroke-dasharray", "4 3");
+      const last = pn.hist[n - 1][b][t];
+      el("svg:circle", { cx: X(n - 1), cy: Y(last), r: 4, fill: SERIES[t], stroke: "var(--surface-1)", "stroke-width": 2 }, svg);
+    }
+    const cross = el("svg:line", { class: "cross", y1: m.t, y2: H - m.b, style: "display:none" }, svg);
+    const hit = el("svg:rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }, svg);
+    hit.addEventListener("pointermove", e => {
+      const r = svg.getBoundingClientRect(); const px = (e.clientX - r.left) * W / r.width;
+      const i = Math.max(0, Math.min(n - 1, Math.round((px - m.l) / (W - m.l - m.r) * xmax)));
+      cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.style.display = "";
+      const rows = [tline(`step ${i}, response ${b}`)];
+      for (let t = 0; t < T; t++) { const row = el("div", { class: "row" }); el("span", { class: "ln", style: `border-color:${SERIES[t]}` }, row); el("span", { class: "v", text: fmt(pn.hist[i][b][t]) }, row); row.appendChild(document.createTextNode(`token ${t + 1} (${C.TOK[st.S.y[b][t]]})`)); rows.push(row); }
+      showTip(e, rows);
+    });
+    hit.addEventListener("pointerleave", () => { cross.style.display = "none"; hideTip(); });
+    ch.cap.replaceChildren(); el("b", { text: `Figure ${figNo}. ` }, ch.cap);
+    ch.cap.appendChild(document.createTextNode(`Response ${b} (A = ${fmt(pn.g.info.A[b])}): trainer prob of each sampled token, by step.`));
+  }
+
+  function renderDataTable() {
+    const S = st.S, box = document.getElementById("dataTable"); box.replaceChildren();
+    const tb = el("table", {}, box);
+    const hr = el("tr", {}, tb); ["response", "token", "sampled", "x1", "x2", "q(yes)", "q(no)", "q(maybe)"].forEach(h => el("th", { text: h }, hr));
+    S.y.forEach((row, b) => row.forEach((y, t) => { const tr = el("tr", {}, tb); [b, t + 1, C.TOK[y], fmt(S.X[b][t][0]), fmt(S.X[b][t][1]), ...S.q[b][t].map(fmt)].forEach(v => el("td", { text: String(v) }, tr)); }));
+    el("caption", { text: "Table 3. The rollout: inputs, sampled tokens and engine probs q per position.", style: "caption-side:top; text-align:left" }, tb);
+  }
+
+  buildPanels();
+  window.__viz = { st, P, doStep, reset };
+})();
+</script>
+</div>
+</body>
+</html>
