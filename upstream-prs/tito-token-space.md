@@ -112,11 +112,19 @@ At the end of the episode (step 10) the training sample is the last engine view 
 
 GLM-5.3 is a mixture-of-experts model. R3 (routing replay) records, during the inference forward pass, which experts the router picked for each token at every MoE layer: one **row** per token. The trainer replays row *k* at token *k* instead of routing again, so row *k* must be token *k*'s recording.
 
-An agent episode is one inference call per turn but one training sequence. The session server stitches the rows: on each turn it asks the engine only for rows after an offset (`routed_experts_start_len`) and appends them. The offset must equal the rows already held, counted as the forward pass ran the tokens, with images expanded. Figure 2 shows a three-turn episode: screenshot A on turn 1, screenshot B on turn 2, text only on turn 3. Each image expands to 2 tokens here.
+An agent episode is one inference call per turn but one training sequence. The session server stitches the rows: on each turn it asks the engine only for rows after an offset (`routed_experts_start_len`) and appends them. The offset must equal the rows already held, counted as the forward pass ran the tokens, with images expanded.
 
-![Figure 2](r3-rows-engine-view.svg)
+Figure 2 shows where this happens in the code. Steps 2 and 7 are our change; the rest is existing code.
 
-*Figure 2. Routed-expert rows for a three-turn episode, built by the real session-server code with a stub engine. A: with change 2. B: without it.*
+![Figure 2](r3-code-path.svg)
+
+*Figure 2. The R3 code path: every turn (steps 1 to 6) and the end of the episode (step 7). File and line references are on the dzorlu/miles branch `tito-session-token-space-r3`.*
+
+Figure 3 shows a three-turn episode: screenshot A on turn 1, screenshot B on turn 2, text only on turn 3. Each image expands to 2 tokens here.
+
+![Figure 3](r3-rows-engine-view.svg)
+
+*Figure 3. Routed-expert rows for a three-turn episode, built by the real session-server code with a stub engine. A: with change 2. B: without it.*
 
 *Table 3. Offset requested and rows returned per turn. "Template view" counts each image as one placeholder.*
 

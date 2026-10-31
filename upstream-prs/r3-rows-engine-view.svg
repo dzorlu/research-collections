@@ -5,6 +5,7 @@
 .tok{fill:#fff;stroke:#9a9a9a}.img{fill:#f6ecd2;stroke:#b9975b}.t1{fill:#e3efff;stroke:#3b78d8}.t2{fill:#dcf3df;stroke:#3a9a4a}
 .t3{fill:#efe3fb;stroke:#7a4bc0}.bad{fill:#fde0e0;stroke:#d04444}.none{fill:#fff;stroke:#bbb;stroke-dasharray:4 3}
 </style></defs>
+<rect width="1200" height="600" fill="#ffffff"/>
 <text class="title" x="20" y="32">A. With the change: each turn asks for rows from the end of the engine view</text>
 <text class="small" x="20" y="68">position</text><text class="lab" x="20" y="102">engine tokens</text><text class="lab" x="20" y="152">R3 rows</text>
 <text class="small" x="198" y="68" text-anchor="middle">0</text>

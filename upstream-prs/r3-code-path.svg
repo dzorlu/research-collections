@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="670" viewBox="0 0 1120 670" font-family="Helvetica, Arial, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker>
+<style>.lane{fill:#fafafa;stroke:#d0d0d0}.head{font-size:15px;font-weight:bold;fill:#111}.sub{font-size:12px;fill:#555}
+.step{font-size:14px;fill:#111}.file{font-size:12px;fill:#4a4a4a;font-family:Menlo,Consolas,monospace}
+.ours{fill:#e3efff;stroke:#3b78d8}.theirs{fill:#eeeeee;stroke:#9a9a9a}.num{font-size:13px;font-weight:bold;fill:#fff}
+.arrow{stroke:#333;stroke-width:1.6;fill:none;marker-end:url(#a)}</style></defs>
+<rect width="1120" height="670" fill="#ffffff"/>
+<rect class="lane" x="20" y="20" width="540" height="590" rx="6"/>
+<text class="head" x="290" y="48" text-anchor="middle">Session server (miles)</text><text class="sub" x="290" y="66" text-anchor="middle">miles/rollout/session/</text>
+<rect class="lane" x="575" y="20" width="170" height="590" rx="6"/>
+<text class="head" x="660" y="48" text-anchor="middle">Router</text><text class="sub" x="660" y="66" text-anchor="middle">sgl-router-for-miles</text>
+<rect class="lane" x="760" y="20" width="190" height="590" rx="6"/>
+<text class="head" x="855" y="48" text-anchor="middle">SGLang engine</text><text class="sub" x="855" y="66" text-anchor="middle">records routed experts</text>
+<rect class="lane" x="965" y="20" width="135" height="590" rx="6"/>
+<text class="head" x="1032" y="48" text-anchor="middle">Trainer</text><text class="sub" x="1032" y="66" text-anchor="middle">miles</text>
+<text class="sub" x="34" y="92">every turn:</text>
+<rect class="theirs" x="36" y="100" width="505" height="50" rx="6"/><circle cx="54" cy="120" r="11" fill="#777"/><text class="num" x="54" y="125" text-anchor="middle">1</text><text class="step" x="72" y="124">engine request built (Figure 1, step 4)</text><text class="file" x="72" y="145">token_space.py:93</text>
+<rect class="ours" x="36" y="162" width="505" height="112" rx="6"/><circle cx="54" cy="182" r="11" fill="#3b78d8"/><text class="num" x="54" y="187" text-anchor="middle">2</text><text class="step" x="72" y="186">R3 offset = rows already held,</text><text class="step" x="72" y="205">counted on the engine view (images expanded)</text><text class="file" x="72" y="226">core.py:442 → _maybe_request_addition_r3 (core.py:264)</text><text class="file" x="72" y="243">engine_token_ids (token_space.py:55)</text><text class="file" x="72" y="260">sets routed_experts_start_len (core.py:283)</text>
+<path class="arrow" d="M300,274 L300,300 L585,300"/>
+<circle cx="320" cy="300" r="11" fill="#333"/><text class="num" x="320" y="305" text-anchor="middle">3</text>
+<rect class="theirs" x="588" y="278" width="145" height="46" rx="6"/><text class="step" x="660" y="297" text-anchor="middle">forwards the offset</text><text class="file" x="660" y="314" text-anchor="middle">chat.rs:387</text>
+<path class="arrow" d="M733,300 L772,300"/>
+<rect class="theirs" x="775" y="272" width="165" height="120" rx="6"/><circle cx="793" cy="292" r="11" fill="#777"/><text class="num" x="793" y="297" text-anchor="middle">4</text><text class="step" x="811" y="296">runs the turn,</text><text class="step" x="811" y="315">records the experts</text><text class="step" x="811" y="334">of every token;</text><text class="step" x="811" y="353">returns rows from</text><text class="step" x="811" y="372">the offset to the end</text>
+<path class="arrow" d="M772,425 L545,425"/>
+<circle cx="858" cy="425" r="11" fill="#333"/><text class="num" x="858" y="430" text-anchor="middle">5</text>
+<text class="step" x="660" y="415" text-anchor="middle">rows in the reply</text><text class="file" x="660" y="443" text-anchor="middle">meta_info.routed_experts</text>
+<rect class="theirs" x="36" y="400" width="505" height="50" rx="6"/><circle cx="54" cy="420" r="11" fill="#777"/><text class="num" x="54" y="425" text-anchor="middle">6</text><text class="step" x="72" y="424">store the reply, with its rows, as this turn's record</text>
+<line x1="36" y1="468" x2="541" y2="468" stroke="#bbb" stroke-dasharray="5 4"/><text class="sub" x="34" y="488">end of episode:</text>
+<rect class="ours" x="36" y="496" width="505" height="100" rx="6"/><circle cx="54" cy="516" r="11" fill="#3b78d8"/><text class="num" x="54" y="521" text-anchor="middle">7</text><text class="step" x="72" y="520">stitch the rows: each turn starts at its offset and ends</text><text class="step" x="72" y="539">at the engine prompt length + outputs − 1</text><text class="file" x="72" y="560">merge_samples_with_addition_r3 (samples/merge.py:248)</text><text class="file" x="72" y="577">start check :278, end :280</text><text class="file" x="72" y="594">output store: adopt_session_records (merge.py:239)</text>
+<path class="arrow" d="M541,545 L972,545"/>
+<rect class="theirs" x="975" y="510" width="118" height="72" rx="6"/><text class="step" x="1034" y="532" text-anchor="middle">replays row k</text><text class="step" x="1034" y="551" text-anchor="middle">at token k</text><text class="step" x="1034" y="570" text-anchor="middle">(routing replay)</text>
+<rect class="ours" x="36" y="628" width="18" height="14" rx="3"/><text class="sub" x="60" y="640">our change (R3 branch)</text>
+<rect class="theirs" x="230" y="628" width="18" height="14" rx="3"/><text class="sub" x="254" y="640">existing code</text>
+<text class="sub" x="420" y="640">file:line on dzorlu/miles branch tito-session-token-space-r3; router: sgl-router-for-miles main</text>
+</svg>
