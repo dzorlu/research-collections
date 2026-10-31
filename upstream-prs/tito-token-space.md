@@ -75,12 +75,12 @@ The idea: the engine expands placeholders and returns the expanded token IDs. mi
    OURS 4: GLM-5.3 token-space strategy               (tito-token-space-glm5)
 ```
 
-Table 1. The four proposed changes. Changes 1 and 2 are two commits on one branch and go up as one PR: change 2 only matters once change 1 sends images through the session server.
+Table 1. The four proposed changes. Changes 1 and 2 are two commits in one draft PR, #4586: change 2 only matters once change 1 sends images through the session server.
 
 | # | Repo | Change | Branch, head | Size |
 |---|---|---|---|---|
-| 1 | miles | Session server on token space | dzorlu/miles `tito-session-token-space`, commit `50c4ecbb0f` | 11 files, +278/-24; new `session/token_space.py` (143 lines) |
-| 2 | miles | R3 rows on the engine view | same branch, commit `dce628a206` (head) | 4 code files, about 25 lines; +185 test lines |
+| 1 | miles | Session server on token space | [#4586](https://github.com/radixark/miles/pull/4586), commit `50c4ecbb0f` | 11 files, +278/-24; new `session/token_space.py` (143 lines) |
+| 2 | miles | R3 rows on the engine view | [#4586](https://github.com/radixark/miles/pull/4586), commit `dce628a206` (head) | 4 code files, about 25 lines; +185 test lines |
 | 3 | SGLang | Keep first-turn images | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402), `pr4-qwen-vl-input-ids-v2` `008518e4fe` | one condition plus a test |
 | 4 | SGLang | GLM-5.3 strategy | dzorlu/sglang `tito-token-space-glm5` `354d92b34f` | new `models/glm5_next.py`, a 2-line hook, tests |
 
