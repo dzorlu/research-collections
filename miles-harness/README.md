@@ -4,7 +4,7 @@ This is a build brief for an engineer or coding agent. It describes a harness th
 with RL on long multi-turn episodes (tool use and computer use with screenshots), using upstream
 [miles](https://github.com/radixark/miles) for training and SGLang for sampling. It names what to build,
 the rules each part must follow, and the tests that prove it works. Per-model run settings are in
-[recipes.md](recipes.md). Colocated fully-async training is in [async.md](async.md). The memory arithmetic and model choice are in
+[recipes.md](recipes.md). Colocated fully-async training is in [../rl-infra/](../rl-infra/README.md). The memory arithmetic and model choice are in
 [../single-node-training/](../single-node-training/README.md).
 
 Upstream references are to miles `main` at `c62ea5d` (2026-10-30). Re-check them before building.

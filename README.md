@@ -34,6 +34,8 @@ notebook.
   session server.
 - [miles-harness/](miles-harness/): build spec for a long-horizon agent RL harness on upstream miles (session
   server, agent and reward hooks, screenshot folding, policy-written summaries, eval, test gates), plus
-  per-model recipes as miles flags for Qwen3.8-27B, GLM-5.3-Flash and Muse Spark Open, and colocated
-  fully-async training (what overlaps, flags miles refuses, loss correction, harness rules, run gates,
-  and a plan for running it on one 8-GPU node at 96K).
+  per-model recipes as miles flags for Qwen3.8-27B, GLM-5.3-Flash and Muse Spark Open.
+- [rl-infra/](rl-infra/): getting the most agent RL training out of a few GPUs: fully async training on
+  shared GPUs (how it works, flags miles refuses, loss correction, harness rules, run checks), a run plan
+  for Qwen3.8-27B on one 8×B200 node at 96K, and memory and precision levers (FP8 engine weights, bf16
+  Adam moments, FP8 KV).
