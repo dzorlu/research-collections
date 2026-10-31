@@ -287,3 +287,23 @@ checkpoint.
 - Step time split into generate, re-prefill, train and weight update.
 - Staleness histogram of consumed groups, and groups dropped or recycled per step.
 - Peak GPU memory per phase, and host memory, against Table 1.
+
+## 10. Ideas for cheaper compute
+
+Levers that cut memory or time on the one-node plan of section 9. Numbers are for Qwen3.8-27B on one
+8×B200 node, TP 4 × CP 2, from the arithmetic of section 9.2. None is measured on this run yet.
+
+Table 3. Lower-precision and memory levers.
+
+| Lever | Flags or checkpoint | Saves per GPU | Effect on the plan | Risk |
+|---|---|---|---|---|
+| FP8 engine weights, bf16 trainer | `--hf-checkpoint` an FP8 checkpoint (`Qwen/Qwen3.8-27B-FP8`) for SGLang; `--ref-load` the bf16 `torch_dist` checkpoint for the trainer | engine weights 55.6 → about 28 GB | KV pool 88 → about 116 GB: 17 full-length 96K episodes per engine instead of 13 | trainer and engine log-probs drift apart; miles recommends TIS (already on in 9.3). SGLang support for this checkpoint on the pinned version is unverified |
+| bf16 Adam moments | `--use-precision-aware-optimizer --exp-avg-dtype bf16 --exp-avg-sq-dtype bf16` | 13.9 GB (moments 8 → 4 bytes per parameter, sharded 8 ways) | more room for activations during the train step | small; already part of the "CPU Adam" set in [recipes.md](recipes.md) |
+| Adam on the CPU | "CPU Adam" flags in [recipes.md](recipes.md) section 1 | the whole 41.7 GB optimizer shard | fallback if gate 1 of 9.4 fails on memory | Adam steps on the CPU; the slowdown is not measured |
+| FP8 KV cache | `--sglang-kv-cache-dtype fp8_e4m3` | KV 64 → 32 KiB per token | a full 96K episode needs about 3.4 GB: 26 per engine instead of 13 | widened the trainer/engine log-prob gap on GLM-5.3-Flash ([recipes.md](recipes.md) section 3) |
+| FP8, MXFP8 or NVFP4 training | `--fp8-recipe` with the matching rollout precision ([miles low-precision docs](https://github.com/radixark/miles/blob/main/docs/advanced/low-precision.md)) | little: master weights and Adam stay in high precision | faster GEMMs in the train step | upstream tested it on Qwen3-4B, Qwen3-30B-A3B and DeepSeek-V4-Flash only (MXFP8 and NVFP4 are beta); not on Gated DeltaNet layers |
+| INT4 QAT | [miles INT4 QAT docs](https://github.com/radixark/miles/blob/main/docs/advanced/int4-qat.md) | none for the trainer | does not apply: it covers routed MoE experts only, and Qwen3.8-27B is dense | n/a |
+
+Order to try them: bf16 Adam moments first (small risk, memory for the train step), then FP8 engine
+weights (more episodes in flight), each against the `train_rollout_logprob_abs_diff` baseline of gate 1.
+Leave FP8 KV and low-precision training until those two hold.
