@@ -85,32 +85,26 @@ Table 1. The four proposed changes.
 
 ### 4.1 The session server on token space
 
-```
- Agent harness              Session server (miles)                              SGLang
- TURN 1
- [user "hi" + imgA] ──► core.chat_completions()                     core.py:397
-                        _store_message_media() -> store_message_media()  core.py:506 -> token_space.py:29
-                          base64 -> /media/<sha256>.png; flag off + image -> HTTP 400
-                        TITO render -> TEMPLATE view [10, 99, 11]
-                        prepare_engine_request()                    token_space.py:93 (called core.py:433-438)
-                          engine_input_ids(): nothing stored yet, start 0   token_space.py:67
-                          sets mm_token_expansion_start_len, return_prompt_token_ids   :120-121
-                        ── input_ids [10,99,11]  media [A]  start_len 0 ──────────►  expand 99
-                        ◄── prompt_token_ids [10,501,502,11] + reply [20,21] ─────
-                        check_engine_prompt(): returned prompt keeps what was sent,
-                          else HTTP 502                             token_space.py:124
-                        store TEMPLATE view [10,99,11,20,21]
-                        ENGINE view = engine_prompt_ids(record) + reply   token_space.py:48
- TURN 2
- [whole history          TITO render: [10,99,11,20,21,12,99,13]
-  + tool + imgB] ──►     prefix check vs stored [10,99,11,20,21]: match
-                        engine_input_ids(): send ENGINE view [10,501,502,11,20,21]
-                          + new part [12,99,13], start 6
-                        ── input_ids [10,501,502,11,20,21,12,99,13]  media [A,B]  start_len 6 ──►
-                        ◄── prompt_token_ids [...,12,601,602,13] + reply [22]
- END  sample = ENGINE view [10,501,502,11,20,21,12,601,602,13,22] + media refs [A, B]
-      trainer: Rockdu's compute_multimodal_train_inputs(), unchanged
-```
+Figure 1 shows one turn through the session server. Blue boxes are our change; grey boxes are existing code or Rockdu's.
+
+![Figure 1](session-server-token-space.svg)
+
+*Figure 1. One chat turn with screenshots through the session server. File and line references are on the dzorlu/miles branch `tito-session-token-space`.*
+
+Table 2 follows the made-up token IDs from section 1 through two turns. Step numbers refer to Figure 1.
+
+*Table 2. Token flow for a two-turn episode. Turn 1 has screenshot A; turn 2 adds a tool result and screenshot B.*
+
+| | Turn 1 | Turn 2 |
+|---|---|---|
+| Harness sends (step 1) | user "hi" + screenshot A | the whole history + a tool result + screenshot B |
+| Template view (step 3) | `[10, 99, 11]` | `[10, 99, 11, 20, 21, 12, 99, 13]` |
+| Prefix match (step 3) | nothing stored yet | first 5 tokens match the stored `[10, 99, 11, 20, 21]` |
+| Sent to the engine (step 4) | `[10, 99, 11]`, images `[A]`, `start_len` 0 | `[10, 501, 502, 11, 20, 21, 12, 99, 13]`, images `[A, B]`, `start_len` 6 |
+| Engine returns (step 7) | prompt `[10, 501, 502, 11]`, reply `[20, 21]` | prompt `[10, 501, 502, 11, 20, 21, 12, 601, 602, 13]`, reply `[22]` |
+| Stored engine view (step 8) | `[10, 501, 502, 11, 20, 21]` | `[10, 501, 502, 11, 20, 21, 12, 601, 602, 13, 22]` |
+
+At the end of the episode (step 10) the training sample is the last engine view plus files A and B. With `--multimodal-token-space-processing` off, a session request with images gets HTTP 400.
 
 **Two views per turn.** The **template view** (one placeholder per image) is what the chat template renders from the harness's text; the TITO prefix check and rollback compare against it, so they are unchanged. The **engine view** (images expanded) is taken from the engine's returned prompt; requests, samples and R3 rows use it. Collapsing expanded tokens back to placeholders is not possible in general: Qwen video expansions contain timestamp text.
 

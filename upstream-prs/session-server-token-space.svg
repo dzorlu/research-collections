@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="760" viewBox="0 0 1120 760" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <style>
+      .lane { fill: #fafafa; stroke: #d0d0d0; }
+      .head { font-size: 15px; font-weight: bold; fill: #111; }
+      .sub  { font-size: 12px; fill: #555; }
+      .step { font-size: 14px; fill: #111; }
+      .file { font-size: 12px; fill: #4a4a4a; font-family: Menlo, Consolas, monospace; }
+      .ours { fill: #e3efff; stroke: #3b78d8; }
+      .theirs { fill: #eeeeee; stroke: #9a9a9a; }
+      .num { font-size: 13px; font-weight: bold; fill: #fff; }
+      .arrow { stroke: #333; stroke-width: 1.6; fill: none; marker-end: url(#a); }
+    </style>
+  </defs>
+
+  <!-- lanes -->
+  <rect class="lane" x="20"  y="20" width="160" height="680" rx="6"/>
+  <rect class="lane" x="195" y="20" width="415" height="680" rx="6"/>
+  <rect class="lane" x="625" y="20" width="150" height="680" rx="6"/>
+  <rect class="lane" x="790" y="20" width="160" height="680" rx="6"/>
+  <rect class="lane" x="965" y="20" width="140" height="680" rx="6"/>
+
+  <text class="head" x="100"  y="48" text-anchor="middle">Agent harness</text>
+  <text class="sub"  x="100"  y="66" text-anchor="middle">chat API, text only</text>
+  <text class="head" x="402"  y="48" text-anchor="middle">Session server (miles)</text>
+  <text class="sub"  x="402"  y="66" text-anchor="middle">miles/rollout/session/</text>
+  <text class="head" x="700"  y="48" text-anchor="middle">Router</text>
+  <text class="sub"  x="700"  y="66" text-anchor="middle">sgl-router-for-miles</text>
+  <text class="head" x="870"  y="48" text-anchor="middle">SGLang engine</text>
+  <text class="sub"  x="870"  y="66" text-anchor="middle">token-space processor</text>
+  <text class="head" x="1035" y="48" text-anchor="middle">Trainer</text>
+  <text class="sub"  x="1035" y="66" text-anchor="middle">miles</text>
+
+  <!-- 1 request in -->
+  <circle cx="44" cy="122" r="12" fill="#333"/><text class="num" x="44" y="127" text-anchor="middle">1</text>
+  <path class="arrow" d="M60,122 L208,122"/>
+  <text class="step" x="34" y="152">chat request with</text>
+  <text class="step" x="34" y="170">the full history:</text>
+  <text class="step" x="34" y="188">text + screenshots</text>
+
+  <!-- 2 store images -->
+  <rect class="ours" x="212" y="95" width="383" height="54" rx="6"/>
+  <circle cx="230" cy="122" r="11" fill="#3b78d8"/><text class="num" x="230" y="127" text-anchor="middle">2</text>
+  <text class="step" x="248" y="117">save each screenshot once, as a file</text>
+  <text class="file" x="248" y="137">core.py:506 → token_space.py:29</text>
+
+  <!-- 3 TITO match -->
+  <rect class="theirs" x="212" y="163" width="383" height="54" rx="6"/>
+  <circle cx="230" cy="190" r="11" fill="#777"/><text class="num" x="230" y="195" text-anchor="middle">3</text>
+  <text class="step" x="248" y="185">TITO: render the text, match stored turns</text>
+  <text class="file" x="248" y="205">existing session code (template view)</text>
+
+  <!-- 4 build request -->
+  <rect class="ours" x="212" y="231" width="383" height="74" rx="6"/>
+  <circle cx="230" cy="258" r="11" fill="#3b78d8"/><text class="num" x="230" y="263" text-anchor="middle">4</text>
+  <text class="step" x="248" y="253">build the engine request: stored expanded</text>
+  <text class="step" x="248" y="271">prefix + new part + start_len</text>
+  <text class="file" x="248" y="293">token_space.py:93 (called at core.py:433)</text>
+
+  <!-- 5 send through router -->
+  <circle cx="440" cy="345" r="11" fill="#333"/><text class="num" x="440" y="350" text-anchor="middle">5</text>
+  <path class="arrow" d="M440,305 L440,334"/><path class="arrow" d="M451,345 L638,345"/>
+  <rect class="ours" x="640" y="323" width="120" height="44" rx="6"/>
+  <text class="step" x="700" y="341" text-anchor="middle">keeps start_len</text>
+  <text class="file" x="700" y="358" text-anchor="middle">router patch</text>
+  <path class="arrow" d="M760,345 L803,345"/>
+  <text class="file" x="462" y="364">POST /v1/chat/completions</text>
+
+  <!-- 6 expand -->
+  <rect class="theirs" x="805" y="318" width="130" height="80" rx="6"/>
+  <circle cx="822" cy="336" r="11" fill="#777"/><text class="num" x="822" y="341" text-anchor="middle">6</text>
+  <text class="step" x="838" y="341">expand only</text>
+  <text class="step" x="815" y="362">the new images,</text>
+  <text class="step" x="815" y="381">run the model</text>
+  <rect class="ours" x="805" y="404" width="130" height="38" rx="6"/>
+  <text class="file" x="870" y="420" text-anchor="middle">#47402: keeps</text>
+  <text class="file" x="870" y="435" text-anchor="middle">turn-1 images</text>
+
+  <!-- 7 back -->
+  <circle cx="870" cy="468" r="11" fill="#333"/><text class="num" x="870" y="473" text-anchor="middle">7</text>
+  <path class="arrow" d="M856,468 L598,468"/>
+  <text class="step" x="725" y="458" text-anchor="middle">expanded prompt ids + reply</text>
+
+  <!-- 8 check + store -->
+  <rect class="ours" x="212" y="440" width="383" height="74" rx="6"/>
+  <circle cx="230" cy="467" r="11" fill="#3b78d8"/><text class="num" x="230" y="472" text-anchor="middle">8</text>
+  <text class="step" x="248" y="462">check the prefix came back unchanged</text>
+  <text class="step" x="248" y="480">(else HTTP 502); store both views</text>
+  <text class="file" x="248" y="502">token_space.py:124, :48</text>
+
+  <!-- 9 reply out -->
+  <circle cx="44" cy="548" r="12" fill="#333"/><text class="num" x="44" y="553" text-anchor="middle">9</text>
+  <path class="arrow" d="M300,514 L300,548 L62,548"/>
+  <text class="step" x="34" y="576">reply text</text>
+
+  <!-- 10 sample -->
+  <rect class="ours" x="212" y="600" width="383" height="54" rx="6"/>
+  <circle cx="230" cy="627" r="11" fill="#3b78d8"/><text class="num" x="230" y="632" text-anchor="middle">10</text>
+  <text class="step" x="248" y="622">end of episode: sample = engine view</text>
+  <text class="file" x="248" y="642">+ screenshot files (samples/merge.py)</text>
+  <path class="arrow" d="M595,627 L973,627"/>
+  <rect class="theirs" x="975" y="592" width="120" height="70" rx="6"/>
+  <text class="step" x="1035" y="613" text-anchor="middle">rebuild pixels</text>
+  <text class="step" x="1035" y="632" text-anchor="middle">with SGLang's</text>
+  <text class="step" x="1035" y="651" text-anchor="middle">processor</text>
+
+  <!-- legend -->
+  <rect class="ours"   x="212" y="718" width="18" height="14" rx="3"/><text class="sub" x="236" y="730">our change</text>
+  <rect class="theirs" x="330" y="718" width="18" height="14" rx="3"/><text class="sub" x="354" y="730">existing code or Rockdu's</text>
+  <text class="sub" x="560" y="730">file:line on dzorlu/miles branch tito-session-token-space</text>
+</svg>
