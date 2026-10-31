@@ -9,6 +9,8 @@ with the reason for each non-obvious choice. Build them into the recipe registry
 2.7 TB host RAM and about 1 TB local disk per node. On 180 GB GPUs (B200) re-derive the layout from the
 memory arithmetic in [../single-node-training/](../single-node-training/README.md).
 
+**Image on B300.** miles dev images up to at least `dev-202610300556` ship flash-attn-4 4.0.0b35. Transformer Engine 2.17 passes causal masks as window (-1, 0), which b35 classifies as local attention, and its SM100 head-dim-256 backward rejects that (fixed in NVIDIA/TransformerEngine#3540). So Megatron cannot train Qwen3.8 out of the box. Pin `flash-attn-4==4.0.0b19` and `quack-kernels==0.6.4` (b19 calls `quack.activation.sub_packed_f32x2`, removed in 0.6.5), keep `nvidia-cutlass-dsl` 4.8.0 (4.6.2 has no `cutlass.cute`). `--attention-backend fused` is no workaround: cuDNN has no kernel for these inputs. Probe one head-dim-256 varlen forward and backward on one GPU before a run.
+
 "Ran" means the shape completed training steps. "Not run" means it is derived and needs the debug-minimal
 gate (README section 7, gate 4) first.
 
@@ -100,6 +102,7 @@ Notes:
   `SGLANG_HEALTH_CHECK_TIMEOUT=600`. A 250K-token prompt prefills at roughly 1,400 tokens/s in 16K chunks,
   so re-prefills take minutes.
 - Use `--log-probs-chunk-size 4096` on any row with responses past ~100K tokens.
+- Screenshots through the session server use the token-space flags of README section 6. Verified on this model at 4 nodes: 32/32 episodes graded, TITO mismatch 0.0, train/rollout KL 9.65e-4, mean abs log-prob diff 0.0154 at step 0.
 
 ## 3. GLM-5.3-Flash
 
@@ -161,6 +164,7 @@ EP8 × PP6 = 48 GPUs.
 - Routing replay needs the `triton` MoE runner: SGLang's `flashinfer_trtllm` runner skips the top-k capture
   and returns zeros. `in_place` pause lets the session server fetch only new routing rows each turn. Sync runs only: colocated fully async requires `retract` ([../rl-infra/](../rl-infra/README.md) section 4).
 - Host memory per node runs close to the limit (about 2.3 to 2.4 TiB of about 2.6). Watch it.
+- Screenshots through the session server on token space: README section 6 flags. Rollouts verified (0 prompt-ID mismatches); a completed train step on this path is pending. Set the replay-check threshold as in README section 6.
 - Rehearse on one node with a 4-layer slice of the checkpoint (same model class, same code paths) before
   the 6-node job.
 

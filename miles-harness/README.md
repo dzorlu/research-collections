@@ -7,7 +7,7 @@ the rules each part must follow, and the tests that prove it works. Per-model ru
 [recipes.md](recipes.md). Colocated fully-async training is in [../rl-infra/](../rl-infra/README.md). The memory arithmetic and model choice are in
 [../single-node-training/](../single-node-training/README.md).
 
-Upstream references are to miles `main` at `c62ea5d` (2026-10-30). Re-check them before building.
+Upstream references are to miles `main` at `c62ea5d` (2026-10-30). Re-check them before building. Several fixes this spec relies on are our open PRs; their status and GPU results are in [../upstream-prs/HANDOFF.md](../upstream-prs/HANDOFF.md) (Table 1). Until they merge, build from upstream main with those PR branches merged in (HANDOFF section 5.1).
 
 ## 1. The one rule everything serves
 
@@ -207,7 +207,7 @@ Because the fold rewrites history, the session server opens a branch: one fold =
 
 Same agent function and environment adapter, no training step. Same image, folding and compaction
 settings for base and every checkpoint of one comparison. Report pass@1 and pass@k from binary pass/fail,
-the end-reason distribution, and mean and max turns. Pair checkpoint and base by task and sample index.
+the end-reason distribution, and mean and max turns. Pair checkpoint and base by task and sample index. An eval group that holds a cancelled episode crashed the zero-std scoring ([miles#4518](https://github.com/radixark/miles/pull/4518)).
 
 ### 4.11 Observability
 
@@ -233,6 +233,9 @@ tool calls after every update: a policy that breaks its tool-call format shows u
 - Screenshots between SGLang processes: `--sglang-mm-feature-transport cuda_ipc` with
   `SGLANG_MM_FEATURE_CACHE_MB=4096`. A full pool silently falls back to CPU pickling.
 - Radix cache on; router per section 4.2.
+- Offload while requests are running: abort them before the cache flush, or the flush is refused and the offload stalls ([miles#4519](https://github.com/radixark/miles/pull/4519)). With `--fully-async --colocate`, the PR's second commit keeps the requests a driver-owned pause retracted; without it every in-flight episode is written off at the first train step.
+- Host memory after each train step: [miles#4521](https://github.com/radixark/miles/pull/4521) returns it and logs per-process GPU and host memory; without it GLM-5.3 grew about 115 GiB per node per step.
+- Resume: torchtitan needs [miles#4522](https://github.com/radixark/miles/pull/4522) (parameters that never train start with fresh optimizer state). Native LoRA needs [miles#4523](https://github.com/radixark/miles/pull/4523); without it a resume silently restarts (fresh optimizer, fresh adapter, scheduler at 0). With `--colocate --lora-train-only`, upstream main (dev image 2026-10-30) crashes in the first `update_weights` ("found paused allocation but cpu_backup does not exist"); run native LoRA non-colocated until that is fixed.
 
 ## 6. Model-specific traps
 
@@ -244,12 +247,10 @@ tool calls after every update: a policy that breaks its tool-call format shows u
   text part in every user turn. Ask for all reasoning inside `<think>` and only tool calls after it.
 - **GLM-5.3 parser grammar.** SGLang's GLM parser forces one declared tool per turn; turn it off with
   `--tool-call-constraint none` ([sglang#47203](https://github.com/sgl-project/sglang/pull/47203)).
-- **Images through the session server.** First-turn images dropped with token IDs
-  ([sglang#47402](https://github.com/sgl-project/sglang/pull/47402)); the token-space design for
-  screenshots is in [../upstream-prs/tito-token-space.md](../upstream-prs/tito-token-space.md).
+- **Screenshots through the session server.** Use the token-space path: [miles#4586](https://github.com/radixark/miles/pull/4586) (stacked on Rockdu's [#4240](https://github.com/radixark/miles/pull/4240) and [#4272](https://github.com/radixark/miles/pull/4272)), flags `--multimodal-token-space-processing --shared-media-dir <path every engine mounts> --sglang-enable-token-space-processor`. It also needs [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) (first-turn images were dropped) and the router fix in [../upstream-prs/patches/](../upstream-prs/patches/): without it the router drops `mm_token_expansion_start_len` and turn 2 of every session fails ("Found 577 placeholders ... but received 2 media expansions"). GLM-5.3 needs a token-space strategy in SGLang (dzorlu/sglang `tito-token-space-glm5`). Without the miles flag, a chat request with media gets HTTP 400. Design and examples: [../upstream-prs/tito-token-space.md](../upstream-prs/tito-token-space.md).
 - **MoE routing.** Trainer and engine pick different experts for the same token; replay the engine's
   choices (`--use-rollout-routing-replay`, engines on the `triton` MoE runner, `--pause-generation-mode
-  in_place`), and add truncated importance sampling (`--use-tis`) for the remaining gap.
+  in_place`), and add truncated importance sampling (`--use-tis`) for the remaining gap. With screenshots through the session server, the per-turn replay offset must count expanded image tokens ([miles#4586](https://github.com/radixark/miles/pull/4586), second commit). On torchtitan the replay guard needs [miles#4520](https://github.com/radixark/miles/pull/4520). The replay check (`--ci-test`) fails at its default 1% per-rank threshold on GLM-5.3 with images on both image paths: image tokens disagree on all eight experts at about 0.65%, text tokens at about 0.045% (deep layers). Set `MILES_TEST_R3_THRESHOLD` for your image share, and keep Ray log dedup on: with it off the check writes about 20,000 lines/s.
 - **Logits.** tokens × vocab × 2 bytes; at 64K tokens and a 248K vocab that is 30 GiB. Use TP for a
   vocab-parallel loss and `--log-probs-chunk-size 4096`.
 
