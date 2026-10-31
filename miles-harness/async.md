@@ -171,3 +171,119 @@ Failure modes to watch in the logs:
 - The re-prefill cost after each pause.
 - Session server v2 and multi-sample episodes under fully-async colocate.
 - The best loss correction under multi-version staleness.
+
+## 9. Plan: colocated fully async on one 8-GPU node at 96K
+
+Goal: train Qwen3.8-27B on text agent episodes of up to 98,304 tokens with colocated fully async on a
+single 8×B200 node, and measure the gain over sync on the same node. The budget is 75 node-hours
+(600 GPU-hours).
+
+### 9.1 Why colocated is the only option on one node
+
+```text
+           step N                                          step N+1
+GPU 0-7  | generate        |P| train            |W|R| generate        |P| train   ...
+         | 8 engines, TP 1 | | TP 4 × CP 2      | | | 8 engines, TP 1 | |
+         | up to 96 eps    | | on all 8 GPUs    | | | same episodes   | |
+
+P  pause (retract), flush and release KV and engine weights, move the trainer onto the GPUs
+W  move the trainer to host RAM, load engine weights, update them to the new version
+R  load the KV pool, resume paused requests (each re-prefills its context once)
+```
+
+Figure 1. One node over two steps. Not to scale: no phase has been timed on this node.
+
+The 96K text row ([recipes.md](recipes.md) Table 1) trains one model copy on TP 4 × CP 2, which uses all 8
+GPUs. A split layout would need GPUs for the trainer on top of those 8 for the engines, so it does not fit
+one node. Colocated fully async needs no extra GPUs: the trainer and the 8 engines take turns on the same
+GPUs (section 1).
+
+The 96K row has run sync on one 8×B300 node. No colocated fully-async run has finished a training step on
+any node count yet, and the row has never run on B200.
+
+### 9.2 Memory on a B200 (180 GB)
+
+Table 1. Per-GPU memory, from the model config and the recipe flags. Trainer: TP 4, CP 2, DP 1, Megatron
+distributed optimizer sharded over the 2 CP ranks. Engines: one per GPU, TP 1, memory fraction 0.8.
+
+| Phase | Item | GB per GPU | Source |
+|---|---|---|---|
+| Train | bf16 weights (27.8B × 2 bytes / TP 4) | 13.9 | arithmetic |
+| Train | fp32 gradients (`--accumulate-allreduce-grads-in-fp32`) | 27.8 | arithmetic |
+| Train | fp32 master weights + 2 Adam moments (12 bytes / 8 ranks) | 41.7 | arithmetic |
+| Train | Activations at 49,152 tokens per GPU, full recompute | not measured | smoke gate 1 |
+| Generate | Engine weights | 55.6 | [single-node notes](../single-node-training/README.md) section 4.2 |
+| Generate | KV and linear-attention pool (0.8 × 180 − 55.6) | 88 | arithmetic |
+
+Without activations the trainer needs 83.4 GB, which leaves about 96 GB for activations and buffers. If
+gate 1 measures a peak above about 170 GB, move Adam to the CPU (the "CPU Adam" flags in
+[recipes.md](recipes.md) section 1). That frees the 41.7 GB optimizer shard.
+
+How many episodes fit in the engine pool:
+
+- KV per token = 16 full-attention layers × 4 KV heads × 256 × 2 (K, V) × 2 bytes = 64 KiB.
+- Linear-attention state per request = 48 layers × 48 value heads × 128 × 128 × 4 bytes (fp32) = 151 MB,
+  independent of length.
+- A full 98,304-token episode holds 6.4 GB of KV plus 0.15 GB of state, so about 6.6 GB.
+- 88 GB per engine holds 13 full-length episodes, so 104 per node. Shorter episodes fit more. Requests
+  beyond the pool queue instead of failing.
+
+Host RAM: while the engines generate, the trainer's 83.4 GB per GPU (667 GB per node) sits in pinned host
+memory, plus the CPU Adam state if used. Plan for at least 1 TB of host RAM.
+
+### 9.3 Settings
+
+The 96K text row of [recipes.md](recipes.md) Table 1 and its shared settings, plus:
+
+```text
+# Fully async, colocated (section 3)
+--fully-async --colocate --pause-generation-mode retract --train-backend megatron
+--update-weights-interval 1
+
+# Batch and in-flight count
+--n-samples-per-prompt 8
+--rollout-batch-size 8                    # 8 groups = 64 episodes per train step
+--async-max-concurrent-samples 96         # 12 per engine, under the 13 full-length episodes that fit
+--async-data-buffer-capacity-factor 2.0
+--dynamic-sampling-filter-path miles.rollout.filter_hub.dynamic_sampling_filters.check_no_aborted
+
+# Off-policy handling (sections 4 and 6.6)
+--use-tis
+# no --max-weight-staleness at first; read the staleness histogram, then set it
+
+# Layout (96K text row)
+--tensor-model-parallel-size 4 --sequence-parallel --context-parallel-size 2
+--pipeline-model-parallel-size 1 --max-tokens-per-gpu 49152
+--rollout-max-context-len 98304 --rollout-max-response-len 81920
+--rollout-num-gpus-per-engine 1 --sglang-mem-fraction-static 0.8
+```
+
+Version: miles `main` at or after `dfd85b00c5` (section 2).
+
+### 9.4 Steps and budget
+
+Each step must pass its gate before the next starts. The comparison in step 4 uses fixed wall-clock
+windows instead of a fixed step count, because sync and async step times differ and neither has been
+measured on this node.
+
+Table 2. Run plan for one 8×B200 node. Hours are wall-clock caps, so they are also node-hours.
+
+| Step | Run | Cap (h) | Gate to pass |
+|---|---|---|---|
+| 1 | Sync smoke: 3 steps, 2 groups of 8 | 4 | peak trainer memory per GPU under 170 GB (else CPU Adam and rerun); `--check-weight-update-equal` passes; `train_rollout_logprob_abs_diff` at the sync baseline (about 0.013) |
+| 2 | Fully-async smoke: 3 steps, settings of 9.3 at 2 groups per step | 4 | the producer survives every pause (no "worker ended"); paused requests resume on new weights; log-prob gap unchanged from step 1; re-prefill time after each resume recorded |
+| 3 | Sync baseline: settings of 9.3 without the async block | 24 | none; it is the reference |
+| 4 | Fully async: settings of 9.3 | 24 | run gates of section 7 |
+| | Reserve for a failed gate | 19 | |
+| | Total | 75 | |
+
+Steps 3 and 4 use the same taskset, batch size and in-flight count (96), and start from the same
+checkpoint.
+
+### 9.5 What to report
+
+- Main figure: cumulative trained groups against wall-clock hours, sync and async on one axis.
+- Reward against wall-clock hours, and against train steps.
+- Step time split into generate, re-prefill, train and weight update.
+- Staleness histogram of consumed groups, and groups dropped or recycled per step.
+- Peak GPU memory per phase, and host memory, against Table 1.
