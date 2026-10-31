@@ -72,17 +72,20 @@ The idea: the engine expands placeholders and returns the expanded token IDs. mi
                └─ 2: R3 rows on the engine view
  SGLang, base sglang-miles:
    OURS 3: first-turn images on the chat endpoint     (#47402)
-   OURS 4: GLM-5.3 token-space strategy               (tito-token-space-glm5)
+   OURS 4: GLM-5.3 token-space strategy               (#47674)
+ router (sgl-router-for-miles):
+   OURS 5: forward mm_token_expansion_start_len on chat (#28)
 ```
 
-Table 1. The four proposed changes. Changes 1 and 2 are two commits in one draft PR, #4586: change 2 only matters once change 1 sends images through the session server.
+Table 1. The five proposed changes. Changes 1 and 2 are two commits in one draft PR, #4586: change 2 only matters once change 1 sends images through the session server.
 
 | # | Repo | Change | Branch, head | Size |
 |---|---|---|---|---|
 | 1 | miles | Session server on token space | [#4586](https://github.com/radixark/miles/pull/4586), commit `50c4ecbb0f` | 11 files, +278/-24; new `session/token_space.py` (143 lines) |
 | 2 | miles | R3 rows on the engine view | [#4586](https://github.com/radixark/miles/pull/4586), commit `dce628a206` (head) | 4 code files, about 25 lines; +185 test lines |
 | 3 | SGLang | Keep first-turn images | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402), `pr4-qwen-vl-input-ids-v2` `008518e4fe` | one condition plus a test |
-| 4 | SGLang | GLM-5.3 strategy | dzorlu/sglang `tito-token-space-glm5` `354d92b34f` | new `models/glm5_next.py`, a 2-line hook, tests |
+| 4 | SGLang | GLM-5.3 strategy | [sglang#47674](https://github.com/sgl-project/sglang/pull/47674), `354d92b34f` | new `models/glm5_next.py`, a 2-line hook, tests |
+| 5 | router | Forward `mm_token_expansion_start_len` on the chat route | [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28), `deb98e1` | 3 files, +34 lines with tests |
 
 ### 4.1 The session server on token space
 
