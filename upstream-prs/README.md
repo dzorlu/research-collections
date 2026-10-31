@@ -2,7 +2,7 @@
 
 We train vision models with RL on long computer-use episodes. miles ([radixark/miles](https://github.com/radixark/miles)) trains, SGLang ([sgl-project/sglang](https://github.com/sgl-project/sglang)) generates the episodes. These are the fixes we carry and send upstream. To continue this work elsewhere, start with [HANDOFF.md](HANDOFF.md): every branch, the open decisions, how to test and verify each PR.
 
-**State on 2026-10-31.** 16 PRs are open upstream: 13 on miles, 3 on SGLang. Each PR description now has a "Verified on GPU" section. Passed: #4523, #4519, #4524, sglang#47402, #4050 on Megatron, and the TITO token-space rebuild on Qwen; GLM's token-space train step and the rest are pending (verdicts in [HANDOFF.md](HANDOFF.md), Table 1). [#4524](https://github.com/radixark/miles/pull/4524) is ready for review; the rest stay drafts until they pass. The TITO screenshot PRs are being rebuilt on Rockdu's token-space design; see [tito-token-space.md](tito-token-space.md). GPU verification on Qwen3.8-VL and GLM-5.3 is in progress. One more PR (GLM vision on torchtitan) is not raised yet.
+**State on 2026-10-31.** 14 PRs are open upstream: 11 on miles, 3 on SGLang. Each PR description now has a "Verified on GPU" section. Passed: #4523, #4519, #4524, sglang#47402, #4050 on Megatron, and the TITO token-space rebuild on Qwen; GLM's token-space train step and the rest are pending (verdicts in [HANDOFF.md](HANDOFF.md), Table 1). [#4524](https://github.com/radixark/miles/pull/4524) is ready for review; the rest stay drafts until they pass. The TITO screenshot PRs are being rebuilt on Rockdu's token-space design; see [tito-token-space.md](tito-token-space.md). GPU verification on Qwen3.8-VL and GLM-5.3 is in progress. One more PR (GLM vision on torchtitan) is not raised yet.
 
 Table 1. Open PRs, by group.
 
@@ -11,13 +11,13 @@ Table 1. Open PRs, by group.
 | [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) | 1. Exact tokens for vision models | replaces #44133; to be closed in favor of the token-space path |
 | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | 1. Exact tokens for vision models | replaces #44134; kept as the first-turn image fix of the token-space path |
 | [miles#4586](https://github.com/radixark/miles/pull/4586) | 1. Exact tokens for vision models | token-space session server + R3 offsets, stacked on #4272; supersedes #4546 and #4547 |
-| [miles#4546](https://github.com/radixark/miles/pull/4546) | 1. Exact tokens for vision models | superseded by #4586 |
+| [miles#4546](https://github.com/radixark/miles/pull/4546) | 1. Exact tokens for vision models | closed 2026-10-31, superseded by #4586 |
 | [miles#4516](https://github.com/radixark/miles/pull/4516) | 1. Exact tokens for vision models | Qwen parser |
 | [sglang#47203](https://github.com/sgl-project/sglang/pull/47203) | 1. Exact tokens for vision models | GLM tool-call constraint |
 | [miles#4050](https://github.com/radixark/miles/pull/4050) | 2. Vision training correctness | main merged in on 10-29 |
 | [miles#4049](https://github.com/radixark/miles/pull/4049) | 2. Vision training correctness | main merged in on 10-29 |
 | [miles#4520](https://github.com/radixark/miles/pull/4520) | 3. Expert replay (R3) on GLM | torchtitan fixes |
-| [miles#4547](https://github.com/radixark/miles/pull/4547) | 3. Expert replay (R3) on GLM | replaces #4517; to be replaced by the token-space R3 branch |
+| [miles#4547](https://github.com/radixark/miles/pull/4547) | 3. Expert replay (R3) on GLM | closed 2026-10-31, superseded by #4586 |
 | [miles#4522](https://github.com/radixark/miles/pull/4522) | 4. GLM-5.3 on torchtitan | resume |
 | [miles#4519](https://github.com/radixark/miles/pull/4519) | 5. Long colocated runs | cancel before flush |
 | [miles#4521](https://github.com/radixark/miles/pull/4521) | 5. Long colocated runs | memory report and host release |
