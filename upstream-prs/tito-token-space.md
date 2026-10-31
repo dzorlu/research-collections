@@ -110,23 +110,25 @@ At the end of the episode (step 10) the training sample is the last engine view 
 
 ### 4.2 R3 rows on the engine view
 
-GLM-5.3 is a mixture-of-experts model. R3 (routing replay) records, during the inference forward pass, which experts the router picked for each token at every MoE layer: one **row** per token. The trainer replays row *k* at token *k* instead of routing again. So row *k* must be token *k*'s recording.
+GLM-5.3 is a mixture-of-experts model. R3 (routing replay) records, during the inference forward pass, which experts the router picked for each token at every MoE layer: one **row** per token. The trainer replays row *k* at token *k* instead of routing again, so row *k* must be token *k*'s recording.
 
-An agent episode is one inference call per turn but one training sequence. The session server stitches the rows: on each turn it asks the engine only for rows after an offset (`routed_experts_start_len`, `core.py:281`) and appends them. The offset must equal the rows already held, counted as the forward pass ran the tokens: with images expanded.
+An agent episode is one inference call per turn but one training sequence. The session server stitches the rows: on each turn it asks the engine only for rows after an offset (`routed_experts_start_len`) and appends them. The offset must equal the rows already held, counted as the forward pass ran the tokens, with images expanded. Figure 2 shows a three-turn episode: screenshot A on turn 1, screenshot B on turn 2, text only on turn 3. Each image expands to 2 tokens here.
 
-```
- TURN 1  engine runs [10,501,502,11] + [20,21]  = 6 tokens -> rows 0..4 (all but the last generated token)
- TURN 2  ask for rows from 5
-         engine runs [10,501,502,11,20,21,12,601,602,13] + [22] -> rows 5..9
- SAMPLE  11 tokens, 10 rows, row k = token k
+![Figure 2](r3-rows-engine-view.svg)
 
- without change 2 (counting on the template view):
- TURN 1  [10,99,11] + [20,21] = 5 tokens -> thinks rows 0..3
- TURN 2  asks from 4 -> engine returns rows 4..9, row 4 is appended twice
- SAMPLE  every row after the screenshot is shifted: token k replays token k-1's experts
-```
+*Figure 2. Routed-expert rows for a three-turn episode, built by the real session-server code with a stub engine. A: with change 2. B: without it.*
 
-Change 2: the offset is computed on the engine view (`engine_token_ids(...)`, `session/core.py:431-446`, `session/v2/core.py:220-235`), and `merge_samples_with_addition_r3` and `adopt_session_records` end each turn's rows at `len(engine_prompt_ids(record)) + outputs - 1` (`samples/merge.py`).
+*Table 3. Offset requested and rows returned per turn. "Template view" counts each image as one placeholder.*
+
+| Turn | Engine prompt + reply | Offset with change 2 | Rows returned | Offset without (template view) | Rows returned |
+|---|---|---|---|---|---|
+| 1 | `[10, 501, 502, 11]` + `[20, 21]` | 0 | 0 to 4 | 0 | 0 to 4 |
+| 2 | `[..., 12, 601, 602, 13]` + `[22]` | 5 | 5 to 9 | 4 | 4 to 9 |
+| 3 | `[..., 22, 14, 15]` + `[23]` | 10 | 10 to 12 | 8 | 8 to 12 |
+
+With change 2 the sample has 14 tokens and 13 rows, and row *k* comes from position *k* for every *k*. Without it, each offset falls short by one per earlier image, rows overlap, and the turn-1 record expects 4 rows but holds 5. The session server then refuses the sample with HTTP 422 (`cannot reshape array of size 20 into shape (4,2,2)`); the two-turn episode is refused the same way. Every shape we ran was refused rather than silently misaligned. A shape whose sizes happen to divide evenly could pass the reshape; we have not seen one.
+
+Change 2 computes the offset on the engine view, after the request is built (`engine_token_ids`, `token_space.py:55`, called at `core.py:442` and `v2/core.py:231`). `merge_samples_with_addition_r3` and `adopt_session_records` end each turn's rows at `len(engine_prompt_ids(record)) + outputs - 1` (`samples/merge.py:280`, `:239`).
 
 ### 4.3 First-turn images (#47402)
 
