@@ -34,4 +34,5 @@ notebook.
   session server.
 - [miles-harness/](miles-harness/): build spec for a long-horizon agent RL harness on upstream miles (session
   server, agent and reward hooks, screenshot folding, policy-written summaries, eval, test gates), plus
-  per-model recipes as miles flags for Qwen3.8-27B, GLM-5.3-Flash and Muse Spark Open.
+  per-model recipes as miles flags for Qwen3.8-27B, GLM-5.3-Flash and Muse Spark Open, and colocated
+  fully-async training (what overlaps, flags miles refuses, loss correction, harness rules, run gates).

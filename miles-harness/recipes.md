@@ -159,7 +159,7 @@ EP8 × PP6 = 48 GPUs.
 - No PP: torchtitan pads every micro-batch to `--seq-length` under PP. No TP: the GLM model refuses it.
 - The episode count per step must be a multiple of DP (6 here): 72 = 9 prompts × 8 samples.
 - Routing replay needs the `triton` MoE runner: SGLang's `flashinfer_trtllm` runner skips the top-k capture
-  and returns zeros. `in_place` pause lets the session server fetch only new routing rows each turn.
+  and returns zeros. `in_place` pause lets the session server fetch only new routing rows each turn. Sync runs only: colocated fully async requires `retract` ([async.md](async.md) section 3).
 - Host memory per node runs close to the limit (about 2.3 to 2.4 TiB of about 2.6). Watch it.
 - Rehearse on one node with a 4-layer slice of the checkpoint (same model class, same code paths) before
   the 6-node job.
