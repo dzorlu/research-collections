@@ -16,8 +16,8 @@ Everything is public: the PRs (Table 1), the fork branches ([dzorlu/miles](https
 What is left, in order:
 
 1. **GLM-5.3 train step on the token-space path.** The one missing check for #4586, sglang#47674, #4588, #4520 and #47203 on token space. Run section 5.3's R2 shape (6 nodes, torchtitan, R3 on) with `MILES_TEST_R3_THRESHOLD=1.0` (log, do not assert) and Ray log dedup on. Pass = train step 0 completes, a checkpoint is saved, KL and grad norm are finite. Then R3 (resume from step 2) verifies #4522.
-2. **Qwen 2-step readout.** #4521 (host memory flat across steps), #4049 (tower tensors per sync), #4516 (reasoning and tool-call shares), #4518 (eval groups with a cancelled episode). A 2-step Qwen run (section 5.3 R1 with `--num-rollout 2`, eval between steps) gives all four. If our last run's numbers reached the PR descriptions, skip this.
-3. **Mark ready.** Move each PASS PR from draft to ready for review: today #4524 (already ready), #4523, #4519, #4050, sglang#47402, sgl-router-for-miles#28.
+2. **Qwen multi-step readout: done 2026-10-31** (3 steps). #4521, #4049 and #4516 pass; #4518's case (an eval group holding a cancelled episode) never occurred, so it stays unverified on GPU.
+3. **Mark ready.** Move each PASS PR from draft to ready for review: today #4524 (already ready), #4523, #4519, #4050, #4516, #4521, #4049, sglang#47402, sgl-router-for-miles#28.
 4. **Follow-ups:** an image-aware threshold for the R3 replay check (image tokens disagree about 15x more than text on both paths); the two upstream bugs of decision 3.7.
 
 Build without our launcher: section 5.1 (upstream dev image plus the PR branches merged), the B300 image pins in section 5.0, the router fix from #28, and the run flags in [../miles-harness/](../miles-harness/README.md) (section 5 and 6) and [../miles-harness/recipes.md](../miles-harness/recipes.md). Section 5.5 covers Modal.
@@ -35,18 +35,18 @@ Table 1. Every open PR, its current head, and its GPU verdict on 2026-10-31. Eac
 | [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) GLM-5.3 token-space strategy (base `sglang-miles`) | 1. TITO | `tito-token-space-glm5` `354d92b34f` | CPU parity bitwise; rollouts PASS (G) | a completed G train step |
 | [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28) router forwards `mm_token_expansion_start_len` on chat | 1. TITO | dzorlu/sgl-router-for-miles `chat-forward-mm-token-expansion-start-len` `deb98e1` (on main `b6839b5`; same patch-id as the build that ran) | PASS (every Q and G token-space run; 0 HTTP 400 over 32/32 and 128/128 Q episodes; without it turn 2 fails) | none |
 | [miles#4588](https://github.com/radixark/miles/pull/4588) GLM-5.3 vision on torchtitan | 4. GLM torchtitan | `glm-vision-titan-port` `85136e6318` (behind main) | PASS on the non-token-space G path (train step 0, KL 1.78e-3, abs diff 0.0196); 49 CPU tests | token-space G train step; rebase for torchtitan v0.4.0 |
-| [miles#4516](https://github.com/radixark/miles/pull/4516) | 1. TITO | `pr-qwen-thinking-parser-v2` `c6777d7023` | pending (Q TITO mismatch 0.0) | reasoning and tool-call shares from the 2-step Q run |
+| [miles#4516](https://github.com/radixark/miles/pull/4516) | 1. TITO | `pr-qwen-thinking-parser-v2` `c6777d7023` | PASS (Q 3-step: reasoning and tool calls parsed in 100% of 25,461 turns; 0 leaked `</think>`) | none |
 | [sglang#47203](https://github.com/sgl-project/sglang/pull/47203) | 1. TITO | `pr-tool-call-constraint-arg-v2` `5338d322bf` | PASS on the non-token-space G path (up to 46 tool calls per turn) | token-space G run |
 | [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) | 1. TITO | `pr3-mm-exact-token-images-v2` `e73de6edb1` | not exercised | close: replaced by the token-space path |
 | [miles#4050](https://github.com/radixark/miles/pull/4050) | 2. Vision | `pr1-vision-rollout-schedule` `2d063bc963` | PASS on Megatron (Q: divisor = episodes, 32 and 128); torchtitan non-token-space divisor 32 for 186 samples | token-space G train step |
-| [miles#4049](https://github.com/radixark/miles/pull/4049) | 2. Vision | `pr2-mm-tower-sync` `c0b94b68c3` | pending | tower tensors per sync from the 2-step Q run |
+| [miles#4049](https://github.com/radixark/miles/pull/4049) | 2. Vision | `pr2-mm-tower-sync` `c0b94b68c3` | PASS on sending (Q: 333 tower tensors per sync, all 32 ranks, each step) | optional: engine-side tower equality after a sync |
 | [miles#4520](https://github.com/radixark/miles/pull/4520) | 3. R3 | `pr-expert-replay-torchtitan-v2` `11c6f92781` | PASS on the non-token-space G path (record pass ran, step-0 kl_loss 0) | token-space G train step |
 | [miles#4522](https://github.com/radixark/miles/pull/4522) | 4. GLM torchtitan | `pr-torchtitan-resume-load-v2` `9db3587ba0` | pending | G resume from its step-2 checkpoint (R3) |
 | [miles#4519](https://github.com/radixark/miles/pull/4519) | 5. Colocated | `pr-offload-abort-before-flush-v2` `0f42285361` (second commit added 10-31 for `--fully-async --colocate`) | PASS (sync Q and G; fully-async Q: 129 written-off episodes before the second commit, 0 after) | none |
-| [miles#4521](https://github.com/radixark/miles/pull/4521) | 5. Colocated | `pr-colocated-memory-v2` `b3259196da` | pending (memory lines logged) | host memory across steps from the 2-step Q run |
+| [miles#4521](https://github.com/radixark/miles/pull/4521) | 5. Colocated | `pr-colocated-memory-v2` `b3259196da` | PASS per process (Q: host RSS and GPU allocated flat across steps) | optional: per-node totals |
 | [miles#4523](https://github.com/radixark/miles/pull/4523) | 6. Native LoRA | `pr-native-lora-resume` `248f3326fd` | PASS (L: optimizer, adapter, scheduler bitwise after resume; all three fail without the PR) | none |
 | [miles#4524](https://github.com/radixark/miles/pull/4524) | 6. Native LoRA | `muse-cpu-safe-import` `d56683a4f2` (base `muse-spark-open`) | PASS, ready for review | none |
-| [miles#4518](https://github.com/radixark/miles/pull/4518) | 7. Cancelled | `pr10-zero-std-skips-aborted-groups-v2` `1e5adfddae` | pending (two eval passes completed) | count of eval groups with a cancelled episode, from the 2-step Q run |
+| [miles#4518](https://github.com/radixark/miles/pull/4518) | 7. Cancelled | `pr10-zero-std-skips-aborted-groups-v2` `1e5adfddae` | not exercised (Q: 3 eval passes completed; no eval group held a cancelled episode) | a run where an eval group holds a cancelled episode; CPU tests cover it |
 
 **GLM-5.3 vision on torchtitan: raised 2026-10-31 as draft [#4588](https://github.com/radixark/miles/pull/4588).** Port of the closed #4022 onto main. Open point: under context parallelism this path ignores `--log-probs-backend fused`.
 
