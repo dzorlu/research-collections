@@ -46,7 +46,7 @@
   <rect class="ours" x="212" y="95" width="383" height="54" rx="6"/>
   <circle cx="230" cy="122" r="11" fill="#3b78d8"/><text class="num" x="230" y="127" text-anchor="middle">2</text>
   <text class="step" x="248" y="117">save each screenshot once, as a file</text>
-  <text class="file" x="248" y="137">core.py:506 → token_space.py:29</text>
+  <text class="file" x="248" y="137">core.py:419 → token_space.py:29</text>
 
   <!-- 3 TITO match -->
   <rect class="theirs" x="212" y="163" width="383" height="54" rx="6"/>
@@ -59,7 +59,7 @@
   <circle cx="230" cy="258" r="11" fill="#3b78d8"/><text class="num" x="230" y="263" text-anchor="middle">4</text>
   <text class="step" x="248" y="253">build the engine request: stored expanded</text>
   <text class="step" x="248" y="271">prefix + new part + start_len</text>
-  <text class="file" x="248" y="293">token_space.py:93 (called at core.py:433)</text>
+  <text class="file" x="248" y="293">token_space.py:93 (called at core.py:435)</text>
 
   <!-- 5 send through router -->
   <circle cx="440" cy="345" r="11" fill="#333"/><text class="num" x="440" y="350" text-anchor="middle">5</text>

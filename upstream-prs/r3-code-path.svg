@@ -31,5 +31,5 @@
 <rect class="theirs" x="975" y="510" width="118" height="72" rx="6"/><text class="step" x="1034" y="532" text-anchor="middle">replays row k</text><text class="step" x="1034" y="551" text-anchor="middle">at token k</text><text class="step" x="1034" y="570" text-anchor="middle">(routing replay)</text>
 <rect class="ours" x="36" y="628" width="18" height="14" rx="3"/><text class="sub" x="60" y="640">our change (R3 branch)</text>
 <rect class="theirs" x="230" y="628" width="18" height="14" rx="3"/><text class="sub" x="254" y="640">existing code</text>
-<text class="sub" x="420" y="640">file:line on dzorlu/miles branch tito-session-token-space-r3; router: sgl-router-for-miles main</text>
+<text class="sub" x="420" y="640">file:line on dzorlu/miles branch tito-session-token-space; router: sgl-router-for-miles main</text>
 </svg>

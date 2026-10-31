@@ -67,19 +67,20 @@ The idea: the engine expands placeholders and returns the expanded token IDs. mi
       └─ #4272 [2/4] rockdu/vlm-02-token-space
           ├─ #4434 [3/4] rockdu/vlm-03-video-freeze
           ├─ [4/4] not published
-          └─ OURS 1: session server on token space   (tito-session-token-space)
-               └─ OURS 2: R3 rows on the engine view   (tito-session-token-space-r3)
+          └─ OURS, one PR (tito-session-token-space), two commits:
+               ├─ 1: session server on token space
+               └─ 2: R3 rows on the engine view
  SGLang, base sglang-miles:
    OURS 3: first-turn images on the chat endpoint     (#47402)
    OURS 4: GLM-5.3 token-space strategy               (tito-token-space-glm5)
 ```
 
-Table 1. The four proposed changes.
+Table 1. The four proposed changes. Changes 1 and 2 are two commits on one branch and go up as one PR: change 2 only matters once change 1 sends images through the session server.
 
 | # | Repo | Change | Branch, head | Size |
 |---|---|---|---|---|
-| 1 | miles | Session server on token space | dzorlu/miles `tito-session-token-space` `50c4ecbb0f` | 11 files, +278/-24; new `session/token_space.py` (143 lines) |
-| 2 | miles | R3 rows on the engine view | dzorlu/miles `tito-session-token-space-r3` `dce628a206` | 4 code files, about 25 lines; +185 test lines |
+| 1 | miles | Session server on token space | dzorlu/miles `tito-session-token-space`, commit `50c4ecbb0f` | 11 files, +278/-24; new `session/token_space.py` (143 lines) |
+| 2 | miles | R3 rows on the engine view | same branch, commit `dce628a206` (head) | 4 code files, about 25 lines; +185 test lines |
 | 3 | SGLang | Keep first-turn images | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402), `pr4-qwen-vl-input-ids-v2` `008518e4fe` | one condition plus a test |
 | 4 | SGLang | GLM-5.3 strategy | dzorlu/sglang `tito-token-space-glm5` `354d92b34f` | new `models/glm5_next.py`, a 2-line hook, tests |
 
@@ -118,7 +119,7 @@ Figure 2 shows where this happens in the code. Steps 2 and 7 are our change; the
 
 ![Figure 2](r3-code-path.svg)
 
-*Figure 2. The R3 code path: every turn (steps 1 to 6) and the end of the episode (step 7). File and line references are on the dzorlu/miles branch `tito-session-token-space-r3`.*
+*Figure 2. The R3 code path: every turn (steps 1 to 6) and the end of the episode (step 7). File and line references are on the dzorlu/miles branch `tito-session-token-space`.*
 
 Figure 3 shows a three-turn episode: screenshot A on turn 1, screenshot B on turn 2, text only on turn 3. Each image expands to 2 tokens here.
 
@@ -174,4 +175,4 @@ GPU pass criteria: first-turn images reach the engine; `start_len` equals the st
 3. `TokenSpaceProcessor` processes every media item on every request, including images already in the expanded prefix: a 40-screenshot session reprocesses all 40 each turn. Is skipping or caching planned?
 4. Who cleans `--shared-media-dir`? Nothing deletes the files.
 
-Once the GPU runs pass, changes 1 and 2 are raised on his branch (or as he prefers) and change 4 against `sglang-miles`; change 3 is already open as #47402.
+Once the GPU runs pass, changes 1 and 2 are raised as one PR on his branch (or as he prefers) and change 4 against `sglang-miles`; change 3 is already open as #47402.

@@ -29,7 +29,7 @@ Table 1. Open PRs, by group.
 The trainer must see the exact token IDs and images the engine used, on every turn of an episode. For screenshots we propose four changes on top of Rockdu's token-space design (open [#4240](https://github.com/radixark/miles/pull/4240) and [#4272](https://github.com/radixark/miles/pull/4272)), explained with examples and code references in [tito-token-space.md](tito-token-space.md):
 
 - **Session server on token space** (miles, fork branch `tito-session-token-space`). Screenshots sent by an agent harness go through the session server: each turn sends the stored expanded prefix, the new part with one placeholder per image and `mm_token_expansion_start_len`; the session stores the engine's returned expanded token IDs, and the trainer uses Rockdu's rebuild.
-- **R3 rows on the engine view** (miles, fork branch `tito-session-token-space-r3`). Expert-routing rows are stitched per turn by counting tokens as the model ran them, so row k stays token k after a screenshot.
+- **R3 rows on the engine view** (miles, fork branch `tito-session-token-space`, same PR as the session-server change). Expert-routing rows are stitched per turn by counting tokens as the model ran them, so row k stays token k after a screenshot.
 - **[sglang#47402](https://github.com/sgl-project/sglang/pull/47402): first-turn images.** A chat request with token IDs and offset 0 no longer drops its images.
 - **GLM-5.3 strategy** (SGLang, fork branch `tito-token-space-glm5`). GLM-5.3 support for the token-space processor, bitwise equal to SGLang's existing GLM processor.
 
