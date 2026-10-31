@@ -2,7 +2,7 @@
 
 We train vision models with RL on long computer-use episodes. miles ([radixark/miles](https://github.com/radixark/miles)) trains, SGLang ([sgl-project/sglang](https://github.com/sgl-project/sglang)) generates the episodes. These are the fixes we carry and send upstream. To continue this work elsewhere, start with [HANDOFF.md](HANDOFF.md): every branch, the open decisions, how to test and verify each PR.
 
-**State on 2026-10-31.** 15 PRs are open upstream: 12 on miles, 3 on SGLang. Each PR description now has a "Verified on GPU" section. Passed: #4523, #4519, #4524, sglang#47402, #4050 on Megatron, and the TITO token-space rebuild on Qwen; GLM's token-space train step and the rest are pending (verdicts in [HANDOFF.md](HANDOFF.md), Table 1). [#4524](https://github.com/radixark/miles/pull/4524) is ready for review; the rest stay drafts until they pass. The TITO screenshot PRs are being rebuilt on Rockdu's token-space design; see [tito-token-space.md](tito-token-space.md). GPU verification on Qwen3.8-VL and GLM-5.3 is in progress. One more PR (GLM vision on torchtitan) is not raised yet.
+**State on 2026-10-31.** 16 PRs are open upstream: 13 on miles, 3 on SGLang. Each PR description now has a "Verified on GPU" section. Passed: #4523, #4519, #4524, sglang#47402, #4050 on Megatron, and the TITO token-space rebuild on Qwen; GLM's token-space train step and the rest are pending (verdicts in [HANDOFF.md](HANDOFF.md), Table 1). [#4524](https://github.com/radixark/miles/pull/4524) is ready for review; the rest stay drafts until they pass. The TITO screenshot PRs are being rebuilt on Rockdu's token-space design; see [tito-token-space.md](tito-token-space.md). GPU verification on Qwen3.8-VL and GLM-5.3 is in progress. One more PR (GLM vision on torchtitan) is not raised yet.
 
 Table 1. Open PRs, by group.
 
@@ -10,7 +10,8 @@ Table 1. Open PRs, by group.
 |---|---|---|
 | [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) | 1. Exact tokens for vision models | replaces #44133; to be closed in favor of the token-space path |
 | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | 1. Exact tokens for vision models | replaces #44134; kept as the first-turn image fix of the token-space path |
-| [miles#4546](https://github.com/radixark/miles/pull/4546) | 1. Exact tokens for vision models | replaces #4051; to be replaced by the token-space session-server branch |
+| [miles#4586](https://github.com/radixark/miles/pull/4586) | 1. Exact tokens for vision models | token-space session server + R3 offsets, stacked on #4272; supersedes #4546 and #4547 |
+| [miles#4546](https://github.com/radixark/miles/pull/4546) | 1. Exact tokens for vision models | superseded by #4586 |
 | [miles#4516](https://github.com/radixark/miles/pull/4516) | 1. Exact tokens for vision models | Qwen parser |
 | [sglang#47203](https://github.com/sgl-project/sglang/pull/47203) | 1. Exact tokens for vision models | GLM tool-call constraint |
 | [miles#4050](https://github.com/radixark/miles/pull/4050) | 2. Vision training correctness | main merged in on 10-29 |
@@ -28,7 +29,7 @@ Table 1. Open PRs, by group.
 
 The trainer must see the exact token IDs and images the engine used, on every turn of an episode. For screenshots we propose four changes on top of Rockdu's token-space design (open [#4240](https://github.com/radixark/miles/pull/4240) and [#4272](https://github.com/radixark/miles/pull/4272)), explained with examples and code references in [tito-token-space.md](tito-token-space.md):
 
-- **Session server on token space** (miles, fork branch `tito-session-token-space`). Screenshots sent by an agent harness go through the session server: each turn sends the stored expanded prefix, the new part with one placeholder per image and `mm_token_expansion_start_len`; the session stores the engine's returned expanded token IDs, and the trainer uses Rockdu's rebuild.
+- **Session server on token space** (miles, [#4586](https://github.com/radixark/miles/pull/4586), fork branch `tito-session-token-space`). Screenshots sent by an agent harness go through the session server: each turn sends the stored expanded prefix, the new part with one placeholder per image and `mm_token_expansion_start_len`; the session stores the engine's returned expanded token IDs, and the trainer uses Rockdu's rebuild.
 - **R3 rows on the engine view** (miles, fork branch `tito-session-token-space`, same PR as the session-server change). Expert-routing rows are stitched per turn by counting tokens as the model ran them, so row k stays token k after a screenshot.
 - **[sglang#47402](https://github.com/sgl-project/sglang/pull/47402): first-turn images.** A chat request with token IDs and offset 0 no longer drops its images.
 - **GLM-5.3 strategy** (SGLang, fork branch `tito-token-space-glm5`). GLM-5.3 support for the token-space processor, bitwise equal to SGLang's existing GLM processor.
