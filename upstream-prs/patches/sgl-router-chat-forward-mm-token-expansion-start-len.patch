@@ -1,0 +1,125 @@
+From f53d38c9ceface6e10b20c83c9c0dcbcc5d2a21f Mon Sep 17 00:00:00 2001
+From: Deniz <dzorlu@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 14:03:44 -0700
+Subject: [PATCH] feat(protocol): forward mm_token_expansion_start_len on chat
+
+PR #26 added mm_token_expansion_start_len to GenerateRequest only. The
+chat route deserializes into ChatCompletionRequest and re-serializes it,
+so the field was dropped on /v1/chat/completions. SGLang then expanded
+media from offset 0 and rejected the next turn with a placeholder count
+mismatch.
+
+Add the field to ChatCompletionRequest with the same type and serde
+attributes as GenerateRequest. Strip it for external OpenAI providers
+like the other SGLang fields. Extend the chat spec tests: the field
+round-trips (int and list) and stays absent when unset.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/protocols/chat.rs          |  5 +++++
+ src/routers/openai/provider.rs |  1 +
+ tests/spec/chat_completion.rs  | 28 ++++++++++++++++++++++++++++
+ 3 files changed, 34 insertions(+)
+
+diff --git a/src/protocols/chat.rs b/src/protocols/chat.rs
+index 33125a8..fd1d1f4 100644
+--- a/src/protocols/chat.rs
++++ b/src/protocols/chat.rs
+@@ -394,6 +394,11 @@ pub struct ChatCompletionRequest {
+     #[serde(default)]
+     pub return_prompt_token_ids: bool,
+ 
++    /// Length of the already expanded input_ids prefix; only media placeholders
++    /// after it are expanded (SGLang extension). An int, or a list for a batch request
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub mm_token_expansion_start_len: Option<Value>,
++
+     /// Return meta info in response (SGLang extension)
+     #[serde(default)]
+     pub return_meta_info: bool,
+diff --git a/src/routers/openai/provider.rs b/src/routers/openai/provider.rs
+index b7ece4f..3b5b78e 100644
+--- a/src/routers/openai/provider.rs
++++ b/src/routers/openai/provider.rs
+@@ -33,6 +33,7 @@ const SGLANG_FIELDS: &[&str] = &[
+     "routed_experts_start_len",
+     "return_cached_tokens_details",
+     "return_prompt_token_ids",
++    "mm_token_expansion_start_len",
+     "return_meta_info",
+     "input_ids",
+     "stop_regex",
+diff --git a/tests/spec/chat_completion.rs b/tests/spec/chat_completion.rs
+index f117271..6a57e80 100644
+--- a/tests/spec/chat_completion.rs
++++ b/tests/spec/chat_completion.rs
+@@ -586,6 +586,7 @@ fn test_sglang_extension_fields_roundtrip() {
+         "routed_experts_start_len": 10,
+         "return_cached_tokens_details": true,
+         "return_prompt_token_ids": true,
++        "mm_token_expansion_start_len": 122,
+         "return_meta_info": true,
+         "input_ids": [1, 2, 3, 42, 100],
+         "stop_regex": ["\\d+", "end"],
+@@ -617,6 +618,7 @@ fn test_sglang_extension_fields_roundtrip() {
+     assert_eq!(req.routed_experts_start_len, 10);
+     assert!(req.return_cached_tokens_details);
+     assert!(req.return_prompt_token_ids);
++    assert_eq!(req.mm_token_expansion_start_len, Some(json!(122)));
+     assert!(req.return_meta_info);
+     assert_eq!(req.input_ids, Some(vec![1, 2, 3, 42, 100]));
+     assert_eq!(req.max_dynamic_patch, Some(12));
+@@ -637,6 +639,7 @@ fn test_sglang_extension_fields_roundtrip() {
+     assert_eq!(serialized["routed_experts_start_len"], 10);
+     assert_eq!(serialized["return_cached_tokens_details"], true);
+     assert_eq!(serialized["return_prompt_token_ids"], true);
++    assert_eq!(serialized["mm_token_expansion_start_len"], 122);
+     assert_eq!(serialized["return_meta_info"], true);
+     assert_eq!(serialized["input_ids"], json!([1, 2, 3, 42, 100]));
+     assert_eq!(serialized["stop_regex"], json!(["\\d+", "end"]));
+@@ -675,6 +678,7 @@ fn test_sglang_extension_fields_default_values() {
+     assert_eq!(req.routed_experts_start_len, 0);
+     assert!(!req.return_cached_tokens_details);
+     assert!(!req.return_prompt_token_ids);
++    assert!(req.mm_token_expansion_start_len.is_none());
+     assert!(!req.return_meta_info);
+     assert!(req.input_ids.is_none());
+     assert!(req.stop_regex.is_none());
+@@ -717,6 +721,7 @@ fn test_sglang_optional_fields_omitted_when_none() {
+         "routed_dp_rank", "disagg_prefill_dp_rank", "data_parallel_rank",
+         "sampling_logprobs_mode",
+         "return_outputs_via_store",
++        "mm_token_expansion_start_len",
+     ];
+     for field in omitted {
+         assert!(
+@@ -741,3 +746,26 @@ fn test_top_logprobs_accepts_up_to_128() {
+         assert_eq!(serde_json::to_value(&req).unwrap()["top_logprobs"], count);
+     }
+ }
++
++#[test]
++fn test_mm_token_expansion_start_len_forwarded() {
++    // The router re-serializes the typed request, so a field missing from the
++    // struct would be dropped before it reaches SGLang.
++    let with_list: ChatCompletionRequest = serde_json::from_value(json!({
++        "model": "test-model",
++        "messages": [{"role": "user", "content": "hello"}],
++        "input_ids": [1, 2, 3],
++        "mm_token_expansion_start_len": [577, 0]
++    }))
++    .expect("should deserialize");
++    let serialized = serde_json::to_value(&with_list).expect("should serialize");
++    assert_eq!(serialized["mm_token_expansion_start_len"], json!([577, 0]));
++
++    let absent: ChatCompletionRequest = serde_json::from_value(json!({
++        "model": "test-model",
++        "messages": [{"role": "user", "content": "hello"}]
++    }))
++    .expect("should deserialize");
++    let serialized = serde_json::to_value(&absent).expect("should serialize");
++    assert!(serialized.get("mm_token_expansion_start_len").is_none());
++}
+-- 
+2.39.5 (Apple Git-154)
+

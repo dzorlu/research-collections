@@ -2,7 +2,7 @@
 
 We train vision models with RL on long computer-use episodes. miles ([radixark/miles](https://github.com/radixark/miles)) trains, SGLang ([sgl-project/sglang](https://github.com/sgl-project/sglang)) generates the episodes. These are the fixes we carry and send upstream. To continue this work elsewhere, start with [HANDOFF.md](HANDOFF.md): every branch, the open decisions, how to test and verify each PR.
 
-**State on 2026-10-30.** 15 PRs are open upstream: 12 on miles, 3 on SGLang. [#4524](https://github.com/radixark/miles/pull/4524) passed its check and is ready for review; the rest are drafts until they pass. The TITO screenshot PRs are being rebuilt on Rockdu's token-space design; see [tito-token-space.md](tito-token-space.md). GPU verification on Qwen3.8-VL and GLM-5.3 is in progress. One more PR (GLM vision on torchtitan) is not raised yet.
+**State on 2026-10-31.** 15 PRs are open upstream: 12 on miles, 3 on SGLang. Each PR description now has a "Verified on GPU" section. Passed: #4523, #4519, #4524, sglang#47402, #4050 on Megatron, and the TITO token-space rebuild on Qwen; GLM's token-space train step and the rest are pending (verdicts in [HANDOFF.md](HANDOFF.md), Table 1). [#4524](https://github.com/radixark/miles/pull/4524) is ready for review; the rest stay drafts until they pass. The TITO screenshot PRs are being rebuilt on Rockdu's token-space design; see [tito-token-space.md](tito-token-space.md). GPU verification on Qwen3.8-VL and GLM-5.3 is in progress. One more PR (GLM vision on torchtitan) is not raised yet.
 
 Table 1. Open PRs, by group.
 
