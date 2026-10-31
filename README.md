@@ -32,3 +32,6 @@ notebook.
   8×B200 node (full-parameter Qwen3.8-27B; LoRA MiMo-V2.6-Flash), what 256K context needs there, and
   the state of long-horizon training with screenshot folding, a policy-written summary and the TITO
   session server.
+- [miles-harness/](miles-harness/): build spec for a long-horizon agent RL harness on upstream miles (session
+  server, agent and reward hooks, screenshot folding, policy-written summaries, eval, test gates), plus
+  per-model recipes as miles flags for Qwen3.8-27B, GLM-5.3-Flash and Muse Spark Open.
