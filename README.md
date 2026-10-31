@@ -28,3 +28,7 @@ notebook.
   ([open in Colab](https://colab.research.google.com/github/dzorlu/research-collections/blob/main/rl-corrections/01-multi-step-clipping/cispo_backward.ipynb)).
 - [upstream-prs/](upstream-prs/): our open PRs to miles and SGLang, grouped by project, with what
   each one fixes and where it stands upstream.
+- [single-node-training/](single-node-training/): which open-weight model is the best one to train on one
+  8×B200 node (full-parameter Qwen3.8-27B; LoRA MiMo-V2.6-Flash), what 256K context needs there, and
+  the state of long-horizon training with screenshot folding, a policy-written summary and the TITO
+  session server.
