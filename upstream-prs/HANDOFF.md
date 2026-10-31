@@ -9,6 +9,19 @@ State on 2026-10-31. Everything needed to continue is in GitHub: the PRs, the fo
 - Deniz decides the open questions in section 3. Do not mark PRs ready, request reviewers, force-push, or post comments upstream without his go.
 - Forks: [dzorlu/miles](https://github.com/dzorlu/miles), [dzorlu/sglang](https://github.com/dzorlu/sglang). Push new work as new branch names. Do not rewrite branches that back an open PR unless Deniz says so.
 
+## 1a. Resuming without our cluster
+
+Everything is public: the PRs (Table 1), the fork branches ([dzorlu/miles](https://github.com/dzorlu/miles), [dzorlu/sglang](https://github.com/dzorlu/sglang), [dzorlu/sgl-router-for-miles](https://github.com/dzorlu/sgl-router-for-miles)), the GPU results in each PR description ("Verified on GPU"), and this folder. Nothing below needs our cluster, launcher or internal repos.
+
+What is left, in order:
+
+1. **GLM-5.3 train step on the token-space path.** The one missing check for #4586, sglang#47674, #4588, #4520 and #47203 on token space. Run section 5.3's R2 shape (6 nodes, torchtitan, R3 on) with `MILES_TEST_R3_THRESHOLD=1.0` (log, do not assert) and Ray log dedup on. Pass = train step 0 completes, a checkpoint is saved, KL and grad norm are finite. Then R3 (resume from step 2) verifies #4522.
+2. **Qwen 2-step readout.** #4521 (host memory flat across steps), #4049 (tower tensors per sync), #4516 (reasoning and tool-call shares), #4518 (eval groups with a cancelled episode). A 2-step Qwen run (section 5.3 R1 with `--num-rollout 2`, eval between steps) gives all four. If our last run's numbers reached the PR descriptions, skip this.
+3. **Mark ready.** Move each PASS PR from draft to ready for review: today #4524 (already ready), #4523, #4519, #4050, sglang#47402, sgl-router-for-miles#28.
+4. **Follow-ups:** an image-aware threshold for the R3 replay check (image tokens disagree about 15x more than text on both paths); the two upstream bugs of decision 3.7.
+
+Build without our launcher: section 5.1 (upstream dev image plus the PR branches merged), the B300 image pins in section 5.0, the router fix from #28, and the run flags in [../miles-harness/](../miles-harness/README.md) (section 5 and 6) and [../miles-harness/recipes.md](../miles-harness/recipes.md). Section 5.5 covers Modal.
+
 ## 2. Where each PR stands
 
 Table 1. Every open PR, its current head, and its GPU verdict on 2026-10-31. Each PR description on GitHub now has a "Verified on GPU" section with the numbers. Q = Qwen3.8-27B VL on Megatron, 4 nodes of 8x B300; G = GLM-5.3 VL on torchtitan, 6 nodes, R3 on; L = Qwen3-0.6B native LoRA, 1 node. Q and G run computer-use episodes through the session server.
@@ -19,8 +32,9 @@ Table 1. Every open PR, its current head, and its GPU verdict on 2026-10-31. Eac
 | [miles#4546](https://github.com/radixark/miles/pull/4546) | 1. TITO | `pr6-session-images-v4` `10551a0b0e` (older design) | PASS for the token-space rebuild, `tito-session-token-space` `dce628a206` commit 1 (Q, G rollouts) | a completed G train step; closed 2026-10-31, superseded by #4586 |
 | [miles#4547](https://github.com/radixark/miles/pull/4547) | 3. R3 | `pr-r3-session-image-offsets-v6` `226cdadbc6` (older design) | PASS on alignment for the rebuild's commit 2 (G replay check equal to the non-token-space path) | closed 2026-10-31, superseded by #4586 |
 | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | 1. TITO | `pr4-qwen-vl-input-ids-v2` `008518e4fe` | PASS (Q: 0 prompt-ID mismatches over 124 samples) | none |
-| GLM-5.3 token-space strategy (no PR) | 1. TITO | dzorlu/sglang `tito-token-space-glm5` `354d92b34f` | rollouts PASS (G) | a completed G train step; draft PR to `sglang-miles` |
-| router change (no PR) | 1. TITO | [patch](patches/sgl-router-chat-forward-mm-token-expansion-start-len.patch) on radixark/sgl-router-for-miles `b6839b5ad4` | in every Q and G token-space run | a PR to the router (decision 3.6) |
+| [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) GLM-5.3 token-space strategy (base `sglang-miles`) | 1. TITO | `tito-token-space-glm5` `354d92b34f` | CPU parity bitwise; rollouts PASS (G) | a completed G train step |
+| [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28) router forwards `mm_token_expansion_start_len` on chat | 1. TITO | dzorlu/sgl-router-for-miles `chat-forward-mm-token-expansion-start-len` `deb98e1` (on main `b6839b5`) | PASS (in every Q and G token-space run; without it turn 2 fails) | none |
+| [miles#4588](https://github.com/radixark/miles/pull/4588) GLM-5.3 vision on torchtitan | 4. GLM torchtitan | `glm-vision-titan-port` `37da2ff9ed` (20 behind main) | PASS on the non-token-space G path (train step 0, KL 1.78e-3, abs diff 0.0196); 49 CPU tests | token-space G train step; rebase for torchtitan v0.4.0 |
 | [miles#4516](https://github.com/radixark/miles/pull/4516) | 1. TITO | `pr-qwen-thinking-parser-v2` `c6777d7023` | pending (Q TITO mismatch 0.0) | reasoning and tool-call shares from the 2-step Q run |
 | [sglang#47203](https://github.com/sgl-project/sglang/pull/47203) | 1. TITO | `pr-tool-call-constraint-arg-v2` `5338d322bf` | PASS on the non-token-space G path (up to 46 tool calls per turn) | token-space G run |
 | [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) | 1. TITO | `pr3-mm-exact-token-images-v2` `e73de6edb1` | not exercised | close: replaced by the token-space path |
@@ -34,7 +48,7 @@ Table 1. Every open PR, its current head, and its GPU verdict on 2026-10-31. Eac
 | [miles#4524](https://github.com/radixark/miles/pull/4524) | 6. Native LoRA | `muse-cpu-safe-import` `d56683a4f2` (base `muse-spark-open`) | PASS, ready for review | none |
 | [miles#4518](https://github.com/radixark/miles/pull/4518) | 7. Cancelled | `pr10-zero-std-skips-aborted-groups-v2` `1e5adfddae` | pending (two eval passes completed) | count of eval groups with a cancelled episode, from the 2-step Q run |
 
-**Not raised yet: GLM-5.3 vision on torchtitan.** Our first PR, miles#4022, was closed on 2026-10-26 after upstream merged GLM-5.3 text training on torchtitan (#3989, #3995). The port of its six commits onto main is on dzorlu/miles `glm-vision-titan-port` `37da2ff9ed` (on main `4250360dfc`). Its 7 test files pass on CPU (49 tests). The log-probs computed per context-parallel rank (commit "torchtitan loss: compute log-probs on each CP rank's own tokens") still need a GPU check. Raise it as a draft PR after a GLM run passes. Open point: under context parallelism this path ignores `--log-probs-backend fused`.
+**GLM-5.3 vision on torchtitan: raised 2026-10-31 as draft [#4588](https://github.com/radixark/miles/pull/4588).** Port of the closed #4022 onto main. Open point: under context parallelism this path ignores `--log-probs-backend fused`.
 
 **Output-store fix in #4547 (v6).** Upstream's output store (`--use-output-store`, off by default) counted R3 rows on the request's token IDs without expanding image placeholders, while our R3 code counts in the engine's expanded token space. v6 makes `adopt_session_records` in `miles/rollout/session/samples/merge.py` count expanded tokens using the session's media store. Test: `tests/fast/rollout/session/test_samples.py::TestStoreSessionAssembly::test_image_records_count_routed_experts_rows_in_the_engines_expanded_token_space` fails without the fix (7 rows stored, 4 expected) and passes with it. CPU only: our training runs do not turn the output store on.
 
@@ -50,7 +64,7 @@ Table 1. Every open PR, its current head, and its GPU verdict on 2026-10-31. Eac
 4. **Compute.** Decided 2026-10-29: our own training cluster (8-GPU B300 nodes).
 
 5. **Token-space TITO as an upstream PR.** Decided 2026-10-31: opened as draft [#4586](https://github.com/radixark/miles/pull/4586), base `rockdu/vlm-02-token-space` (Rockdu can still fold it into his stack); our #4272 comment now points to it. Background: the branch `tito-session-token-space` is stacked on Rockdu's `rockdu/vlm-02-token-space` and linked from our [comment on #4272](https://github.com/radixark/miles/pull/4272#issuecomment-6531805913), which asks whether it should fold into his stack. No reply yet. Options: wait for Rockdu, or open a draft PR from the branch with base `rockdu/vlm-02-token-space`. A ready PR body is in [pr-texts/tito-session-token-space.md](pr-texts/tito-session-token-space.md). The comment's R3 link points at the old `-r3` branch and shows an empty diff since the branches merged; a replacement text is in the same folder.
-6. **Router PR.** Open: the router change needs a public fork of radixark/sgl-router-for-miles to open a PR (the patch is in [patches/](patches/)). Alternative: ask the router maintainers to apply it.
+6. **Router PR.** Decided 2026-10-31: opened as draft [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28) from the public fork dzorlu/sgl-router-for-miles. Background: the router change needs a public fork of radixark/sgl-router-for-miles to open a PR (the patch is in [patches/](patches/)). Alternative: ask the router maintainers to apply it.
 7. **Upstream issues to file (not filed).** (a) With `--colocate --lora-train-only`, upstream main (`radixark/miles:dev-202610300556`) crashes in the first `update_weights`: "get_cpu_backup_pointer: found paused allocation but cpu_backup does not exist". (b) The dev image cannot train head-dim-256 attention (Qwen3.8) on B300: flash-attn-4 4.0.0b35 rejects TE's causal mask as local attention in backward; 4.0.0b19 works but needs quack-kernels 0.6.4 (0.6.5 removed `sub_packed_f32x2`).
 
 ## 4. CPU tests (any machine)
