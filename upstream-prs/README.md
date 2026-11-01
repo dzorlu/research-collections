@@ -1,6 +1,6 @@
 # Our PRs to miles and SGLang
 
-We train vision models with RL on long computer-use episodes. miles ([radixark/miles](https://github.com/radixark/miles)) trains, SGLang ([sgl-project/sglang](https://github.com/sgl-project/sglang)) generates the episodes. These are the fixes we carry and send upstream. To continue this work elsewhere, start with [HANDOFF.md](HANDOFF.md): every branch, the open decisions, how to test and verify each PR.
+We train vision models with RL on long computer-use episodes. miles ([radixark/miles](https://github.com/radixark/miles)) trains, SGLang ([sgl-project/sglang](https://github.com/sgl-project/sglang)) generates the episodes. These are the fixes we carry and send upstream.
 
 **State on 2026-11-01.** 16 PRs are open upstream: 11 on miles, 4 on SGLang, 1 on the router. Each PR's description has a "Verified on GPU" section with the numbers. GPU runs: Qwen3.8-VL on 4 nodes and GLM-5.3 on 6 nodes of 8x B300, computer-use episodes with screenshots through the TITO session server. Our branches are on the forks [dzorlu/miles](https://github.com/dzorlu/miles), [dzorlu/sglang](https://github.com/dzorlu/sglang) and [dzorlu/sgl-router-for-miles](https://github.com/dzorlu/sgl-router-for-miles).
 
