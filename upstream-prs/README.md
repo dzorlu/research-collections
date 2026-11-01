@@ -37,22 +37,25 @@ How to build and run these checks without our launcher: [../miles-harness/](../m
 
 ## 1. Exact tokens for vision models (TITO)
 
-The trainer must see the exact token IDs and images the engine used, on every turn of an episode. For screenshots we propose four changes on top of Rockdu's token-space design (open [#4240](https://github.com/radixark/miles/pull/4240) and [#4272](https://github.com/radixark/miles/pull/4272)), explained with examples and code references in [tito-token-space.md](tito-token-space.md):
+TITO (token-in, token-out) means the trainer scores exactly the token IDs and images the engine used, on every turn of an agent episode. With the PRs below, Qwen3.8-VL and GLM-5.3 each trained 3 steps on computer-use episodes with screenshots through the session server: TITO mismatch rate 0.0, 0 prompt-ID mismatches, and on GLM the routed-expert replay stays aligned with images. Figure 1 shows where each PR acts on one chat turn.
 
-- **Session server on token space** (miles, [#4586](https://github.com/radixark/miles/pull/4586), fork branch `tito-session-token-space`). Screenshots sent by an agent harness go through the session server: each turn sends the stored expanded prefix, the new part with one placeholder per image and `mm_token_expansion_start_len`; the session stores the engine's returned expanded token IDs, and the trainer uses Rockdu's rebuild.
-- **R3 rows on the engine view** (miles, fork branch `tito-session-token-space`, same PR as the session-server change). Expert-routing rows are stitched per turn by counting tokens as the model ran them, so row k stays token k after a screenshot.
-- **[sglang#47402](https://github.com/sgl-project/sglang/pull/47402): first-turn images.** A chat request with token IDs and offset 0 no longer drops its images.
-- **[sglang#47674](https://github.com/sgl-project/sglang/pull/47674): GLM-5.3 strategy** (on `sglang-miles`). GLM-5.3 support for the token-space processor, bitwise equal to SGLang's existing GLM processor.
-- **[sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28): router.** The router dropped `mm_token_expansion_start_len` on the chat route, so turn 2 of every screenshot session failed.
+![Figure 1](tito-prs-turn-path.svg)
 
-These replaced [#4546](https://github.com/radixark/miles/pull/4546) and [#4547](https://github.com/radixark/miles/pull/4547) (closed 2026-10-31); [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) is to be closed.
+*Figure 1. One chat turn through the session server and the PR that acts at each step. Grey boxes are Rockdu's token-space stack ([#4240](https://github.com/radixark/miles/pull/4240), [#4272](https://github.com/radixark/miles/pull/4272)), which these PRs build on.*
 
-Status: see Table 1.
+*Table 2. The TITO PRs. GPU runs: Qwen3.8-VL (Megatron, 4 nodes) and GLM-5.3 (torchtitan, 6 nodes) of 8x B300, episodes up to 256 turns with screenshot folding.*
 
-Two more TITO PRs, not about screenshots:
+| PR | What broke | Fix | GPU result |
+|---|---|---|---|
+| [miles#4586](https://github.com/radixark/miles/pull/4586), commit 1 | the session server carried no screenshots on the token-space design | send the stored expanded prefix, the new part with one placeholder per image, and `mm_token_expansion_start_len`; store the engine's expanded IDs | Qwen and GLM 3 steps each; TITO mismatch 0.0 |
+| [miles#4586](https://github.com/radixark/miles/pull/4586), commit 2 | R3 row offsets counted one placeholder per image, so rows fell out of line (HTTP 422) | count offsets on the expanded tokens | GLM image-token replay rate equal to the non-token-space path (0.659% vs 0.638%) |
+| [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28) | the router dropped `mm_token_expansion_start_len` on chat; turn 2 of every session failed | forward the field | every token-space run |
+| [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | a chat request with `input_ids` and start 0 dropped its images | keep them | 0 prompt-ID mismatches over 124 Qwen samples |
+| [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) | no GLM-5.3 strategy for the token-space processor | add one, bitwise equal to SGLang's GLM processor | GLM 3 steps and a resume |
+| [miles#4516](https://github.com/radixark/miles/pull/4516) | miles never set SGLang's parsers; for Qwen whole replies were stored as text | pass each model family's reasoning and tool-call parsers | 100% of 25,461 Qwen turns parsed; 0 leaked `</think>` |
+| [sglang#47203](https://github.com/sgl-project/sglang/pull/47203) | SGLang's GLM parser forced one declared tool call per turn | `--tool-call-constraint none` | up to 46 tool calls per turn (non-token-space GLM path) |
 
-- **[miles#4516](https://github.com/radixark/miles/pull/4516).** miles never told SGLang which parsers to use. For Qwen, SGLang picked one that waits for `<think>`, but our prompt already ends with `<think>`, so whole replies were stored as plain text: no reasoning, no parsed tool calls.
-- **[sglang#47203](https://github.com/sgl-project/sglang/pull/47203).** SGLang's GLM parser forced every reply into a grammar: only declared tool names, one call per turn. `--tool-call-constraint none` turns that off.
+Merge order: Rockdu's #4240 and #4272, then #4586 (based on his branch). #47402 and #47674 go into `sglang-miles`, #47203 into SGLang main, #28 into the router's main, #4516 into miles main. Rockdu confirmed (2026-11-01) that his unpublished [4/4] covers basic full-modality support and essential TITO capability and does not overlap much with #4586. Replaced and closed: #4546 and #4547; [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) is to be closed. Design and worked examples: [tito-token-space.md](tito-token-space.md).
 
 ## 2. Vision training correctness
 
