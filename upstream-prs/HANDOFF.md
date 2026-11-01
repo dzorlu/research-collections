@@ -17,10 +17,32 @@ What is left, in order:
 
 1. **GLM-5.3 on the token-space path: done 2026-10-31.** The 3-step run (R2) succeeded: 3 train steps, one per rollout, a checkpoint each step; train/rollout KL 2.45e-3 / 3.06e-3 / 1.69e-3, mean abs log-prob diff 0.0235 / 0.0306 / 0.0202. KL to the reference with replay on is exactly 0 at step 0 (#4520 holds) and grows to 6.0e-4 and 1.5e-3 as the policy moves. R3 (resume of R2 for #4522) passed 2026-11-01: it continued at rollout 3, trained one step (reference KL 2.75e-3, not 0) and saved its checkpoint. To rerun it: R2's arguments unchanged except `--num-rollout 4` and `--load` from R2's checkpoints, and with `--ci-test` also `--ci-disable-weight-update-checker` (that check expects the first sync to equal the base checkpoint, which only holds for a fresh run).
 2. **Qwen multi-step readout: done 2026-10-31** (3 steps). #4521, #4049 and #4516 pass; #4518's case (an eval group holding a cancelled episode) never occurred, so it stays unverified on GPU.
-3. **Mark ready.** Move each PASS PR from draft to ready for review: today #4524 (already ready), #4586, sglang#47674, sgl-router-for-miles#28, sglang#47402, #4588, #4520, sglang#47203, #4523, #4522, #4519, #4050, #4516, #4521, #4049. Close sglang#47400 (replaced by the token-space path). #4518 stays draft until its case occurs in a run.
+3. **Fix merge conflicts first (section 1b), then mark ready.** Move each PASS PR from draft to ready for review: today #4524 (already ready), #4586, sglang#47674, sgl-router-for-miles#28, sglang#47402, #4588, #4520, sglang#47203, #4523, #4522, #4519, #4050, #4516, #4521, #4049. Close sglang#47400 (replaced by the token-space path). #4518 stays draft until its case occurs in a run.
 4. **Follow-ups:** an image-aware threshold for the R3 replay check (image tokens disagree about 15x more than text on both paths); the two upstream bugs of decision 3.7.
 
 Build without our launcher: section 5.1 (upstream dev image plus the PR branches merged), the B300 image pins in section 5.0, the router fix from #28, and the run flags in [../miles-harness/](../miles-harness/README.md) (section 5 and 6) and [../miles-harness/recipes.md](../miles-harness/recipes.md). Section 5.5 covers Modal.
+
+## 1b. Merge readiness (checked 2026-11-01)
+
+Verification is done; merging is not. Upstream merged two changes on 2026-10-31 that overlap our PRs, and six PRs now conflict with their base.
+
+Table 0. Mergeability per PR on 2026-11-01 (GitHub `mergeable`).
+
+| PR | Merges cleanly | Why not / what to do |
+|---|---|---|
+| #4586 (base `rockdu/vlm-02-token-space`) | yes | can merge only after Rockdu's #4272; no reply from him yet |
+| #4521, #4519, #4518, #4516, #4050, #4049, #4524, sglang#47203, sgl-router-for-miles#28 | yes | none |
+| #4523 | no | upstream merged [#4530](https://github.com/radixark/miles/pull/4530) (LR scheduler stepped twice on resume) on 10-31, the same fix as #4523's scheduler part. Rebase on main and drop our scheduler change; keep the optimizer and adapter restore (their GPU result stands: optimizer and adapter bitwise after resume) |
+| #4588, #4522, #4520 | no | upstream merged torchtitan v0.4.0 and the GLM port to it ([#4537](https://github.com/radixark/miles/pull/4537) to [#4539](https://github.com/radixark/miles/pull/4539)) on 10-31. Port each to v0.4.0. Their GPU results were taken on the older torchtitan, so after the port rerun at least the GLM 1-step smoke (and R3 for #4522) |
+| sglang#47402, sglang#47674 (base `sglang-miles`) | no | `sglang-miles` moved; merge it into each branch, resolve, rerun the CPU tests (#47674's parity tests) |
+
+Method for each: merge the base into the PR branch (normal push, no force-push), resolve, run the PR's CPU tests (section 4), and note the new head in Table 1.
+
+**Coordination comments (not posted; need Deniz's go).** Short comments on overlapping upstream PRs, so one version gets merged:
+- [#1585](https://github.com/radixark/miles/pull/1585) (HJSang, draft, idle since 09-22): drains pending requests in `flush_cache`; same crash as #4519. Point to #4519's GPU results (including `--fully-async --colocate`) and ask whether to close one or combine.
+- [#4218](https://github.com/radixark/miles/pull/4218) (HJSang, draft, active): routing replay on torchtitan/TPU; both change the torchtitan replay guard that #4520 fixes. Point to #4520 (step-0 KL to the reference exactly 0) and agree who carries the guard.
+- [#3879](https://github.com/radixark/miles/pull/3879) (HJSang, draft): freezes the sparse-attention indexer. If it merges, #4522's indexer case goes away; ask about timing.
+- [#3964](https://github.com/radixark/miles/pull/3964) and [#4229](https://github.com/radixark/miles/pull/4229) duplicate the scheduler fix that #4530 merged; nothing to post.
 
 ## 2. Where each PR stands
 
