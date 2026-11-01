@@ -36,8 +36,11 @@ The trainer must see the exact token IDs and images the engine used, on every tu
 - **R3 rows on the engine view** (miles, fork branch `tito-session-token-space`, same PR as the session-server change). Expert-routing rows are stitched per turn by counting tokens as the model ran them, so row k stays token k after a screenshot.
 - **[sglang#47402](https://github.com/sgl-project/sglang/pull/47402): first-turn images.** A chat request with token IDs and offset 0 no longer drops its images.
 - **[sglang#47674](https://github.com/sgl-project/sglang/pull/47674): GLM-5.3 strategy** (on `sglang-miles`). GLM-5.3 support for the token-space processor, bitwise equal to SGLang's existing GLM processor.
+- **[sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28): router.** The router dropped `mm_token_expansion_start_len` on the chat route, so turn 2 of every screenshot session failed.
 
-These supersede [#4546](https://github.com/radixark/miles/pull/4546), [#4547](https://github.com/radixark/miles/pull/4547) and [sglang#47400](https://github.com/sgl-project/sglang/pull/47400), which close once the GPU runs pass.
+These replaced [#4546](https://github.com/radixark/miles/pull/4546) and [#4547](https://github.com/radixark/miles/pull/4547) (closed 2026-10-31); [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) is to be closed.
+
+**Status 2026-11-01.** All verified on GPU with Qwen3.8-VL and GLM-5.3 (3 train steps each through the session server with screenshots; results in each PR description and [tito-token-space.md](tito-token-space.md) section 5). #4586, #28, #4516 and #47203 merge cleanly; #47402 and #47674 conflict with the current `sglang-miles` and need its merge (HANDOFF section 1b). #4586 can merge only after Rockdu's #4272.
 
 Two more TITO PRs, not about screenshots:
 

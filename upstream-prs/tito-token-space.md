@@ -167,7 +167,9 @@ A `glm5_next.py` strategy for the token-space processor: each `<|image|>` expand
 | R3 tests | the 4 R3 tests fail with change 1 alone and pass with change 2 |
 | Change 3 | its test fails on sglang-miles and passes on #47402; CPU serving_chat and token-space tests 230 passed vs 229, the same 14 macOS video/audio failures |
 | Change 4 parity vs SGLang's existing GLM processor | bitwise equal input_ids, mm_token_type_ids, pixel_values, image_grid_thw and rotary positions, for 1 and 3 images and a 2-turn chat with `start_len` |
-| Real GPU runs | not yet: Qwen3.8-VL (4 nodes) and GLM-5.3 (6 nodes) token-space runs wait for a launcher fix (a renamed miles function) |
+| GPU, Qwen3.8-VL (Megatron, 4 nodes of 8x B300), computer-use episodes up to 256 turns with screenshot folding, 3 train steps | 32/32 and 128/128 episodes graded; TITO mismatch rate 0.0; 0 prompt-ID mismatches over 124 samples; 0 HTTP 400; train/rollout KL 8.9e-4 to 9.1e-4 and mean abs log-prob diff about 0.014 per step; 3 checkpoints |
+| GPU, GLM-5.3 (torchtitan, 6 nodes, R3 on), same episodes, 3 train steps then a resume for a 4th | 0 prompt-ID mismatches; train/rollout KL 2.45e-3 / 3.06e-3 / 1.69e-3; KL to the reference exactly 0 at step 0; resume continued at rollout 3 and saved its checkpoint |
+| GPU, R3 alignment (GLM) | share of tokens whose top-8 experts share none with the replay: image tokens 0.659% vs 0.638% on the non-token-space path, text 0.0445% vs 0.0460%: the same, so the offsets are aligned |
 
 GPU pass criteria: first-turn images reach the engine; `start_len` equals the stored engine view every turn, with no HTTP 502 or 400; each image's expanded length equals `grid.prod() // merge_size**2` for its own grid; samples equal the engine prompt plus reply; the trainer's image build succeeds; step 0 is finite and close to earlier runs (Qwen mean log-prob gap 0.0128, K3 KL 5.2e-4). GLM also: R3 rows equal tokens minus 1, replay mismatch 0, step-0 KL to the reference near 0.
 
@@ -178,4 +180,4 @@ GPU pass criteria: first-turn images reach the engine; `start_len` equals the st
 3. `TokenSpaceProcessor` processes every media item on every request, including images already in the expanded prefix: a 40-screenshot session reprocesses all 40 each turn. Is skipping or caching planned?
 4. Who cleans `--shared-media-dir`? Nothing deletes the files.
 
-Once the GPU runs pass, changes 1 and 2 are raised as one PR on his branch (or as he prefers) and change 4 against `sglang-miles`; change 3 is already open as #47402.
+Raised after the GPU runs passed (2026-10-31): changes 1 and 2 as [#4586](https://github.com/radixark/miles/pull/4586) (base his `rockdu/vlm-02-token-space`, so he can fold it into his stack), change 3 as [sglang#47402](https://github.com/sgl-project/sglang/pull/47402), change 4 as [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) (base `sglang-miles`), change 5 as [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28).
