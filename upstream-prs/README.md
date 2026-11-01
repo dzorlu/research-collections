@@ -2,31 +2,38 @@
 
 We train vision models with RL on long computer-use episodes. miles ([radixark/miles](https://github.com/radixark/miles)) trains, SGLang ([sgl-project/sglang](https://github.com/sgl-project/sglang)) generates the episodes. These are the fixes we carry and send upstream. To continue this work elsewhere, start with [HANDOFF.md](HANDOFF.md): every branch, the open decisions, how to test and verify each PR.
 
-**State on 2026-11-01.** 17 PRs are open upstream: 12 on miles, 4 on SGLang, 1 on the router. Each PR description has a "Verified on GPU" section. Verified on GPU: the TITO token-space PR #4586 on Qwen3.8-VL and GLM-5.3 (3 train steps each) with its SGLang and router dependencies, and 13 more; #4522's resume run passed on 2026-11-01; open: #4518 (its case never occurred in a run). Verdicts per PR: [HANDOFF.md](HANDOFF.md), Table 1. #4524 is ready for review; the rest are drafts.
+**State on 2026-11-01.** 16 PRs are open upstream: 11 on miles, 4 on SGLang, 1 on the router. Each PR's description has a "Verified on GPU" section with the numbers. GPU runs: Qwen3.8-VL on 4 nodes and GLM-5.3 on 6 nodes of 8x B300, computer-use episodes with screenshots through the TITO session server. Our branches are on the forks [dzorlu/miles](https://github.com/dzorlu/miles), [dzorlu/sglang](https://github.com/dzorlu/sglang) and [dzorlu/sgl-router-for-miles](https://github.com/dzorlu/sgl-router-for-miles).
 
-Table 1. Open PRs, by group.
+Table 1. Open PRs: what each fixes, its GPU result and whether it merges cleanly today.
 
-| PR | Group | Note |
-|---|---|---|
-| [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) | 1. Exact tokens for vision models | replaces #44133; to be closed in favor of the token-space path |
-| [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | 1. Exact tokens for vision models | replaces #44134; kept as the first-turn image fix of the token-space path |
-| [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) | 1. Exact tokens for vision models | GLM-5.3 token-space strategy, on `sglang-miles` |
-| [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28) | 1. Exact tokens for vision models | router forwards `mm_token_expansion_start_len` on chat |
-| [miles#4588](https://github.com/radixark/miles/pull/4588) | 4. GLM-5.3 on torchtitan | vision tower in training |
-| [miles#4586](https://github.com/radixark/miles/pull/4586) | 1. Exact tokens for vision models | token-space session server + R3 offsets, stacked on #4272; supersedes #4546 and #4547 |
-| [miles#4546](https://github.com/radixark/miles/pull/4546) | 1. Exact tokens for vision models | closed 2026-10-31, superseded by #4586 |
-| [miles#4516](https://github.com/radixark/miles/pull/4516) | 1. Exact tokens for vision models | Qwen parser |
-| [sglang#47203](https://github.com/sgl-project/sglang/pull/47203) | 1. Exact tokens for vision models | GLM tool-call constraint |
-| [miles#4050](https://github.com/radixark/miles/pull/4050) | 2. Vision training correctness | main merged in on 10-29 |
-| [miles#4049](https://github.com/radixark/miles/pull/4049) | 2. Vision training correctness | main merged in on 10-29 |
-| [miles#4520](https://github.com/radixark/miles/pull/4520) | 3. Expert replay (R3) on GLM | torchtitan fixes |
-| [miles#4547](https://github.com/radixark/miles/pull/4547) | 3. Expert replay (R3) on GLM | closed 2026-10-31, superseded by #4586 |
-| [miles#4522](https://github.com/radixark/miles/pull/4522) | 4. GLM-5.3 on torchtitan | resume |
-| [miles#4519](https://github.com/radixark/miles/pull/4519) | 5. Long colocated runs | cancel before flush |
-| [miles#4521](https://github.com/radixark/miles/pull/4521) | 5. Long colocated runs | memory report and host release |
-| [miles#4523](https://github.com/radixark/miles/pull/4523) | 6. Native LoRA | resume |
-| [miles#4524](https://github.com/radixark/miles/pull/4524) | 6. Native LoRA | Muse import without a GPU, into `muse-spark-open`; **ready for review** |
-| [miles#4518](https://github.com/radixark/miles/pull/4518) | 7. Cancelled episodes | eval scoring |
+| PR | Fixes | GPU result | Merges cleanly |
+|---|---|---|---|
+| [miles#4586](https://github.com/radixark/miles/pull/4586) | screenshots through the session server on Rockdu's token space, plus R3 offsets on expanded tokens (section 1) | PASS (Qwen3.8-VL, 3 steps; GLM-5.3, 3 steps, R3 aligned, reference KL 0 at step 0) | yes, onto Rockdu's branch; merges after his #4272 |
+| [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) | GLM-5.3 token-space strategy | PASS (GLM-5.3, 3 steps); CPU parity bitwise | no: merge current `sglang-miles` |
+| [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28) | router dropped `mm_token_expansion_start_len` on chat | PASS (every token-space run) | yes |
+| [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | first-turn images dropped with token IDs | PASS (0 prompt-ID mismatches) | no: merge current `sglang-miles` |
+| [miles#4516](https://github.com/radixark/miles/pull/4516) | Qwen reasoning and tool-call parsers | PASS (100% of 25,461 turns parsed) | yes |
+| [sglang#47203](https://github.com/sgl-project/sglang/pull/47203) | GLM tool-call grammar forced one call per turn | PASS on the non-token-space path (46 calls per turn); not exercised on token space | yes |
+| [miles#4050](https://github.com/radixark/miles/pull/4050) | loss divided by samples, not episodes, with screenshot folding | PASS (Megatron and torchtitan) | yes |
+| [miles#4049](https://github.com/radixark/miles/pull/4049) | frozen vision tower not re-sent to engines | PASS on sending (333 tensors per sync); engine-side equality not checked | yes |
+| [miles#4520](https://github.com/radixark/miles/pull/4520) | R3 on torchtitan: guard crash; reference picked its own experts | PASS (step-0 reference KL exactly 0, both paths) | no: port to torchtitan v0.4.0 |
+| [miles#4522](https://github.com/radixark/miles/pull/4522) | torchtitan resume failed on never-trained parameters | PASS (GLM resume continued at rollout 3, saved) | no: port to torchtitan v0.4.0 |
+| [miles#4588](https://github.com/radixark/miles/pull/4588) | GLM-5.3 vision tower in torchtitan training | PASS (both GLM paths) | no: port to torchtitan v0.4.0 |
+| [miles#4519](https://github.com/radixark/miles/pull/4519) | offload flush refused with running requests | PASS (sync and fully-async colocated) | yes |
+| [miles#4521](https://github.com/radixark/miles/pull/4521) | host memory grew every step | PASS per process; per-node totals not logged | yes |
+| [miles#4523](https://github.com/radixark/miles/pull/4523) | native LoRA resume silently restarted | PASS (optimizer, adapter, scheduler bitwise) | no: upstream #4530 merged the scheduler part; drop it |
+| [miles#4524](https://github.com/radixark/miles/pull/4524) | Muse import needed a GPU | PASS; **ready for review** | yes |
+| [miles#4518](https://github.com/radixark/miles/pull/4518) | eval crashed on groups with a cancelled episode | not exercised (case never occurred); CPU tests | yes |
+
+Closed: #4546 and #4547 (replaced by #4586). To close: [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) (replaced by the token-space path).
+
+**What is left.**
+1. Fix the six merge conflicts: merge the base into each branch (no force-push), resolve, rerun the PR's CPU tests. The three torchtitan PRs need a port to torchtitan v0.4.0 ([#4537](https://github.com/radixark/miles/pull/4537) to [#4539](https://github.com/radixark/miles/pull/4539), merged 2026-10-31); their GPU results predate it, so rerun a GLM step after the port.
+2. Mark the passing PRs ready for review.
+3. Coordinate with overlapping upstream PRs (not posted): [#1585](https://github.com/radixark/miles/pull/1585) duplicates #4519; [#4218](https://github.com/radixark/miles/pull/4218) touches #4520's replay guard; [#3879](https://github.com/radixark/miles/pull/3879) would remove #4522's indexer case.
+4. Follow-ups: an image-aware threshold for miles' R3 replay check (image tokens disagree about 15 times more than text on both image paths); two upstream bugs to report: native LoRA with `--colocate --lora-train-only` crashes in the first weight update on main, and the B300 dev image cannot train head-dim-256 attention (pin flash-attn-4 4.0.0b19 and quack-kernels 0.6.4).
+
+How to build and run these checks without our launcher: [../miles-harness/](../miles-harness/README.md).
 
 ## 1. Exact tokens for vision models (TITO)
 
@@ -40,7 +47,7 @@ The trainer must see the exact token IDs and images the engine used, on every tu
 
 These replaced [#4546](https://github.com/radixark/miles/pull/4546) and [#4547](https://github.com/radixark/miles/pull/4547) (closed 2026-10-31); [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) is to be closed.
 
-**Status 2026-11-01.** All verified on GPU with Qwen3.8-VL and GLM-5.3 (3 train steps each through the session server with screenshots; results in each PR description and [tito-token-space.md](tito-token-space.md) section 5). #4586, #28, #4516 and #47203 merge cleanly; #47402 and #47674 conflict with the current `sglang-miles` and need its merge (HANDOFF section 1b). #4586 can merge only after Rockdu's #4272.
+Status: see Table 1.
 
 Two more TITO PRs, not about screenshots:
 

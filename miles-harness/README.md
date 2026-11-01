@@ -7,7 +7,7 @@ the rules each part must follow, and the tests that prove it works. Per-model ru
 [recipes.md](recipes.md). Colocated fully-async training is in [../rl-infra/](../rl-infra/README.md). The memory arithmetic and model choice are in
 [../single-node-training/](../single-node-training/README.md).
 
-Upstream references are to miles `main` at `c62ea5d` (2026-10-30). Re-check them before building. Several fixes this spec relies on are our open PRs; their status and GPU results are in [../upstream-prs/HANDOFF.md](../upstream-prs/HANDOFF.md) (Table 1). Until they merge, build from upstream main with those PR branches merged in (HANDOFF section 5.1).
+Upstream references are to miles `main` at `c62ea5d` (2026-10-30). Re-check them before building. Several fixes this spec relies on are our open PRs; their status and GPU results are in [../upstream-prs/README.md](../upstream-prs/README.md) (Table 1). Until they merge, build from upstream main with those PR branches merged in.
 
 ## 1. The one rule everything serves
 
