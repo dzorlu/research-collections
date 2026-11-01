@@ -2,7 +2,7 @@
 
 We train vision models with RL on long computer-use episodes. miles ([radixark/miles](https://github.com/radixark/miles)) trains, SGLang ([sgl-project/sglang](https://github.com/sgl-project/sglang)) generates the episodes. These are the fixes we carry and send upstream. To continue this work elsewhere, start with [HANDOFF.md](HANDOFF.md): every branch, the open decisions, how to test and verify each PR.
 
-**State on 2026-10-31.** 17 PRs are open upstream: 12 on miles, 4 on SGLang, 1 on the router. Each PR description now has a "Verified on GPU" section. Passed: #4523, #4519, #4524, sglang#47402, #4050 on Megatron, and the TITO token-space rebuild on Qwen; GLM's token-space train step and the rest are pending (verdicts in [HANDOFF.md](HANDOFF.md), Table 1). [#4524](https://github.com/radixark/miles/pull/4524) is ready for review; the rest stay drafts until they pass. The TITO screenshot PRs are being rebuilt on Rockdu's token-space design; see [tito-token-space.md](tito-token-space.md). GPU verification on Qwen3.8-VL and GLM-5.3 is in progress. 
+**State on 2026-11-01.** 17 PRs are open upstream: 12 on miles, 4 on SGLang, 1 on the router. Each PR description has a "Verified on GPU" section. Verified on GPU: the TITO token-space PR #4586 on Qwen3.8-VL and GLM-5.3 (3 train steps each) with its SGLang and router dependencies, and 12 more; open: #4522 (resume run), #4518 (its case never occurred in a run). Verdicts per PR: [HANDOFF.md](HANDOFF.md), Table 1. #4524 is ready for review; the rest are drafts.
 
 Table 1. Open PRs, by group.
 

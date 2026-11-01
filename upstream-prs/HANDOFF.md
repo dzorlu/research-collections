@@ -1,6 +1,6 @@
 # Handoff: getting our miles and SGLang PRs merged
 
-State on 2026-10-31. Everything needed to continue is in GitHub: the PRs, the fork branches below, and the texts in [pr-texts/](pr-texts/). Nothing depends on the old machine or our training cluster. [README.md](README.md) explains what each PR fixes. [tito-token-space.md](tito-token-space.md) explains the TITO screenshot work and its rebuild on Rockdu's token-space design.
+State on 2026-11-01. Everything needed to continue is in GitHub: the PRs, the fork branches below, and the texts in [pr-texts/](pr-texts/). Nothing depends on the old machine or our training cluster. [README.md](README.md) explains what each PR fixes. [tito-token-space.md](tito-token-space.md) explains the TITO screenshot work and its rebuild on Rockdu's token-space design.
 
 ## 1. Goal and rules
 
@@ -28,13 +28,13 @@ Table 1. Every open PR, its current head, and its GPU verdict on 2026-10-31. Eac
 
 | PR | Group | PR head now | GPU verdict | Still needed |
 |---|---|---|---|---|
-| [miles#4586](https://github.com/radixark/miles/pull/4586) (draft, base `rockdu/vlm-02-token-space`) | 1. TITO | `tito-session-token-space` `dce628a206` (2 commits: session server on token space, R3 offsets) | PASS on Qwen (rollout, train step, checkpoint); GLM rollouts and R3 alignment PASS | a completed G train step; then ready for review |
-| [miles#4546](https://github.com/radixark/miles/pull/4546) | 1. TITO | `pr6-session-images-v4` `10551a0b0e` (older design) | PASS for the token-space rebuild, `tito-session-token-space` `dce628a206` commit 1 (Q, G rollouts) | a completed G train step; closed 2026-10-31, superseded by #4586 |
-| [miles#4547](https://github.com/radixark/miles/pull/4547) | 3. R3 | `pr-r3-session-image-offsets-v6` `226cdadbc6` (older design) | PASS on alignment for the rebuild's commit 2 (G replay check equal to the non-token-space path) | closed 2026-10-31, superseded by #4586 |
+| [miles#4586](https://github.com/radixark/miles/pull/4586) (draft, base `rockdu/vlm-02-token-space`) | 1. TITO | `tito-session-token-space` `dce628a206` (2 commits: session server on token space, R3 offsets) | PASS: Q 3 steps; G 3-step run on token space: 3 train steps and checkpoints, reference KL 0 at step 0; R3 replay rate equal to the non-token-space path | ready for review once reviewers are wanted |
+| [miles#4546](https://github.com/radixark/miles/pull/4546) | 1. TITO | `pr6-session-images-v4` `10551a0b0e` (older design) | closed 2026-10-31 | superseded by #4586 |
+| [miles#4547](https://github.com/radixark/miles/pull/4547) | 3. R3 | `pr-r3-session-image-offsets-v6` `226cdadbc6` (older design) | closed 2026-10-31 | superseded by #4586 |
 | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | 1. TITO | `pr4-qwen-vl-input-ids-v2` `008518e4fe` | PASS (Q: 0 prompt-ID mismatches over 124 samples) | none |
-| [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) GLM-5.3 token-space strategy (base `sglang-miles`) | 1. TITO | `tito-token-space-glm5` `354d92b34f` | CPU parity bitwise; rollouts PASS (G) | a completed G train step |
+| [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) GLM-5.3 token-space strategy (base `sglang-miles`) | 1. TITO | `tito-token-space-glm5` `354d92b34f` | PASS: CPU parity bitwise; G 3-step run on token space: 3 train steps and checkpoints, reference KL 0 at step 0 | none |
 | [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28) router forwards `mm_token_expansion_start_len` on chat | 1. TITO | dzorlu/sgl-router-for-miles `chat-forward-mm-token-expansion-start-len` `deb98e1` (on main `b6839b5`; same patch-id as the build that ran) | PASS (every Q and G token-space run; 0 HTTP 400 over 32/32 and 128/128 Q episodes; without it turn 2 fails) | none |
-| [miles#4588](https://github.com/radixark/miles/pull/4588) GLM-5.3 vision on torchtitan | 4. GLM torchtitan | `glm-vision-titan-port` `85136e6318` (behind main) | PASS on the non-token-space G path (train step 0, KL 1.78e-3, abs diff 0.0196); 49 CPU tests | token-space G train step; rebase for torchtitan v0.4.0 |
+| [miles#4588](https://github.com/radixark/miles/pull/4588) GLM-5.3 vision on torchtitan | 4. GLM torchtitan | `glm-vision-titan-port` `85136e6318` (behind main) | PASS on both G paths (non-token-space step 0; G 3-step run on token space: 3 train steps and checkpoints, reference KL 0 at step 0) | rebase for torchtitan v0.4.0 |
 | [miles#4516](https://github.com/radixark/miles/pull/4516) | 1. TITO | `pr-qwen-thinking-parser-v2` `c6777d7023` | PASS (Q 3-step: reasoning and tool calls parsed in 100% of 25,461 turns; 0 leaked `</think>`) | none |
 | [sglang#47203](https://github.com/sgl-project/sglang/pull/47203) | 1. TITO | `pr-tool-call-constraint-arg-v2` `5338d322bf` | PASS on the non-token-space G path (up to 46 tool calls per turn) | token-space G run |
 | [sglang#47400](https://github.com/sgl-project/sglang/pull/47400) | 1. TITO | `pr3-mm-exact-token-images-v2` `e73de6edb1` | not exercised | close: replaced by the token-space path |
