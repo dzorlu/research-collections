@@ -19,7 +19,8 @@ matching measurement or code check yet.
   hours of fully async on the same node, compared on trained groups per hour.
 - **Two cheap levers to try first:** bf16 Adam moments (13.9 GB per GPU freed for training) and FP8
   engine weights (13 to 17 full-length episodes in flight per engine).
-- **Nothing here has run on B200 yet,** and the speed-up of fully async over sync is not measured.
+- **Measured on 4 nodes of B300: fully async trained 2× faster than sync** with no sign of collapse over
+  10 steps; see [async-results](async-results/README.md). The one-node B200 plan below has not run yet.
 
 ## 2. Sync training wastes time on long episodes
 
