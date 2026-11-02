@@ -3,31 +3,46 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class NN(nn.Module):
-  def __init__(self, input_dim, hidden_dim, vocab_size):
+  def __init__(self, input_dim, hidden_dims, vocab_size):
+    """
+      hidden_dims: one entry per hidden layer, e.g. [128] or [128, 128].
+    """
     super().__init__()
-    self.input_dim = input_dim
-    self.hidden_dim = hidden_dim
     self.vocab_size = vocab_size
+    dims = [input_dim, *hidden_dims, vocab_size]      # e.g. [I, H, V]
 
-    self.w1 = nn.Parameter(
-        torch.randn(input_dim, hidden_dim) / input_dim ** 0.5 # [I, H]
-    )
-    self.w2 = nn.Parameter(
-        torch.randn(hidden_dim, vocab_size) / hidden_dim ** 0.5 # [H, V]
-    )
+    # One weight matrix per layer: weights[i] is [dims[i], dims[i+1]].
+    # Divide by sqrt(fan_in) so each layer's output is about size 1.
+    weights = []
+    for d_in, d_out in zip(dims[:-1], dims[1:]):
+      W = torch.randn(d_in, d_out) / d_in ** 0.5      # [in, out]
+      weights.append(nn.Parameter(W))
+    self.weights = nn.ParameterList(weights)          # registered: .parameters(), .to(device), state_dict()
+
+  def is_last(self, i):
+    return i == len(self.weights) - 1
 
   def forward(self, x):
     """
       x: [B, S, I]
+      Sets self.logits [B, S, V], self.p [B, S, V], and self.cache (what backward needs, one entry per layer).
     """
-    s1 = x @ self.w1 # [B, S, H]
-    a1 = s1 * (s1 > 0) # [B, S, H]
-    s2 = a1 @ self.w2 # [B, S, V]
+    a = x                                             # [B, S, I]  the input is layer 0's activation
+    self.cache = []
+    for i, W in enumerate(self.weights):
+      s = a @ W                                       # [B, S, out]  pre-activation
 
-    # softmax
-    a2 = torch.softmax(s2, -1)
-    self.acts = {'s1': s1, 'a1': a1, 's2': s2, 'a2': a2, 'x': x}
-    return a2
+      # backward needs this layer's input (for dW) and its pre-activation (for relu').
+      self.cache.append({'a_in': a, 's': s})
+
+      if self.is_last(i):
+        a = s                                         # [B, S, V]  no relu on the logits
+      else:
+        a = s * (s > 0)                               # [B, S, out]  relu
+
+    self.logits = a                                   # [B, S, V]
+    self.p = torch.softmax(self.logits, -1)           # [B, S, V]
+    return self.p
 
   def loss(self, out, y):
     """
@@ -38,25 +53,30 @@ class NN(nn.Module):
     out_ = out.gather(-1, y_) # [B, S, 1]
     return torch.mean(-torch.log(out_))
 
-  def backward_(self, gradient):
-    # [B, S, V]
-    # common backward. gradient changes.
-    a1 = self.acts['a1'] # [B, S, H]
+  def backward_(self, dlogits):
+    """
+      dlogits: [B, S, V]. Changes per method; everything below the logits does not.
+      Walks the layers top to bottom. Per layer: through relu, weight gradient, gradient for the layer below.
+    """
+    ds = dlogits                                      # [B, S, V]  gradient at the last pre-activation
+    self.gradients = [None] * len(self.weights)
 
-    ds2 = gradient.reshape(-1, self.vocab_size) # [BxS, V]
-    a1_ = a1.reshape(-1, self.hidden_dim) # [BxS, H]
-    dw2 = (a1_.T @ ds2) #[H,V]
+    for i in reversed(range(len(self.weights))):
+      W = self.weights[i]                             # [in, out]
+      a_in = self.cache[i]['a_in']                    # [B, S, in]
+      s = self.cache[i]['s']                          # [B, S, out]
 
-    da1 = gradient @ self.w2.T # [B, S, V] x [V, H] -> # [B, S, H]
-    s1 = self.acts['s1'] # [B, S, H]
+      # 1. Through relu: pass the gradient only where the unit was on. (The logits have no relu.)
+      if not self.is_last(i):
+        ds = ds * (s > 0)                             # [B, S, out]
 
-    # ReLU
-    ds1 = da1 * (s1 > 0) # [B, S, H]
+      # 2. Weight gradient: this layer's input times the gradient at its output, summed over all B*S positions.
+      a_in_flat = a_in.reshape(-1, W.shape[0])        # [B*S, in]
+      ds_flat = ds.reshape(-1, W.shape[1])            # [B*S, out]
+      self.gradients[i] = a_in_flat.T @ ds_flat       # [in, out]
 
-    x = self.acts['x'] # [B, S, I]
-    dw1 = x.reshape(-1, self.input_dim).T @ ds1.reshape(-1, self.hidden_dim)
-    self.gradients = {'dw1': dw1, 'dw2': dw2}
-
+      # 3. Gradient for the layer below: at this layer's input, which is the previous layer's activation.
+      ds = ds @ W.T                                   # [B, S, in]
 
   def backward(self, w, A, y):
     """
@@ -64,18 +84,15 @@ class NN(nn.Module):
       A: advantage. [B, S]
       y: token ids. [B, S]
     """
-    # Gradient calculation
-    p = self.acts['a2'] # [B, S, V]
-    b, s = p.shape[0], p.shape[1]
-    w_ = w.unsqueeze(-1)
-    A = A.unsqueeze(-1)
-
-    y_one_hot = F.one_hot(y, self.vocab_size)
-    # gradient
-    gradient = w_ * A * (p - y_one_hot) / (b * s)
-    self.backward_(gradient)
+    B, S, V = self.p.shape
+    y_one_hot = F.one_hot(y, V)                       # [B, S, V]
+    w_ = w.unsqueeze(-1)                              # [B, S, 1]
+    A_ = A.unsqueeze(-1)                              # [B, S, 1]
+    dlogits = w_ * A_ * (self.p - y_one_hot) / (B * S)   # [B, S, V]  / (B * S): the loss is a mean over positions
+    self.backward_(dlogits)
 
   @torch.no_grad()
   def step(self, lr=0.1):
-    self.w1 -= self.gradients['dw1'] * lr
-    self.w2 -= self.gradients['dw2'] * lr
+    # Step against the gradient.
+    for W, dW in zip(self.weights, self.gradients):
+      W -= lr * dW                                    # [in, out]
