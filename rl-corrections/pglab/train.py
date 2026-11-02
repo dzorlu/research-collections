@@ -159,7 +159,6 @@ def run(spec: RunSpec, cfg: Config) -> list[Row]:
     # 2. The trainer's log-probs of the same tokens before any update: fixed for this rollout.
     model.forward(ro.x)
     logp_old = logp_of_tokens(model.logits, ro.y)                     # [B, S]
-    mismatch_ratio = (logp_old - ro.logp_engine).exp()                # [B, S]  p_old / p_engine
 
     # 3. One pass over the rollout in `steps_per_rollout` minibatches, one optimizer step each.
     #    Minibatch k trains on weights that already moved k - 1 times since logp_old: that is the staleness.
@@ -167,9 +166,8 @@ def run(spec: RunSpec, cfg: Config) -> list[Row]:
     ws = []
     for mb in torch.arange(len(ro.y)).chunk(spec.steps_per_rollout):   # [b] response indices
       model.forward(ro.x[mb])
-      logp_now = logp_of_tokens(model.logits, ro.y[mb])               # [b, S]
-      staleness_ratio = (logp_now - logp_old[mb]).exp()               # [b, S]  p_now / p_old, 1 on the first minibatch
-      w = METHODS[spec.method](staleness_ratio, mismatch_ratio[mb], ro.A[mb])   # [b, S]
+      logp_now = logp_of_tokens(model.logits, ro.y[mb])               # [b, S]  equals logp_old on the first minibatch
+      w = METHODS[spec.method](logp_now, logp_old[mb], ro.logp_engine[mb], ro.A[mb])   # [b, S]
       model.backward(w, ro.A[mb], ro.y[mb])
       model.step(cfg.lr)
       ws.append(w)
