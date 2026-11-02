@@ -26,7 +26,13 @@ def register(name):
 def reinforce(logp_now, logp_old, logp_engine, A):
   """
     No correction: every token at full strength.
-    w = 1.  [B, S]
+    w = 1
+
+    logp_now:    [B, S]
+    logp_old:    [B, S]
+    logp_engine: [B, S]
+    A:           [B, S]
+    returns w:   [B, S]
   """
   raise NotImplementedError
 
@@ -34,8 +40,14 @@ def reinforce(logp_now, logp_old, logp_engine, A):
 @register("ppo")
 def ppo(logp_now, logp_old, logp_engine, A, low=0.8, high=1.28):
   """
-    r = p_now / p_old.
-    w = r; 0 where A > 0 and r > high, or A < 0 and r < low.  [B, S]
+    r = p_now / p_old
+    w = r; 0 where A > 0 and r > high, or A < 0 and r < low
+
+    logp_now:    [B, S]
+    logp_old:    [B, S]
+    logp_engine: [B, S]
+    A:           [B, S]
+    returns w:   [B, S]
   """
   raise NotImplementedError
 
@@ -43,8 +55,14 @@ def ppo(logp_now, logp_old, logp_engine, A, low=0.8, high=1.28):
 @register("cispo")
 def cispo(logp_now, logp_old, logp_engine, A, cap=4.0):
   """
-    r = p_now / p_old.
-    w = clamp(r, 0, cap). Never 0, at most cap.  [B, S]
+    r = p_now / p_old
+    w = clamp(r, 0, cap). Never 0, at most cap.
+
+    logp_now:    [B, S]
+    logp_old:    [B, S]
+    logp_engine: [B, S]
+    A:           [B, S]
+    returns w:   [B, S]
   """
   raise NotImplementedError
 
@@ -52,7 +70,13 @@ def cispo(logp_now, logp_old, logp_engine, A, cap=4.0):
 @register("tis")
 def tis(logp_now, logp_old, logp_engine, A, cap=2.0):
   """
-    rho = p_old / p_engine.
-    w = clamp(rho, 0, cap) * ppo(logp_now, logp_old, logp_engine, A).  [B, S]
+    rho = p_old / p_engine
+    w = clamp(rho, 0, cap) * ppo(logp_now, logp_old, logp_engine, A)
+
+    logp_now:    [B, S]
+    logp_old:    [B, S]
+    logp_engine: [B, S]
+    A:           [B, S]
+    returns w:   [B, S]
   """
   raise NotImplementedError
