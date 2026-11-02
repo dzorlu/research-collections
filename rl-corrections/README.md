@@ -15,7 +15,7 @@ recomputed before the step, no gradient) and `p_engine` (the SGLang engine that 
 
 Loss normalization (per token vs per response, GRPO vs Dr. GRPO vs DAPO): [normalization.ipynb](normalization.ipynb).
 Backward pass by hand on a two-layer network, with `w` and `A` as inputs (REINFORCE, PPO, CISPO, TIS as four `w`s): [manual_backward.ipynb](manual_backward.ipynb).
-Training harness (sort task, toy engine with lag and logit noise, registered `w` methods, CLI and charts): [pglab/](pglab/), run with the `pglab` conda env: `python -m pglab.train --methods ppo,cispo --lag 0,8 --noise 0,1 --k 1,4`, then `python -m pglab.plot runs/latest`.
+Training harness (sort task, toy engine with lag and logit noise, registered `w` methods, CLI and charts): [pglab/](pglab/), run with the `pglab` conda env: `python -m pglab.train --methods ppo,cispo --lag 0,8 --noise 0,1 --epochs 1,4`, then `python -m pglab.plot runs/latest`.
 Score centering, step by step with numbers: [score_centering.md](score_centering.md).
 New agent: read [HANDOFF.md](HANDOFF.md) first.
 Start with [corrections.md](corrections.md): one table and the PyTorch code for each method.
