@@ -29,9 +29,9 @@ Closed: #4546 and #4547 (replaced by #4586). To close: [sglang#47400](https://gi
 
 ## Taking over: re-verification on torchtitan v0.4.0 (state 2026-11-01)
 
-Upstream merged torchtitan v0.4.0 ([#4537](https://github.com/radixark/miles/pull/4537) to [#4539](https://github.com/radixark/miles/pull/4539)) and [#4530](https://github.com/radixark/miles/pull/4530) on 2026-10-31, and force-updated `sglang-miles` on 2026-11-01. Six PRs conflicted. Each is resolved on a public branch that contains the PR's current head, so adopting it is a fast-forward (no force-push): `git push https://github.com/dzorlu/<repo>.git <resolved-branch>:<pr-branch>`. Adopt a branch once its tests in Table 3 pass.
+Upstream merged torchtitan v0.4.0 ([#4537](https://github.com/radixark/miles/pull/4537) to [#4539](https://github.com/radixark/miles/pull/4539)) and [#4530](https://github.com/radixark/miles/pull/4530) on 2026-10-31, and force-updated `sglang-miles` on 2026-11-01. Six PRs conflicted. Each is resolved on a public branch that contains the PR's current head, so adopting it is a fast-forward (no force-push): `git push https://github.com/dzorlu/<repo>.git <resolved-branch>:<pr-branch>`. Adopt a branch once its tests in Table 2 pass.
 
-*Table 3. Resolved branches, not yet adopted by the PRs.*
+*Table 2. Resolved branches, not yet adopted by the PRs.*
 
 | PR | PR branch | Resolved branch (head) | What changed | Tests to run |
 |---|---|---|---|---|
@@ -53,8 +53,8 @@ Run the miles tests inside `radixark/miles:dev-202611011509` (or newer; torchtit
 On 2026-11-01 runs 1 and 3 and both unit-test jobs were submitted to our cluster and queued behind other work; results are added here if they finish. After they pass: adopt the six branches, update the six PR descriptions, then mark the passing PRs ready.
 
 **What is left.**
-1. Fix the six merge conflicts: merge the base into each branch (no force-push), resolve, rerun the PR's CPU tests. The three torchtitan PRs conflict with main's move to torchtitan v0.4.0 ([#4537](https://github.com/radixark/miles/pull/4537) to [#4539](https://github.com/radixark/miles/pull/4539), merged 2026-10-31): #4520 and #4522 in one file each, #4588 in six (upstream rewrote the GLM-5.3 model it plugs into). Their GPU results predate v0.4.0, so rerun a GLM step after resolving.
-2. Mark the passing PRs ready for review.
+1. Finish the torchtitan v0.4.0 re-verification and adopt the six resolved branches (section "Taking over" above).
+2. Mark the passing PRs ready for review; close [sglang#47400](https://github.com/sgl-project/sglang/pull/47400).
 3. Coordinate with overlapping upstream PRs (not posted): [#1585](https://github.com/radixark/miles/pull/1585) duplicates #4519; [#4218](https://github.com/radixark/miles/pull/4218) touches #4520's replay guard; [#3879](https://github.com/radixark/miles/pull/3879) would remove #4522's indexer case.
 4. Follow-ups: an image-aware threshold for miles' R3 replay check (image tokens disagree about 15 times more than text on both image paths); two upstream bugs to report: native LoRA with `--colocate --lora-train-only` crashes in the first weight update on main, and the B300 dev image cannot train head-dim-256 attention (pin flash-attn-4 4.0.0b19 and quack-kernels 0.6.4).
 
@@ -68,7 +68,7 @@ TITO (token-in, token-out) means the trainer scores exactly the token IDs and im
 
 *Figure 1. One chat turn through the session server and the PR that acts at each step. Grey boxes are Rockdu's token-space stack ([#4240](https://github.com/radixark/miles/pull/4240), [#4272](https://github.com/radixark/miles/pull/4272)), which these PRs build on.*
 
-*Table 2. The TITO PRs. GPU runs: Qwen3.8-VL (Megatron, 4 nodes) and GLM-5.3 (torchtitan, 6 nodes) of 8x B300, episodes up to 256 turns with screenshot folding.*
+*Table 3. The TITO PRs. GPU runs: Qwen3.8-VL (Megatron, 4 nodes) and GLM-5.3 (torchtitan, 6 nodes) of 8x B300, episodes up to 256 turns with screenshot folding.*
 
 | PR | What broke | Fix | GPU result |
 |---|---|---|---|
