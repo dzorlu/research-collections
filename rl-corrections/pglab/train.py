@@ -1,7 +1,7 @@
 """
-Train the toy model on sort with each method, under lag, noise and epochs (optimizer steps) per rollout.
+Train the toy model on sort with each method, under lag, noise and optimizer steps per rollout.
 
-  python -m pglab.train --methods reinforce,ppo,cispo,tis --lag 0,4 --noise 0,0.5 --epochs 1,4
+  python -m pglab.train --methods reinforce,ppo,cispo,tis --lag 0,4 --noise 0,0.5 --steps-per-rollout 1,4
 """
 import collections
 import copy
@@ -22,12 +22,12 @@ S, V = 4, 10                     # digits per prompt, digit values 0-9
 
 class Config(BaseSettings):
   """CLI flags. Lists take commas: --lag 0,8."""
-  model_config = SettingsConfigDict(cli_parse_args=True, cli_prog_name='pglab.train', env_prefix='PGLAB_')
+  model_config = SettingsConfigDict(cli_parse_args=True, cli_kebab_case=True, cli_prog_name='pglab.train', env_prefix='PGLAB_')
 
   methods: list[str] = ['reinforce', 'ppo', 'cispo', 'tis']
   lag: list[int] = [0]           # engine weights are this many updates old
   noise: list[float] = [0.0]     # std of the noise added to the engine's logits
-  epochs: list[int] = [1]        # optimizer steps per rollout
+  steps_per_rollout: list[int] = [1]   # minibatches per rollout, one optimizer step each (miles --num-steps-per-rollout)
   seeds: int = 3
   steps: int = 300               # rollouts per run
   prompts: int = 64
@@ -50,7 +50,7 @@ class RunSpec(BaseModel):
   method: str
   lag: int
   noise: float
-  epochs: int
+  steps_per_rollout: int
   seed: int
 
 
@@ -59,7 +59,7 @@ class Row(RunSpec):
   step: int
   reward: float                  # mean fraction of positions right
   solved: float                  # share of responses fully sorted
-  w_zero: float                  # share of tokens with w = 0 at the last epoch
+  w_zero: float                  # share of tokens with w = 0, over all minibatches
   gap: float                     # mean |logp_old - logp_engine|
 
 
@@ -161,14 +161,19 @@ def run(spec: RunSpec, cfg: Config) -> list[Row]:
     logp_old = logp_of_tokens(model.logits, ro.y)                     # [B, S]
     mismatch_ratio = (logp_old - ro.logp_engine).exp()                # [B, S]  p_old / p_engine
 
-    # 3. `epochs` optimizer steps on this rollout. Only the w line depends on the method.
-    for _ in range(spec.epochs):
-      model.forward(ro.x)
-      logp_now = logp_of_tokens(model.logits, ro.y)                   # [B, S]
-      staleness_ratio = (logp_now - logp_old).exp()                   # [B, S]  p_now / p_old, 1 at the first epoch
-      w = METHODS[spec.method](staleness_ratio, mismatch_ratio, ro.A)  # [B, S]
-      model.backward(w, ro.A, ro.y)
+    # 3. One pass over the rollout in `steps_per_rollout` minibatches, one optimizer step each.
+    #    Minibatch k trains on weights that already moved k - 1 times since logp_old: that is the staleness.
+    #    Only the w line depends on the method.
+    ws = []
+    for mb in torch.arange(len(ro.y)).chunk(spec.steps_per_rollout):   # [b] response indices
+      model.forward(ro.x[mb])
+      logp_now = logp_of_tokens(model.logits, ro.y[mb])               # [b, S]
+      staleness_ratio = (logp_now - logp_old[mb]).exp()               # [b, S]  p_now / p_old, 1 on the first minibatch
+      w = METHODS[spec.method](staleness_ratio, mismatch_ratio[mb], ro.A[mb])   # [b, S]
+      model.backward(w, ro.A[mb], ro.y[mb])
       model.step(cfg.lr)
+      ws.append(w)
+    w = torch.cat(ws)                                                 # [B, S]
 
     snapshots.append(copy.deepcopy(model.state_dict()))
     if not all(W.isfinite().all() for W in model.weights):
@@ -195,8 +200,9 @@ def main():
   with open(f'{cfg.out}/metrics.csv', 'w', newline='') as f:
     writer = csv.DictWriter(f, Row.model_fields)
     writer.writeheader()
-    for method, lag, noise, epochs, seed in itertools.product(cfg.methods, cfg.lag, cfg.noise, cfg.epochs, range(cfg.seeds)):
-      spec = RunSpec(method=method, lag=lag, noise=noise, epochs=epochs, seed=seed)
+    grid = itertools.product(cfg.methods, cfg.lag, cfg.noise, cfg.steps_per_rollout, range(cfg.seeds))
+    for method, lag, noise, steps_per_rollout, seed in grid:
+      spec = RunSpec(method=method, lag=lag, noise=noise, steps_per_rollout=steps_per_rollout, seed=seed)
       rows = run(spec, cfg)
       writer.writerows(r.model_dump() for r in rows)
       print(f"{spec}  reward {rows[-1].reward:.3f}")
