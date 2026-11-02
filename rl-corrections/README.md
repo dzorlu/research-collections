@@ -14,6 +14,7 @@ Three probabilities appear in the formulas: `p_now` (trainer, current weights, w
 recomputed before the step, no gradient) and `p_engine` (the SGLang engine that sampled the token).
 
 Loss normalization (per token vs per response, GRPO vs Dr. GRPO vs DAPO): [normalization.ipynb](normalization.ipynb).
+Backward pass by hand on a two-layer network, with `w` and `A` as inputs (REINFORCE, PPO, CISPO, TIS as four `w`s): [manual_backward.ipynb](manual_backward.ipynb).
 Score centering, step by step with numbers: [score_centering.md](score_centering.md).
 New agent: read [HANDOFF.md](HANDOFF.md) first.
 Start with [corrections.md](corrections.md): one table and the PyTorch code for each method.
