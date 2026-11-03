@@ -68,6 +68,7 @@ def cispo(logp_now, logp_old, logp_engine, A, cap=4.0):
     r = p_now / p_old
     w = clamp(r, 0, cap). Never 0, at most cap.
 
+
     https://arxiv.org/abs/2506.13585 (MiniMax-M1).
 
     logp_now:    [B, S]
@@ -116,7 +117,15 @@ def gspo(logp_now, logp_old, logp_engine, A, low=0.8, high=1.28):
     A:           [B, S]
     returns w:   [B, S]
   """
-  raise NotImplementedError
+  r = logp_now - logp_old
+  _mean_exp = r.mean(-1).exp() #[B,]
+  A0 = A[:, 0]
+  _mean_exp[(_mean_exp > high) & (A0 > 0)] = 0
+  _mean_exp[(_mean_exp < low) & (A0 < 0)] = 0
+  _mean_exp = _mean_exp.unsqueeze(-1)
+  return _mean_exp
+  
+  
 
 
 @register("dppo")
@@ -135,4 +144,10 @@ def dppo(logp_now, logp_old, logp_engine, A, delta=0.15):
     A:           [B, S]
     returns w:   [B, S]
   """
-  raise NotImplementedError
+  r = (logp_now - logp_engine).exp()
+  r_diff = torch.abs(logp_now.exp() - logp_engine.exp())
+  # then PPO style clipping but with r_diff 
+  w = r.clone()
+  w[(A > 0) & (r_diff > delta) & (r > 1)] = 0
+  w[(A < 0) & (r_diff > delta) & (r < 1)] = 0
+  return w
