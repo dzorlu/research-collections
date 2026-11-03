@@ -131,13 +131,16 @@ trades one term for the other.
 
 ## 5. Baseline: less variance, no bias
 
-A baseline replaces $A = r_y$ with $A = r_y - b$. Multiply out the row:
+Praise every move and the player learns nothing about which moves were good. A baseline is that praise: it adds the
+same $-b$ to every reward, so on average it cannot push the model toward any token. It still changes each
+individual update, and that is where the variance goes.
 
-$$(r_y - b)\,(p - e_y) = r_y\,(p - e_y) \;-\; b\,(p - e_y).$$
+Replace $A = r_y$ with $A = r_y - b$ and multiply out the row:
 
-The subtracted piece averages to zero over the model's own samples, because $e_y$ lands on each token as often as
-$p$ says: $\mathbb{E}[e_y] = p$. A reward of $b$ for every draw carries no information about which token is better,
-so it cannot push the model anywhere on average [[3]](#ref-3)[[6]](#ref-6). A fair coin paid $b$ whatever comes up:
+$$(r_y - b)\,(p - e_y) = \underbrace{r_y\,(p - e_y)}_{\text{row without baseline}} \;-\; \underbrace{b\,(p - e_y)}_{\text{what the baseline subtracts}}.$$
+
+The subtracted piece is not a constant: it depends on which $y$ was drawn and changes sign. A fair coin paid $b$
+whatever comes up:
 
 ```python
 heads (half the time):  b * (p - e_0) = b * (-0.5, +0.5)
@@ -145,17 +148,19 @@ tails (half the time):  b * (p - e_1) = b * (+0.5, -0.5)
 average:                b * (0, 0)
 ```
 
-The toy, $r = (0, 0, 1)$, with $b = 0$ and $b = J = 0.2$:
+The toy, with $b = 0.2$:
 
-| $y$ | $p_y$ | $p - e_y$ | row, $b = 0$ | row, $b = 0.2$ |
-|---|---|---|---|---|
-| 0 | 0.5 | (−0.5, 0.3, 0.2) | (0, 0, 0) | $-0.2 \cdot (p - e_0)$ = (0.10, −0.06, −0.04) |
-| 1 | 0.3 | (0.5, −0.7, 0.2) | (0, 0, 0) | $-0.2 \cdot (p - e_1)$ = (−0.10, 0.14, −0.04) |
-| 2 | 0.2 | (0.5, 0.3, −0.8) | (0.50, 0.30, −0.80) | $0.8 \cdot (p - e_2)$ = (0.40, 0.24, −0.64) |
-| | | **average** | **(0.10, 0.06, −0.16)** | **(0.10, 0.06, −0.16)** |
-| | | **$\operatorname{Var}(x)$** | **0.157** | **0.103** |
+| $y$ | $p_y$ | $p - e_y$ | $A$, $b = 0$ | row, $b = 0$ | $A$, $b = 0.2$ | row, $b = 0.2$ | subtracted, $b\,(p - e_y)$ | $p_y \times$ subtracted |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 0.5 | (−0.5, 0.3, 0.2) | 0 | (0, 0, 0) | −0.2 | (0.10, −0.06, −0.04) | (−0.10, 0.06, 0.04) | (−0.05, 0.03, 0.02) |
+| 1 | 0.3 | (0.5, −0.7, 0.2) | 0 | (0, 0, 0) | −0.2 | (−0.10, 0.14, −0.04) | (0.10, −0.14, 0.04) | (0.03, −0.04, 0.01) |
+| 2 | 0.2 | (0.5, 0.3, −0.8) | 1 | (0.50, 0.30, −0.80) | 0.8 | (0.40, 0.24, −0.64) | (0.10, 0.06, −0.16) | (0.02, 0.01, −0.03) |
+| | | | | **avg (0.10, 0.06, −0.16)** | | **avg (0.10, 0.06, −0.16)** | | **sum (0, 0, 0)** |
+| | | | | **$\operatorname{Var}(x)$ 0.157** | | **$\operatorname{Var}(x)$ 0.103** | | |
 
-Same average, so no bias. The rows sit closer to it, so lower variance.
+Weighted by how often each $y$ is drawn, the subtracted pieces sum to zero (last column), because $e_y$ lands on
+each token as often as $p$ says: $\mathbb{E}[e_y] = p$ [[3]](#ref-3)[[6]](#ref-6). The average row is unchanged,
+no bias. The rows sit closer to it, so lower variance.
 
 ![baseline](figs/bv_baseline.png)
 
