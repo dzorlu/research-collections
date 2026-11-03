@@ -72,8 +72,9 @@ def batches(w, p_engine, b=0.0):
 
 def hist(ax, est, color, lo, hi):
   """Share of batches at each estimate (the estimates are discrete), true value dashed, average as a triangle."""
-  values, counts = est.unique(return_counts=True)                       # [n], [n]
-  ax.bar(values.numpy(), (counts / len(est)).numpy(), width=(hi - lo) / 120, color=color)
+  values, counts = (est * 1e4).round().div(1e4).unique(return_counts=True)   # [n], [n]  rounded: the estimates are discrete
+  width = 0.8 * values.diff().min().item() if len(values) > 1 else (hi - lo) / 120   # fill the gap between values
+  ax.bar(values.numpy(), (counts / len(est)).numpy(), width=width, color=color)
   ax.axvline(TRUE2, color=INK, linestyle='--', linewidth=1.2)
   ax.plot(est.mean().item(), 0, marker='^', color=INK, markersize=9, clip_on=False, zorder=5)
   ax.set_xlim(lo, hi)
@@ -83,7 +84,7 @@ def hist(ax, est, color, lo, hi):
 # Figure 1: model vs close engine writing the tokens, w = 1. Same scatter, different center.
 fig, ax = plt.subplots(figsize=(7, 3.4))
 lo, hi = -0.5, 0.1
-width = (hi - lo) / 120
+width = 0.05 * 0.4                                                      # estimates are multiples of 0.05; two bars per slot
 for (name, p_sampler), color, shift in zip([('model, q = 0.2', p), ('close engine, q = 0.1', ENGINES['close'])], [BLUE, ORANGE], [-0.5, 0.5]):
   est = batches(torch.ones(V), p_sampler)                              # [N_BATCHES]
   values, counts = est.unique(return_counts=True)                      # [n], [n]
