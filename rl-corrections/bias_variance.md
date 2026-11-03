@@ -137,13 +137,13 @@ $$(r_y - b)\,(p - e_y) = \underbrace{r_y\,(p - e_y)}_{\text{row without baseline
 
 The subtracted piece is not a constant: it depends on which $y$ was drawn, and it changes sign. With $b = 0.2$:
 
-| $y$ | $p_y$ | row, $b = 0$ | row, $b = 0.2$ | subtracted, $b\,(p - e_y)$ | $p_y \times$ subtracted |
-|---|---|---|---|---|---|
-| 0 | 0.5 | (0, 0, 0) | (0.10, −0.06, −0.04) | (−0.10, 0.06, 0.04) | (−0.05, 0.03, 0.02) |
-| 1 | 0.3 | (0, 0, 0) | (−0.10, 0.14, −0.04) | (0.10, −0.14, 0.04) | (0.03, −0.04, 0.01) |
-| 2 | 0.2 | (0.50, 0.30, −0.80) | (0.40, 0.24, −0.64) | (0.10, 0.06, −0.16) | (0.02, 0.01, −0.03) |
-| | | **average (0.10, 0.06, −0.16)** | **average (0.10, 0.06, −0.16)** | | **sum (0, 0, 0)** |
-| | | **$\operatorname{Var}(x)$ 0.157** | **$\operatorname{Var}(x)$ 0.103** | | |
+| $y$ | $p_y$ | $p - e_y$ | $A$, $b = 0$ | row, $b = 0$ | $A$, $b = 0.2$ | row, $b = 0.2$ | subtracted, $b\,(p - e_y)$ | $p_y \times$ subtracted |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 0.5 | (−0.5, 0.3, 0.2) | 0 | (0, 0, 0) | −0.2 | (0.10, −0.06, −0.04) | (−0.10, 0.06, 0.04) | (−0.05, 0.03, 0.02) |
+| 1 | 0.3 | (0.5, −0.7, 0.2) | 0 | (0, 0, 0) | −0.2 | (−0.10, 0.14, −0.04) | (0.10, −0.14, 0.04) | (0.03, −0.04, 0.01) |
+| 2 | 0.2 | (0.5, 0.3, −0.8) | 1 | (0.50, 0.30, −0.80) | 0.8 | (0.40, 0.24, −0.64) | (0.10, 0.06, −0.16) | (0.02, 0.01, −0.03) |
+| | | | | **avg (0.10, 0.06, −0.16)** | | **avg (0.10, 0.06, −0.16)** | | **sum (0, 0, 0)** |
+| | | | | **$\operatorname{Var}(x)$ 0.157** | | **$\operatorname{Var}(x)$ 0.103** | | |
 
 Weighted by how often each $y$ is drawn, the subtracted pieces cancel (last column), so the average row is
 unchanged: no bias. This is not luck: $e_y$ lands on each token exactly as often as $p$ says, so $p - e_y$
