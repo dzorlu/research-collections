@@ -2,12 +2,32 @@
 
 ## 1. The question
 
-Training follows `dlogits = w * A * (p - y_onehot) / (B * S)`, computed from one batch. How far is that from the
-gradient we actually want, and what does each correction (`w` in pglab's methods) do to the gap?
+RL for language models works like this: sample responses, score them, and nudge the model toward the good ones. The
+nudge is computed from a sampled batch, so it is only an estimate of the gradient we want. And the samples usually
+come from a different copy of the model than the one being trained: a separate inference engine, fast but a few
+updates behind and numerically slightly different.
 
-## 2. The true gradient
+Methods like PPO, importance sampling, TIS and DPPO each change that estimate. This post asks: how far is the
+estimate from the gradient we want, and what does each method do to the gap?
 
-The goal is the model's average reward. In a toy with one position and three tokens:
+## 2. The update
+
+The model turns logits into probabilities `p` with a softmax. When a token `y` is written and gets advantage `A`
+(how much better than usual the response was), the policy gradient on the logits is:
+
+```python
+dlogits = w * A * (p - y_onehot)    # [V]  one written token; V = vocabulary size
+```
+
+`y_onehot` is 1 at the written token and 0 elsewhere. `w` is a per-token weight: 1 in plain REINFORCE, and the knob
+every correction method turns. This is the gradient of the loss, so training subtracts it: a negative entry pushes
+that token's logit up.
+
+For a batch of `B` responses of `S` tokens each, average over all `B * S` tokens.
+
+## 3. The true gradient
+
+The goal is the model's average reward. A toy with one position and three tokens:
 
 ```python
 p    = [0.5, 0.3, 0.2]    # [V]  how often the model writes each token
@@ -15,33 +35,26 @@ R_of = [0.0, 0.0, 1.0]    # [V]  reward if token k is written: only token 2 is r
 J = 0.5*0 + 0.3*0 + 0.2*1 = 0.2    # average reward over everything the model could write
 ```
 
-The true gradient is how `J` changes when the logits change. `J` is a sum over every response the model could write,
-so its gradient is too: each response contributes how often it is written, times its reward, times the direction
-that makes it likelier. Here that sum is `[0.10, 0.06, -0.16]` in `dlogits` form (autograd agrees). Training
-subtracts `dlogits`, so token 2's `-0.16` pushes it up.
+The true gradient is how `J` changes when the logits change. Differentiating `J` by hand (or with any autodiff
+tool) gives `[0.10, 0.06, -0.16]`, written as a loss gradient like `dlogits`. Token 2's `-0.16` says: push token 2
+up.
 
-With three responses we can add them all up. A real model has `V**S` possible responses (`10**4` in pglab, far more
-than atoms in the universe for an LLM), so we sample a batch of `B` and average instead. The rest of this post
-follows one number, token 2's entry `-0.16`, and asks how the batch's version of it behaves.
+`J` is a sum over every response the model could write, so its gradient is too. With three responses we can add
+them all up. A real model has `V**S` possible responses, far more than atoms in the universe, so training samples a
+batch of `B` and averages instead. The rest of this post follows one number, token 2's `-0.16`, and asks how the
+batch's version of it behaves.
 
-## 3. One sample, one guess
+## 4. One sample, one guess
 
-One position, so `S = 1`:
-
-```python
-y        = sampled tokens            # [B]
-A        = R_of[y] - b               # [B]  advantage: reward minus a baseline b
-dlogits  = w * A * (p - y_onehot) / B     # [B, V]
-estimate = dlogits.sum(0)[2]         # ()   the batch's version of token 2's gradient
-```
-
-With `w = 1` and `b = 0`, each sample adds one of two values to token 2's entry:
+One position (`S = 1`), no baseline (`A` = reward), `w = 1`. Each sample adds one of two values to token 2's entry:
 
 ```python
-y = 2:  A = 1  ->  1 * (0.2 - 1) = -0.8    # written 20% of the time
-y = 0 or 1: A = 0  ->  0                   # written 80% of the time
-average = 0.2 * -0.8 = -0.16               # the true gradient
+y = 2:      A = 1  ->  1 * (0.2 - 1) = -0.8    # written 20% of the time
+y = 0 or 1: A = 0  ->  0                       # written 80% of the time
+average = 0.2 * -0.8 = -0.16                   # the true gradient
 ```
+
+The batch's estimate is the average of its `B` samples.
 
 Two numbers describe the estimate:
 
@@ -52,10 +65,10 @@ Two numbers describe the estimate:
 error = bias**2 + variance / B
 ```
 
-## 4. Baseline: less variance, no bias
+## 5. Baseline: less variance, no bias
 
-Subtract `b = 0.2`, the average reward. The sampled rows change, the average does not: over the model's own samples,
-`p - y_onehot` averages to 0, so subtracting `b` times it subtracts 0.
+Use `A = reward - b` with `b = 0.2`, the average reward. The samples change, their average does not: over the
+model's own samples, `p - y_onehot` averages to 0, so subtracting `b` times it subtracts 0.
 
 ![baseline](figs/bv_baseline.png)
 
@@ -65,7 +78,7 @@ Subtract `b = 0.2`, the average reward. The sampled rows change, the average doe
 GRPO uses the group's mean reward as `b`. (Its other two steps, dividing by the group's reward std and by response
 length, do add bias; see [Dr. GRPO](https://arxiv.org/abs/2503.20783).)
 
-## 5. When the engine writes the tokens
+## 6. When the engine writes the tokens
 
 Now `y` comes from the engine, so tokens show up at the engine's rates, not the model's. We still want the model's
 `-0.16`. Two engines, `b = 0`:
@@ -76,7 +89,7 @@ close = [0.6,  0.3,  0.1 ]    # [V]  engine writes token 2 half as often as the 
 far   = [0.69, 0.30, 0.01]    # [V]  engine almost never writes token 2
 ```
 
-### 5.1 Two distances between engine and model
+### 6.1 Two distances between engine and model
 
 **Total variation (TV): how much probability moved.**
 
@@ -109,7 +122,7 @@ That is the chi-squared distance. Each token adds `p**2 / p_engine`, so a token 
 *Figure 2: engine `[0.7 - e, 0.3, e]` as `e`, the engine's probability of token 2, falls from 0.2 (same as the
 model) to 0.005. TV levels off at 0.2. Chi-squared explodes.*
 
-### 5.2 Three weights
+### 6.2 Three weights
 
 Each sample now adds `-0.8 * w[2]` if it wrote token 2, and 0 otherwise.
 
@@ -124,9 +137,9 @@ Each sample now adds `-0.8 * w[2]` if it wrote token 2, and 0 otherwise.
 *Figure 3: the far engine, 20,000 batches of 16. REINFORCE and TIS are tight but centered in the wrong place (bias).
 IS is centered on the truth on average, but no single batch lands near it (variance).*
 
-### 5.3 Every method, both engines
+### 6.3 Every method, both engines
 
-pglab's methods each choose `w`. Here are their errors at `B = 16`, split into bias² and variance:
+Each method chooses `w`. Here are their errors at `B = 16`, split into bias² and variance:
 
 ![methods](figs/bv_methods.png)
 
@@ -149,14 +162,13 @@ Table 1: the numbers behind Figure 4 (`b = 0`, per-sample variance, error at `B 
 Three things to take from this:
 
 1. **Unbiased is not the same as better.** With the close engine, plain REINFORCE beats IS at `B = 16`.
-2. **The trust-region methods look worst here, by design.** PPO (with its ratio taken against the engine, as in
-   miles `--use-rollout-logprobs`) and DPPO set `w = 0` on token 2, so they estimate 0. They are not trying to
+2. **The trust-region methods look worst here, by design.** PPO (with its ratio taken against the engine) and DPPO set `w = 0` on token 2, so they estimate 0. They are not trying to
    estimate one gradient well. They stop the step on tokens that already moved too far. That benefit only shows up
-   across steps (section 6).
+   across steps (section 7).
 3. **PPO and DPPO disagree with the close engine.** Token 2's ratio is 2, so PPO blocks it. Only 0.10 of
    probability moved, under DPPO's 0.15, so DPPO keeps it.
 
-### 5.4 Where to put the cap
+### 6.4 Where to put the cap
 
 A cap trades variance for bias. Where the best trade sits depends on the batch size:
 
@@ -165,10 +177,10 @@ A cap trades variance for bias. Where the best trade sits depends on the batch s
 *Figure 5: far engine, error versus the cap on `w`. At `B = 16` the best cap is about 3. At `B = 256` the variance is
 16 times smaller, so the best cap rises to about 14.*
 
-pglab's `tis` and miles `--use-tis` cap at 2. The same trade appears in classic RL as
+Common TIS implementations cap at 2. The same trade appears in classic RL as
 [V-trace](https://arxiv.org/abs/1802.01561) and [Retrace](https://arxiv.org/abs/1606.02647).
 
-## 6. Across steps: the blind spot and the trust region
+## 7. Across steps: the blind spot and the trust region
 
 So far, one estimate. Training takes steps, and a step can hide a second kind of bias.
 
@@ -202,7 +214,7 @@ Table 3: PPO and DPPO on a rare token with `A > 0` and a confident token with `A
 PPO blocks a token that barely moved and passes one that moved a lot. In the paper, collapse came from the second
 kind (Figure 5 there), and the mean `|p - p_engine|` rose before reward fell (Figure 3 there).
 
-## 7. Summary
+## 8. Summary
 
 Table 4: what each choice of `w` does.
 
@@ -216,6 +228,4 @@ Table 4: what each choice of `w` does.
 TV is how much probability moved; ignoring it costs bias. Chi-squared is how big the weights get; correcting for it
 costs variance. A trust region adds a little bias now to keep the next step's bias (the blind spot) small.
 
-Next: measure the same bias and variance on pglab training checkpoints, per method, instead of on a toy.
-
-Figures: `bias_variance_figs.py`.
+Next: the same measurement on a real training run, per method, instead of a toy.
