@@ -145,12 +145,10 @@ The subtracted piece is not a constant: it depends on which $y$ was drawn, and i
 | | | | | **avg (0.10, 0.06, −0.16)** | | **avg (0.10, 0.06, −0.16)** | | **sum (0, 0, 0)** |
 | | | | | **$\operatorname{Var}(x)$ 0.157** | | **$\operatorname{Var}(x)$ 0.103** | | |
 
-Weighted by how often each $y$ is drawn, the subtracted pieces cancel (last column), so the average row is
-unchanged: no bias. This is not luck: $e_y$ lands on each token exactly as often as $p$ says, so $p - e_y$
-averages to $p - p = 0$ under the model's own samples [[3]](#ref-3)[[6]](#ref-6). The rows themselves moved
-closer to their common average, so the variance fell. Greensmith et al. derive the variance-minimizing $b$
-[[6]](#ref-6). Under the engine $e_y$ averages to $p_{\text{engine}}$ instead, the pieces sum to
-$b\,(p - p_{\text{engine}}) \ne 0$, and the baseline does shift the average; section 6 therefore uses $b = 0$.
+The subtracted piece differs from row to row, but weighted by how often each $y$ is drawn it sums to zero (last
+column): $e_y$ lands on each token as often as $p$ says, so $p - e_y$ averages to $p - p = 0$
+[[3]](#ref-3)[[6]](#ref-6). The average row is unchanged, no bias; the rows sit closer to it, so the variance fell.
+Under the engine the pieces sum to $b\,(p - p_{\text{engine}}) \ne 0$ instead, so section 6 uses $b = 0$.
 
 ![baseline](figs/bv_baseline.png)
 
