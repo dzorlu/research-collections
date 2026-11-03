@@ -145,10 +145,13 @@ The subtracted piece is not a constant: it depends on which $y$ was drawn, and i
 | | | | | **avg (0.10, 0.06, −0.16)** | | **avg (0.10, 0.06, −0.16)** | | **sum (0, 0, 0)** |
 | | | | | **$\operatorname{Var}(x)$ 0.157** | | **$\operatorname{Var}(x)$ 0.103** | | |
 
-The subtracted piece differs from row to row, but weighted by how often each $y$ is drawn it sums to zero (last
-column): $e_y$ lands on each token as often as $p$ says, so $p - e_y$ averages to $p - p = 0$
-[[3]](#ref-3)[[6]](#ref-6). The average row is unchanged, no bias; the rows sit closer to it, so the variance fell.
-Under the engine the pieces sum to $b\,(p - p_{\text{engine}}) \ne 0$ instead, so section 6 uses $b = 0$.
+The pieces differ from row to row, but weighted by how often each $y$ is drawn they sum to zero (last column).
+The reason: a reward of $b$ for every draw says nothing about which token is better, so on average it cannot push
+the model toward any token. Each draw does push its own token up, but tokens come up in proportion to $p$, and
+pushing every token up in proportion to its own probability leaves a softmax where it is: $e_y$ averages to $p$,
+so $p - e_y$ averages to $0$ [[3]](#ref-3)[[6]](#ref-6). The average row is unchanged, no bias; the rows sit closer
+to it, so the variance fell. Under the engine the pushes come in proportion to $p_{\text{engine}}$ instead and the
+pieces sum to $b\,(p - p_{\text{engine}}) \ne 0$, so section 6 uses $b = 0$.
 
 ![baseline](figs/bv_baseline.png)
 
