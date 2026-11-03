@@ -30,8 +30,8 @@ For a batch of `B` responses of `S` tokens each, average over all `B * S` tokens
 The goal is the model's average reward. A toy with one position and three tokens:
 
 ```python
-p    = [0.5, 0.3, 0.2]    # [V]  how often the model writes each token
-R_of = [0.0, 0.0, 1.0]    # [V]  reward if token k is written: only token 2 is right
+p      = [0.5, 0.3, 0.2]  # [V]  how often the model writes each token
+reward = [0.0, 0.0, 1.0]  # [V]  reward[k] if token k is written; = one_hot(target) with target = 2
 J = 0.5*0 + 0.3*0 + 0.2*1 = 0.2    # average reward over everything the model could write
 ```
 

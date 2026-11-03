@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 torch.manual_seed(0)
 p = torch.tensor([0.5, 0.3, 0.2])        # [V]  model
-R_of = torch.tensor([0.0, 0.0, 1.0])     # [V]  reward if token k is written
+reward = torch.tensor([0.0, 0.0, 1.0])     # [V]  reward if token k is written
 TRUE = -p[2] * (1 - p[2])                # ()   true gradient on token 2's logit: -0.16
 B = 16
 N_BATCHES = 20000
@@ -45,7 +45,7 @@ def weights(method, p_engine):
 
 def row(w, b=0.0):
   """Token 2's dlogits entry if token k is written, one sample. Returns [V]."""
-  A = R_of - b                                         # [V]
+  A = reward - b                                         # [V]
   is_2 = torch.tensor([0.0, 0.0, 1.0])                 # [V]  onehot(k)[2] for k = 0, 1, 2
   return w * A * (p[2] - is_2)                         # [V]
 
