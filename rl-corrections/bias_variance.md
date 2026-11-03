@@ -58,24 +58,21 @@ a Bernoulli($q$) scaled by $v$. A batch average is $v$ times the fraction of 2s 
 The model writes token 2 at $q = p_2 = 0.2$. The close engine of section 6 writes it half as often,
 $p_{\text{engine},2} = 0.1$. Draw many batches of 16 from each:
 
-![bias and scatter](figs/bv_bias_scatter.png)
+![model vs engine batches](figs/bv_bias_scatter.png)
 
 *Figure 1: where batches of 16 land, 20,000 from each sampler. Token 2's coordinate of $\hat g_B$; dashed is $g$.*
 
-The spread is scatter, which averages out. The engine's offset is bias, which does not.
+The spread averages out. The engine's offset does not.
 
-**Error.** The error of the estimator is the average squared miss over batches, $\mathbb{E}\,\|\hat g_B - g\|^2$.
-A batch averages $B$ independent rows, so
+**Error.** The error of the estimator is the mean squared miss over batches, $\mathbb{E}\,\|\hat g_B - g\|^2$. It
+decomposes into bias and variance [[5]](#ref-5):
 
-$$\mathbb{E}[\hat g_B] = \mathbb{E}[x], \qquad \operatorname{Var}(\hat g_B) = \frac{\operatorname{Var}(x)}{B}.$$
+$$\mathbb{E}\,\|\hat g_B - g\|^2 = \underbrace{\|\mathbb{E}[\hat g_B] - g\|^2}_{\text{bias}^2} + \underbrace{\mathbb{E}\,\|\hat g_B - \mathbb{E}[\hat g_B]\|^2}_{\text{variance}}.$$
 
-Split each miss at the center, square, average [[5]](#ref-5):
+A batch averages $B$ independent rows, so $\mathbb{E}[\hat g_B] = \mathbb{E}[x]$ and
+$\operatorname{Var}(\hat g_B) = \operatorname{Var}(x)/B$:
 
-$$\begin{aligned}
-\hat g_B - g &= \underbrace{(\hat g_B - \mathbb{E}[\hat g_B])}_{\text{scatter}} + \underbrace{(\mathbb{E}[x] - g)}_{\text{bias}} \\
-\mathbb{E}\,\|\hat g_B - g\|^2 &= \mathbb{E}\,\|\text{scatter}\|^2 + 2\,\text{bias} \cdot \mathbb{E}[\text{scatter}] + \|\text{bias}\|^2 \\
-&= \operatorname{Var}(x)/B \;+\; 0 \;+\; \|\text{bias}\|^2 \qquad \text{(scatter averages to 0)}
-\end{aligned}$$
+$$\mathbb{E}\,\|\hat g_B - g\|^2 = \|\mathbb{E}[x] - g\|^2 + \frac{\operatorname{Var}(x)}{B}.$$
 
 Only $\operatorname{Var}(x)/B$ shrinks with $B$. For our row, $x = v$ with probability $q$ and $0$ otherwise,
 with $\|v\|^2 = 0.98$:
