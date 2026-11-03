@@ -2,295 +2,285 @@
 
 ## 1. The question
 
-RL for language models works like this: sample responses, score them, and nudge the model toward the good ones. The
-nudge is computed from a sampled batch, so it is only an estimate of the gradient we want. And the samples usually
-come from a different copy of the model than the one being trained: a separate inference engine, fast but a few
-updates behind and numerically slightly different [[1]](#ref-1)[[2]](#ref-2).
-
-Methods like PPO, importance sampling, TIS and DPPO each change that estimate. This post asks: how far is the
-estimate from the gradient we want, and what does each method do to the gap?
+RL for language models estimates the policy gradient from a sampled batch. The tokens are usually written by an
+inference engine rather than the model being trained: a separate copy that is a few updates behind and numerically
+slightly different [[1]](#ref-1)[[2]](#ref-2). Importance sampling (IS), truncated IS (TIS), PPO and DPPO each modify
+the estimator to cope with that mismatch. This post measures, on a toy where everything is exact, how far each
+modified estimator lands from the true gradient, split into bias and variance.
 
 ## 2. The update
 
-The model turns logits into probabilities `p` with a softmax. When a token `y` is written and gets advantage `A`
-(how much better than usual the response was), the policy gradient on the logits is [[3]](#ref-3):
+Let $z \in \mathbb{R}^V$ be the logits at one position, $p = \operatorname{softmax}(z)$ the trained model's
+distribution, and $p_{\text{engine}}$ the distribution of the engine that samples. For a sampled token $y$ with
+one-hot $e_y$, advantage $A$ and per-token weight $w$, the policy-gradient update on the logits is [[3]](#ref-3)
 
-```python
-dlogits = w * A * (p - y_onehot)    # [V]  one written token; V = vocabulary size
-```
+$$\text{dlogits} = w\,A\,(p - e_y).$$
 
-`y_onehot` is 1 at the written token and 0 elsewhere. `p - y_onehot` is the gradient of `-log p[y]` for a softmax. `w` is a per-token weight: 1 in plain REINFORCE, and the knob
-every correction method turns. This is the gradient of the loss, so training subtracts it: a negative entry pushes
-that token's logit up.
-
-The two inputs have separate jobs: `y_onehot` says which token was written, `A` says how good that was. The reward
-enters only through `A`.
-
-For a batch of `B` responses of `S` tokens each, average over all `B * S` tokens.
+This is a loss gradient ($p - e_y = \nabla_z[-\log p_y]$), so training subtracts it. The reward enters only through
+$A$. Plain REINFORCE has $w = 1$; every correction method below is a choice of $w$. A batch of $B$ responses of $S$
+tokens averages this over all $BS$ tokens.
 
 ## 3. The true gradient
 
-The goal is the model's average reward, `J`. A toy with one position and three tokens:
+The true gradient is the update from section 2, averaged over which token gets written, each weighted by how often
+the model writes it. By the policy gradient identity this equals $-\nabla_z J$, the gradient of the average reward
+in loss sign [[3]](#ref-3)[[4]](#ref-4):
+
+$$g = \sum_y p_y \cdot r_y\,(p - e_y) \qquad (w = 1,\ A = r_y).$$
+
+Every method below is an estimate of $g$. The toy has one position, three tokens, and only token 2 is rewarded:
 
 ```python
-p = [0.5, 0.3, 0.2]               # [V]  how often the model writes each token
-# reward: 1 if the model writes token 2, else 0
-J = 0.5*0 + 0.3*0 + 0.2*1 = 0.2   # average reward over everything the model could write
+p = [0.5, 0.3, 0.2]    # model
+r = [0, 0, 1]          # reward if token k is written
 ```
 
-The true gradient is the exact slope of `J` with respect to each logit: nothing sampled, nothing estimated. For a
-softmax it has a closed form (from `J = sum_k p_k * reward_k` and the softmax derivative):
+| $y$ | $p_y$ | $A = r_y$ | $p - e_y$ | $p_y \cdot A \cdot (p - e_y)$ |
+|---|---|---|---|---|
+| 0 | 0.5 | 0 | (−0.5, 0.3, 0.2) | (0, 0, 0) |
+| 1 | 0.3 | 0 | (0.5, −0.7, 0.2) | (0, 0, 0) |
+| 2 | 0.2 | 1 | (0.5, 0.3, −0.8) | (0.10, 0.06, −0.16) |
+| | | | **sum** | **$g$ = (0.10, 0.06, −0.16)** |
 
-```python
-# slope of J for logit k:  p_k * (reward_k - J)
-[0.5 * (0 - 0.2),  0.3 * (0 - 0.2),  0.2 * (1 - 0.2)]  =  [-0.10, -0.06, +0.16]
-```
+The weight $p_y$ is how often the model itself writes each token. That is what breaks when another model writes the
+tokens (section 6). A real model can't sum over all $V^S$ responses, so it averages $B$ samples instead.
 
-Each entry is a probability times a reward relative to the average. Tokens that beat `J` go up, the rest go down, so
-`J` already acts as a baseline inside the true gradient (section 5). The factor `p_k` weighs each token by how often
-the model itself writes it; section 6 is what happens when a different model does the writing.
+## 4. Bias and variance
 
-Section 2's update is a loss to minimize, which flips the sign. The target for every method below is
+Call the update of one sampled token a row, $x = w\,A\,(p - e_y)$, and the average of $B$ rows $\hat g_B$. In
+section 3's table only the $y = 2$ row is nonzero. Call it $v$:
 
-```python
-true dlogits = [0.10, 0.06, -0.16]
-```
+$$v = p - e_2 = (0.5,\ 0.3,\ -0.8), \qquad g = 0.2\,v = (0.10,\ 0.06,\ -0.16).$$
 
-**Where sampling comes in.** The same numbers come from section 2's update, written out for every token the model
-could write and weighted by how often it writes it. With `w = 1` and no baseline, `A` is just the reward:
+With $q$ the probability that a sampled token is 2, one row is $x = v$ with probability $q$ and $0$ otherwise:
+a Bernoulli($q$) scaled by $v$. A batch average is $v$ times the fraction of 2s it drew.
 
-```python
-#           how often   A    p - y_onehot
-token 0:    0.5       * 0  * [-0.5,  0.3,  0.2]  =  [0.00, 0.00,  0.00]
-token 1:    0.3       * 0  * [ 0.5, -0.7,  0.2]  =  [0.00, 0.00,  0.00]
-token 2:    0.2       * 1  * [ 0.5,  0.3, -0.8]  =  [0.10, 0.06, -0.16]
-                                            sum  =  [0.10, 0.06, -0.16]    # the true dlogits
-```
+The model writes token 2 at $q = p_2 = 0.2$. The close engine of section 6 writes it half as often,
+$p_{\text{engine},2} = 0.1$. Draw many batches of 16 from each:
 
-This is the policy gradient identity: the gradient of the average reward equals the average, over what the model
-writes, of `A * (p - y_onehot)` [[3]](#ref-3)[[4]](#ref-4). So the true gradient is an average over every response
-the model could write. Here that is three responses. A language model with a 100,000-token vocabulary writing
-1,000-token responses has `100000**1000` of them, so training cannot do the sum. It samples `B` responses and
-averages their rows instead. The rest of this post follows one number, token 2's `-0.16`, and asks how far that
-batch average lands from it.
+![bias and scatter](figs/bv_bias_scatter.png)
 
-## 4. One sample, one guess
+*Figure 1: where batches of 16 land, 20,000 from each sampler. Token 2's coordinate of $\hat g_B$; dashed is $g$.*
 
-One position (`S = 1`), no baseline (`A` = reward), `w = 1`. From here on we track only the third entry of `dlogits`
-(token 2's logit), whose true value is `-0.16`. Each sample gives it one of two values, `A * (p[2] - y_onehot[2])`:
+The spread is scatter, which averages out. The engine's offset is bias, which does not.
 
-```python
-y = 2:      A = 1  ->  1 * (0.2 - 1) = -0.8    # written 20% of the time
-y = 0 or 1: A = 0  ->  0                       # written 80% of the time
-average = 0.2 * -0.8 = -0.16                   # third entry of the true dlogits [0.10, 0.06, -0.16]
-```
+**Error.** The error of the estimator is the average squared miss over batches, $\mathbb{E}\,\|\hat g_B - g\|^2$.
+A batch averages $B$ independent rows, so
 
-A batch averages `B` of these samples. How good is that average? Measure how far it lands from `-0.16`, square
-it so misses in either direction count, and average over many batches. Call that the **error**.
+$$\mathbb{E}[\hat g_B] = \mathbb{E}[x], \qquad \operatorname{Var}(\hat g_B) = \frac{\operatorname{Var}(x)}{B}.$$
 
-Start with one sample per batch (`B = 1`):
+Split each miss at the center, square, average [[5]](#ref-5):
 
-```python
-lands at -0.8 (20%):  miss = -0.8 + 0.16 = -0.64,  squared 0.4096
-lands at  0   (80%):  miss =  0   + 0.16 = +0.16,  squared 0.0256
-error = 0.2 * 0.4096 + 0.8 * 0.0256 = 0.102
-```
+$$\begin{aligned}
+\hat g_B - g &= \underbrace{(\hat g_B - \mathbb{E}[\hat g_B])}_{\text{scatter}} + \underbrace{(\mathbb{E}[x] - g)}_{\text{bias}} \\
+\mathbb{E}\,\|\hat g_B - g\|^2 &= \mathbb{E}\,\|\text{scatter}\|^2 + 2\,\text{bias} \cdot \mathbb{E}[\text{scatter}] + \|\text{bias}\|^2 \\
+&= \operatorname{Var}(x)/B \;+\; 0 \;+\; \|\text{bias}\|^2 \qquad \text{(scatter averages to 0)}
+\end{aligned}$$
 
-The misses cancel on average, because the samples average to exactly `-0.16`. All of this error is scatter, called
-the **variance**. Averaging `B` samples shrinks scatter: with `B = 16` the error is `0.102 / 16 = 0.0064`.
+Only $\operatorname{Var}(x)/B$ shrinks with $B$. For our row, $x = v$ with probability $q$ and $0$ otherwise,
+with $\|v\|^2 = 0.98$:
 
-Now suppose token 2 is written only 10% of the time instead of 20%, which is what happens in section 6 when another
-model writes the tokens:
+| | model, $q = 0.2$ | engine, $q = 0.1$ |
+|---|---|---|
+| $\mathbb{E}[x] = q\,v$ | $0.2\,v$ = (0.10, 0.06, −0.16) | $0.1\,v$ = (0.05, 0.03, −0.08) |
+| bias $= \mathbb{E}[x] - g$ | (0, 0, 0) | (−0.05, −0.03, +0.08) $= -0.1\,v$ |
+| $\|\text{bias}\|^2$ | 0 | $0.05^2 + 0.03^2 + 0.08^2 = 0.0098$ |
+| $\operatorname{Var}(x) = q\,\|v - \mathbb{E}[x]\|^2 + (1-q)\,\|0 - \mathbb{E}[x]\|^2$ | $0.2 \cdot 0.64 \cdot 0.98 + 0.8 \cdot 0.04 \cdot 0.98 = 0.157$ | $0.1 \cdot 0.81 \cdot 0.98 + 0.9 \cdot 0.01 \cdot 0.98 = 0.088$ |
+| error $= \|\text{bias}\|^2 + \operatorname{Var}(x)/B$ | $0.157 / B$ | $0.0098 + 0.088 / B$ |
+| at $B = 16$ | 0.0098 | $0.0098 + 0.0055 = 0.0153$ |
 
-```python
-lands at -0.8 (10%), 0 (90%)  ->  average -0.08, off by 0.08 from -0.16
-scatter = 0.1 * (-0.8 + 0.08)**2 + 0.9 * (0 + 0.08)**2 = 0.058
-error = 0.08**2 + 0.058 / B       # B = 16: 0.0064 + 0.0036 = 0.010
-```
+The model's bias is 0 because it writes token 2 at exactly the rate $g$ weights the $y = 2$ row, $q = p_2$
+(section 3). Bias appears when that match breaks: $y$ drawn from a different distribution than $p$, as with the
+engine, or the row changed ($w \ne 1$, $A$ rescaled).
 
-The `0.08` miss is the **bias**: the gap between the estimate's own average and the true value. More samples do not
-fix it: the batch average moves toward `-0.08`, not `-0.16`. So the error always splits into two parts:
-
-```python
-error = bias**2 + variance / B    # variance: the scatter of one sample
-```
-
-This is the standard split of mean squared error [[5]](#ref-5). A bigger batch shrinks only the second part.
+The model's error goes to 0 as $B$ grows; the engine's never falls below $\|\text{bias}\|^2$, 0.0098. Which is better depends on $B$: for $B < 7$ the engine's smaller variance outweighs its bias, beyond that
+the bias dominates. Section 5 lowers $\operatorname{Var}(x)$ without touching the bias; every method in section 6
+trades one term for the other.
 
 ## 5. Baseline: less variance, no bias
 
-Use `A = R - b`, where `R` is the reward (0 or 1), with `b = 0.2`, the average reward. The samples change, their average does not: over the
-model's own samples, `p - y_onehot` averages to 0, so subtracting `b` times it subtracts 0. This is why baselines are free [[3]](#ref-3)[[6]](#ref-6); Greensmith et al. also derive the
-baseline that minimizes variance [[6]](#ref-6).
+A baseline subtracts a constant from the reward, $A = r_y - b$. It leaves the average row unchanged, because
+$\mathbb{E}_{y \sim p}[p - e_y] = p - p = 0$, and changes only the variance [[3]](#ref-3)[[6]](#ref-6). Model
+sampling itself, with $b = 0$ and $b = J = 0.2$:
+
+| $y$ | model writes | row, $b = 0$ | row, $b = 0.2$ |
+|---|---|---|---|
+| 0 | 0.5 | (0, 0, 0) | (0.10, −0.06, −0.04) |
+| 1 | 0.3 | (0, 0, 0) | (−0.10, 0.14, −0.04) |
+| 2 | 0.2 | (0.50, 0.30, −0.80) | (0.40, 0.24, −0.64) |
+| | **average** | **(0.10, 0.06, −0.16)** | **(0.10, 0.06, −0.16)** |
+| | **$\operatorname{Var}(x)$** | **0.157** | **0.103** |
+
+With the baseline, token 2's row shrinks toward $g$ and the other two move off zero, so all three sit closer to
+their common average. Greensmith et al. derive the variance-minimizing $b$ [[6]](#ref-6).
 
 ![baseline](figs/bv_baseline.png)
 
-*Figure 1: 20,000 batches of 16, model sampling itself. Both baselines center on the true value (no bias). With
-`b = 0.2` the spread shrinks from 0.102 to 0.058 per sample.*
+*Figure 2: 20,000 batches of 16, model sampling itself, showing token 2's coordinate of the batch estimate. Both
+baselines center on the true value; $b = 0.2$ is narrower.*
 
-GRPO uses the group's mean reward as `b` [[7]](#ref-7). Its other two steps, dividing by the group's reward std and by
-response length, do add bias [[8]](#ref-8).
+GRPO uses the group's mean reward as $b$ [[7]](#ref-7). Its other two steps, dividing by the group's reward standard
+deviation and by response length, rescale $A$ and so add bias [[8]](#ref-8).
 
 ## 6. When the engine writes the tokens
 
-Now `y` comes from the engine, so tokens show up at the engine's rates, not the model's. We still want the model's
-`-0.16`. Two engines, `b = 0`:
+Now $y \sim p_{\text{engine}}$ while the target is still $g$. Two engines, $b = 0$:
 
 ```python
-p     = [0.5,  0.3,  0.2 ]    # [V]  model
-close = [0.6,  0.3,  0.1 ]    # [V]  engine writes token 2 half as often as the model
-far   = [0.69, 0.30, 0.01]    # [V]  engine almost never writes token 2
+p     = [0.5,  0.3,  0.2 ]    # model
+close = [0.6,  0.3,  0.1 ]    # writes token 2 half as often
+far   = [0.69, 0.30, 0.01]    # almost never writes token 2
 ```
 
 ### 6.1 Two distances between engine and model
 
-**Total variation (TV): how much probability moved.**
+**Total variation** measures how much probability mass moved [[9]](#ref-9):
+
+$$\mathrm{TV} = \tfrac{1}{2}\textstyle\sum_k |p_k - p_{\text{engine},k}|,$$
+
+which is 0.10 for close (0.1 moved from token 0 to token 2) and 0.19 for far.
+
+**Chi-squared** measures how large the correcting weights get. The importance weight is
+$w_k = p_k / p_{\text{engine},k}$ [[10]](#ref-10)[[12]](#ref-12):
 
 ```python
-p - close = [-0.1, 0.0, +0.1]    # take 0.1 from token 0, give it to token 2
+w_close = [0.83, 1.0,  2.0]
+w_far   = [0.72, 1.0, 20.0]
 ```
 
-`sum(|p - close|)` is 0.2, but it counts every move twice, once where it leaves and once where it lands. So the
-amount moved is `TV = 0.5 * sum(|p - p_engine|)`: 0.10 for close, 0.19 for far. This is the total variation
-distance [[9]](#ref-9).
+It has mean 1 under the engine, and its variance is the chi-squared divergence, which controls the error of
+importance sampling [[11]](#ref-11):
 
-**Chi-squared: how big the weights get.** The weight that undoes the mismatch is `w = p / p_engine`, the importance
-weight [[10]](#ref-10)[[12]](#ref-12):
+$$\operatorname{Var}_{p_{\text{engine}}}(w) = \sum_k \frac{p_k^2}{p_{\text{engine},k}} - 1 = \chi^2(p \,\|\, p_{\text{engine}}).$$
 
-```python
-w_close = [0.83, 1.0,  2.0]    # [V]
-w_far   = [0.72, 1.0, 20.0]    # [V]
-```
-
-Under the engine the weight always averages to 1: each term `p_engine[k] * (p[k] / p_engine[k])` is just `p[k]`. So
-the weight's variance is its average square minus 1:
-
-```python
-close: 0.6*0.83**2  + 0.3*1**2 + 0.1*2**2   - 1 = 0.12
-far:   0.69*0.72**2 + 0.3*1**2 + 0.01*20**2 - 1 = 3.66
-```
-
-That is the chi-squared distance; the second moment of the importance weight is exactly `1 + chi-squared`, and it
-controls the error of importance sampling [[11]](#ref-11). Each token adds `p**2 / p_engine`, so a token the engine rarely writes blows it up.
+This is 0.12 for close and 3.66 for far. A token the engine rarely writes contributes $p_k^2 / p_{\text{engine},k}$,
+so it dominates.
 
 ![distance](figs/bv_distance.png)
 
-*Figure 2: engine `[0.7 - e, 0.3, e]` as `e`, the engine's probability of token 2, falls from 0.2 (same as the
-model) to 0.005. TV levels off at 0.2. Chi-squared explodes.*
+*Figure 3: engine $(0.7 - \epsilon,\ 0.3,\ \epsilon)$ as $\epsilon$, the engine's probability of token 2, falls from
+0.2 (same as the model) to 0.005. TV levels off at 0.2. Chi-squared explodes.*
 
 ### 6.2 Three weights
 
-Each sample now adds `-0.8 * w[2]` if it wrote token 2, and 0 otherwise.
+A row is now $x = w_2\,v$ if $y = 2$ and $0$ otherwise, with $y = 2$ at rate $p_{\text{engine},2}$. With the far
+engine, $p_{\text{engine},2} = 0.01$:
 
-- **REINFORCE**, `w = 1`: token 2 shows up at the engine's rate, so the average is `-0.8 * 0.01 = -0.008` with the
-  far engine. Bias `+0.152`: it barely pushes token 2.
-- **IS**, `w = p / p_engine = 20` on token 2: the average is `-0.8 * 20 * 0.01 = -0.16`, exact. But 85% of batches
-  of 16 never see token 2 and estimate 0; the 14% that see it once estimate `-1.0`.
-- **TIS**, `w` capped at 2: in between, mostly bias. Truncating weights to trade variance for bias goes back to
-  Ionides [[13]](#ref-13); for LLM training it was proposed against engine mismatch [[1]](#ref-1).
+- **REINFORCE**, $w = 1$: $\mathbb{E}[x] = 0.01\,v$, a twentieth of $g$. Bias $-0.19\,v$, $\|\text{bias}\|^2 = 0.035$.
+- **IS**, $w = p / p_{\text{engine}}$, so $w_2 = 20$: $\mathbb{E}[x] = 0.01 \cdot 20\,v = g$, unbiased. But 85% of
+  batches of 16 never see token 2 and estimate $0$; the 14% that see it once estimate $\tfrac{20}{16}\,v$, six
+  times $g$.
+- **TIS**, $w = \min(p / p_{\text{engine}},\ 2)$: in between, mostly bias. Truncating weights to trade variance for
+  bias goes back to Ionides [[13]](#ref-13); for LLM training it was proposed against engine mismatch [[1]](#ref-1).
 
 ![weights](figs/bv_weights_far.png)
 
-*Figure 3: the far engine. Left: 300 single batches of 16. Every REINFORCE and TIS batch lands near 0; most IS batches
-land at 0 and a few at -1 or -2. Right: average more and more batches. REINFORCE and TIS settle near 0, the wrong
-place (bias). IS swings for hundreds of batches (variance) before settling on the true -0.16.*
+*Figure 4: the far engine, token 2's coordinate of the batch estimate. Left: 300 single batches of 16. Every
+REINFORCE and TIS batch lands near 0; most IS batches land at 0 and a few at -1 or -2. Right: running average over
+batches. REINFORCE and TIS settle near 0 (bias). IS swings for hundreds of batches (variance) before settling on
+the true -0.16.*
 
 ### 6.3 Every method, both engines
 
-Each method chooses `w`. Here are their errors at `B = 16`, split into bias² and variance:
+Two more choices of $w$, both built on the ratio $\rho_y = p_y / p_{\text{engine},y}$:
+
+- **PPO** [[14]](#ref-14), with the ratio taken against the engine, sets $w = 0$ when $\rho_y$ leaves
+  $[1 - \epsilon, 1 + \epsilon]$ in the direction $A$ favors, and $w = \rho_y$ otherwise.
+- **DPPO** [[2]](#ref-2) sets $w = 0$ when $|p_y - p_{\text{engine},y}| > \delta$ (here $\delta = 0.15$) in the
+  direction $A$ favors, and $w = \rho_y$ otherwise.
 
 ![methods](figs/bv_methods.png)
 
-*Figure 4: squared error of the batch estimate at `B = 16`. Close engine (left): IS, TIS and DPPO coincide (the cap
+*Figure 5: squared error of the batch estimate at $B = 16$. Close engine (left): IS, TIS and DPPO coincide (the cap
 of 2 does not bind, and DPPO passes since only 0.10 moved). Far engine (right): IS is mostly variance, the rest are
 mostly bias.*
 
-Table 1: the numbers behind Figure 4 (`b = 0`, per-sample variance, error at `B = 16`).
+Table 1: the numbers behind Figure 5 ($b = 0$, per-sample variance, error at $B = 16$). Every bias is a multiple
+of $v$, so one coefficient gives it.
 
-| engine | method | `w` on token 2 | bias | variance | error |
-|---|---|---|---|---|---|
-| close | REINFORCE | 1 | +0.080 | 0.058 | 0.010 |
-| close | IS, TIS, DPPO | 2 | 0 | 0.230 | 0.014 |
-| close | PPO (ratio to engine) | 0 | +0.160 | 0 | 0.026 |
-| far | REINFORCE | 1 | +0.152 | 0.006 | 0.024 |
-| far | IS | 20 | 0 | 2.534 | 0.158 |
-| far | TIS | 2 | +0.144 | 0.025 | 0.022 |
-| far | PPO, DPPO | 0 | +0.160 | 0 | 0.026 |
+| engine | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error |
+|---|---|---|---|---|---|---|
+| close | REINFORCE | 1 | $-0.10\,v$ | 0.0098 | 0.088 | 0.015 |
+| close | IS, TIS, DPPO | 2 | 0 | 0 | 0.353 | 0.022 |
+| close | PPO (ratio to engine) | 0 | $-g$ | 0.0392 | 0 | 0.039 |
+| far | REINFORCE | 1 | $-0.19\,v$ | 0.0354 | 0.010 | 0.036 |
+| far | IS | 20 | 0 | 0 | 3.881 | 0.243 |
+| far | TIS | 2 | $-0.18\,v$ | 0.0318 | 0.039 | 0.034 |
+| far | PPO, DPPO | 0 | $-g$ | 0.0392 | 0 | 0.039 |
 
-Three things to take from this:
-
-1. **Unbiased is not the same as better.** With the close engine, plain REINFORCE beats IS at `B = 16`.
-2. **The trust-region methods look worst here, by design.** PPO [[14]](#ref-14) (with its ratio taken against the engine)
-   and DPPO [[2]](#ref-2) set `w = 0` on token 2, so they estimate 0. They are not trying to
-   estimate one gradient well. They stop the step on tokens that already moved too far. That benefit only shows up
+1. **Unbiased is not better.** With the close engine, REINFORCE beats IS at $B = 16$.
+2. **The trust-region methods look worst, by design.** PPO and DPPO set $w_2 = 0$, so they estimate the zero vector and their bias is $-g$. They do not
+   aim to estimate one gradient well; they stop the step on tokens that already moved too far. That pays off only
    across steps (section 7).
-3. **PPO and DPPO disagree with the close engine.** Token 2's ratio is 2, so PPO blocks it. Only 0.10 of
-   probability moved, under DPPO's 0.15, so DPPO keeps it.
+3. **PPO and DPPO disagree on the close engine.** $\rho_2 = 2$, so PPO blocks token 2. Only 0.10 of probability
+   moved, under $\delta = 0.15$, so DPPO keeps it.
 
 ### 6.4 Where to put the cap
 
-A cap trades variance for bias. Where the best trade sits depends on the batch size:
+A cap trades variance for bias, and the best trade depends on $B$:
 
 ![cap](figs/bv_cap.png)
 
-*Figure 5: far engine, error versus the cap on `w`. At `B = 16` the best cap is about 3. At `B = 256` the variance is
-16 times smaller, so the best cap rises to about 14.*
+*Figure 6: far engine, error versus the cap on $w$. At $B = 16$ the best cap is about 3. At $B = 256$ the variance
+term is 16 times smaller, so the best cap rises to about 14.*
 
-Common TIS implementations cap at 2 [[1]](#ref-1). The same trade appears in classic RL as V-trace [[15]](#ref-15) and
-Retrace [[16]](#ref-16).
+Common TIS implementations cap at 2 [[1]](#ref-1). The same trade appears in classic off-policy RL as V-trace
+[[15]](#ref-15) and Retrace [[16]](#ref-16).
 
 ## 7. Across steps: the blind spot and the trust region
 
-So far, one estimate. Training takes steps, and a step can hide a second kind of bias.
+Section 6 concerned one estimate. Over a step there is a second bias that no per-token $w$ removes: $w$ corrects
+which token is written at a prefix, not how often each prefix is reached.
 
-`w` fixes which token is written at a prefix. It cannot fix how often each prefix is reached. Two tokens; reward 1 if
-the second token is `b`. The engine writes the first token 50/50, and after `a` it writes `b` 10% of the time. A step
-moves the first token toward `a` by `d`, and "after `a`" toward `b` by `d`.
+Two-token toy: the first token is $a$ or $b$, and the reward is 1 if the second token is $b$. The engine writes the
+first token 50/50; after $a$ it writes $b$ with probability 0.1, after $b$ with probability 0.5, so $J = 0.3$. A step
+raises $P(\text{first} = a)$ by $d$ and $P(b \mid a)$ by $d$. The true gain is $J(d) - J(0) = 0.1\,d + d^2$. The
+surrogate (the importance-weighted objective evaluated on engine samples) keeps the engine's prefix frequencies and
+predicts $0.1\,d$. The gap, $d^2$, is the stepped model reaching "after $a$" more often while also improving there.
 
 Table 2: the gain the weighted batch predicts (surrogate) vs the true gain in average reward.
 
-| `d` | true gain | surrogate | gap |
+| $d$ | true gain | surrogate | gap |
 |---|---|---|---|
 | 0.01 | 0.0011 | 0.0010 | 0.0001 |
 | 0.1 | 0.0200 | 0.0100 | 0.0100 |
 | 0.3 | 0.1200 | 0.0300 | 0.0900 |
 
-The stepped model reaches "after `a`" more often, and it also improved there. The batch was written by the engine and
-never saw that. This gap is classic: the performance difference lemma [[17]](#ref-17) writes the true gain exactly, and TRPO
-[[18]](#ref-18)[[19]](#ref-19) bounds the gap by the TV between the two policies. The DPPO paper adapts the bound to LLM responses
-(Theorem 3.2 in [[2]](#ref-2)): the gap is at most a constant times the TV summed over the response. So keep TV small at every token. That is a trust region,
-and it is what the zeros in Figure 4 pay for.
+The performance difference lemma [[17]](#ref-17) writes the true gain exactly, and TRPO [[18]](#ref-18)[[19]](#ref-19)
+bounds the gap by the TV between the two policies. DPPO adapts the bound to LLM responses (Theorem 3.2 in
+[[2]](#ref-2)): the gap is at most a constant times the TV summed over the response. Keeping per-token TV small is a
+trust region, and it is what the zeros in Figure 5 pay for.
 
-PPO measures movement with the ratio, `|r - 1|`. DPPO measures `|p - p_engine|`, which equals `p_engine * |r - 1|`,
-the token's actual share of TV.
+PPO measures movement by $|\rho - 1|$. DPPO measures $|p - p_{\text{engine}}| = p_{\text{engine}}\,|\rho - 1|$, the
+token's actual share of TV.
 
-Table 3: PPO and DPPO on a rare token with `A > 0` and a confident token with `A < 0`.
+Table 3: PPO and DPPO on a rare token with $A > 0$ and a confident token with $A < 0$.
 
-| token | `p_engine` → `p` | `r` | moved | PPO | DPPO (`delta` 0.15) |
+| token | $p_{\text{engine}} \to p$ | $\rho$ | moved | PPO | DPPO ($\delta = 0.15$) |
 |---|---|---|---|---|---|
-| rare | 0.0001 → 0.01 | 100 | 0.0099 | `w = 0` | `w = 100` |
-| confident | 0.99 → 0.80 | 0.81 | 0.19 | `w = 0.81` | `w = 0` |
+| rare | 0.0001 → 0.01 | 100 | 0.0099 | $w = 0$ | $w = 100$ |
+| confident | 0.99 → 0.80 | 0.81 | 0.19 | $w = 0.81$ | $w = 0$ |
 
-PPO blocks a token that barely moved and passes one that moved a lot. In the paper, collapse came from the second
-kind (Figure 5 in [[2]](#ref-2)), and the mean `|p - p_engine|` rose before reward fell (Figure 3 in [[2]](#ref-2)).
+PPO blocks a token that barely moved and passes one that moved a lot. In the DPPO paper, collapse came from the
+second kind (Figure 5 in [[2]](#ref-2)), and the mean $|p - p_{\text{engine}}|$ rose before reward fell (Figure 3
+in [[2]](#ref-2)).
 
 ## 8. Summary
 
-Table 4: what each choice of `w` does.
+Table 4: what each choice of $w$ does.
 
-| method | `w` | bias | variance |
+| method | $w$ | bias | variance |
 |---|---|---|---|
 | REINFORCE | 1 | grows with TV | low |
-| IS | `p / p_engine` | none | grows with chi-squared |
-| TIS | IS, capped | in between; best cap grows with `B` | in between |
-| PPO, DPPO | 0 on tokens that moved too far | adds bias on those tokens | low |
+| IS | $p / p_{\text{engine}}$ | none | grows with $\chi^2$ |
+| TIS | IS, capped | in between; best cap grows with $B$ | in between |
+| PPO, DPPO | 0 on tokens that moved too far | added on those tokens | low |
 
-TV is how much probability moved; ignoring it costs bias. Chi-squared is how big the weights get; correcting for it
-costs variance. A trust region adds a little bias now to keep the next step's bias (the blind spot) small.
+Ignoring the mismatch costs bias that scales with TV. Correcting it with $p / p_{\text{engine}}$ costs variance that
+scales with $\chi^2$. A cap sits between the two, and the right cap depends on $B$. A trust region accepts some
+bias in the current step to bound the next step's blind-spot bias.
 
-Next: the same measurement on a real training run, per method, instead of a toy.
-
-Figures are generated by `bias_variance_figs.py`; every number above was checked in PyTorch.
+Next: the same measurement on a real training run, per method.
 
 ## References
 

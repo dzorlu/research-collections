@@ -8,7 +8,7 @@ import html
 import os
 import sys
 
-PAGE = '''<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
+PAGE = r'''<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
 <style>
 :root {{ --ink:#1d1d1b; --muted:#5f5e5a; --line:#e4e3df; --bg:#fcfcfb; --code:#f2f1ee; --accent:#2a78d6; }}
 body {{ margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 -apple-system,system-ui,sans-serif; }}
@@ -35,13 +35,27 @@ sup.cite + sup.cite::before {{ content:','; font-size:11px; color:var(--accent);
   #toc {{ display:none; }} main {{ margin:0 auto; padding:24px 16px 60px; }}
   .sidenote {{ float:none; display:block; margin:6px 0 10px; width:auto; border-left:2px solid var(--line); padding-left:8px; }}
 }}
-</style></head><body>
+.katex-display {{ overflow-x:auto; overflow-y:hidden; padding:2px 0; }}
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+</head><body>
 <nav id="toc"></nav><main id="c"></main>
 <script id="md" type="text/plain">{md}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
 <script>
 const raw = document.createElement('textarea'); raw.innerHTML = document.getElementById('md').textContent;
-const main = document.getElementById('c'); main.innerHTML = marked.parse(raw.value);
+// Math: swap each $$...$$ / $...$ span (outside code) for a placeholder so marked leaves `_`, `*`, `|` alone,
+// then put the escaped source back and let KaTeX render it.
+const math = [];
+const protectedMd = raw.value.replace(/(```[\s\S]*?```|`[^`\n]*`)|\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, (m, code) => {{
+  if (code) return m;
+  math.push(m); return 'KATEXMATH' + (math.length - 1) + 'END';
+}});
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const main = document.getElementById('c');
+main.innerHTML = marked.parse(protectedMd).replace(/KATEXMATH(\d+)END/g, (_, i) => esc(math[+i]));
 
 // References: text of each numbered entry.
 const refs = {{}};
@@ -77,6 +91,10 @@ heads.forEach((h, i) => {{
   h.id = h.id || 'sec-' + i;
   const a = document.createElement('a'); a.href = '#' + h.id; a.textContent = h.textContent;
   a.className = h.tagName.toLowerCase(); toc.appendChild(a);
+}});
+renderMathInElement(document.body, {{
+  delimiters: [{{left: '$$', right: '$$', display: true}}, {{left: '$', right: '$', display: false}}],
+  throwOnError: false,
 }});
 const links = [...toc.querySelectorAll('a')];
 addEventListener('scroll', () => {{
