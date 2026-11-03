@@ -74,8 +74,12 @@ For any estimator $\hat\theta$ of a target $\theta$, with $m = \mathbb{E}[\hat\t
 
 $$\hat\theta - \theta = (\hat\theta - m) + (m - \theta).$$
 
-Square and take expectations. The cross term $2\,(m - \theta)\cdot\mathbb{E}[\hat\theta - m]$ is zero because
-$\mathbb{E}[\hat\theta - m] = 0$, leaving
+Square both sides, $\|a + b\|^2 = \|a\|^2 + 2\,a\cdot b + \|b\|^2$, and take expectations. The constant
+$m - \theta$ comes out of the cross term, and what is left of it is zero:
+
+$$\mathbb{E}\big[2\,(\hat\theta - m)\cdot(m - \theta)\big] = 2\,(m - \theta)\cdot\big(\mathbb{E}[\hat\theta] - m\big) = 0.$$
+
+So
 
 $$\mathbb{E}\,\|\hat\theta - \theta\|^2 = \underbrace{\mathbb{E}\,\|\hat\theta - m\|^2}_{\text{variance}} + \underbrace{\|m - \theta\|^2}_{\text{bias}^2}.$$
 
