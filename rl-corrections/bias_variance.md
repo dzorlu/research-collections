@@ -23,6 +23,9 @@ dlogits = w * A * (p - y_onehot)    # [V]  one written token; V = vocabulary siz
 every correction method turns. This is the gradient of the loss, so training subtracts it: a negative entry pushes
 that token's logit up.
 
+The two inputs have separate jobs: `y_onehot` says which token was written, `A` says how good that was. The reward
+enters only through `A`.
+
 For a batch of `B` responses of `S` tokens each, average over all `B * S` tokens.
 
 ## 3. The true gradient
@@ -30,9 +33,9 @@ For a batch of `B` responses of `S` tokens each, average over all `B * S` tokens
 The goal is the model's average reward. A toy with one position and three tokens:
 
 ```python
-p      = [0.5, 0.3, 0.2]  # [V]  how often the model writes each token
-reward = [0.0, 0.0, 1.0]  # [V]  reward for writing each token: only token 2 is right
-J = 0.5*0 + 0.3*0 + 0.2*1 = 0.2    # average reward over everything the model could write
+p = [0.5, 0.3, 0.2]               # [V]  how often the model writes each token
+# reward: 1 if the model writes token 2, else 0
+J = 0.5*0 + 0.3*0 + 0.2*1 = 0.2   # average reward over everything the model could write
 ```
 
 The true gradient says how `J` changes when each logit changes. Find it by nudging one logit at a time by 0.01 and
@@ -49,10 +52,11 @@ So the gradient of `J` is `[-0.10, -0.06, +0.16]`. The update in section 2 is wr
 flips the sign: the true `dlogits` is `[0.10, 0.06, -0.16]`.
 
 The same numbers come from averaging section 2's update over what the model writes (with its sign flipped back to
-`onehot - p`). Each token contributes how often it is written, times its reward, times `onehot - p`:
+`onehot - p`). Each token contributes how often it is written, times its `A`, times `onehot - p`. With no baseline,
+`A` is just the reward:
 
 ```python
-#           how often   reward   onehot - p
+#           how often   A        onehot - p
 token 0:    0.5       * 0      * [ 0.5, -0.3, -0.2]  =  [ 0.00,  0.00, 0.00]
 token 1:    0.3       * 0      * [-0.5,  0.7, -0.2]  =  [ 0.00,  0.00, 0.00]
 token 2:    0.2       * 1      * [-0.5, -0.3,  0.8]  =  [-0.10, -0.06, 0.16]
@@ -92,7 +96,7 @@ This split of the mean squared error is standard [[5]](#ref-5). Averaging `B` in
 
 ## 5. Baseline: less variance, no bias
 
-Use `A = reward - b` with `b = 0.2`, the average reward. The samples change, their average does not: over the
+Use `A = R - b`, where `R` is the reward (0 or 1), with `b = 0.2`, the average reward. The samples change, their average does not: over the
 model's own samples, `p - y_onehot` averages to 0, so subtracting `b` times it subtracts 0. This is why baselines are free [[3]](#ref-3)[[6]](#ref-6); Greensmith et al. also derive the
 baseline that minimizes variance [[6]](#ref-6).
 
