@@ -38,6 +38,15 @@ sup.cite + sup.cite::before {{ content:','; font-size:11px; color:var(--accent);
   table {{ max-width:100%; }}
 }}
 .katex-display {{ overflow-x:auto; overflow-y:hidden; padding:2px 0; }}
+details.note {{ margin:4px 0 14px; }}
+details.note summary {{ list-style:none; cursor:pointer; display:inline-block; font-size:12px; color:var(--accent); }}
+details.note summary::-webkit-details-marker {{ display:none; }}
+details.note summary::before {{ content:'?'; display:inline-block; width:16px; height:16px; line-height:16px; text-align:center;
+         border:1px solid var(--accent); border-radius:50%; margin-right:6px; font-weight:600; }}
+details.note[open] summary::before {{ content:'×'; }}
+.note-body {{ margin-top:8px; padding:12px 16px; border-left:3px solid var(--accent); background:var(--code); border-radius:0 6px 6px 0;
+         font-size:14px; }}
+.note-body p:first-child {{ margin-top:0; }} .note-body p:last-child {{ margin-bottom:0; }}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 </head><body>
@@ -56,8 +65,16 @@ const protectedMd = raw.value.replace(/(```[\s\S]*?```|`[^`\n]*`)|\$\$[\s\S]+?\$
   math.push(m); return 'KATEXMATH' + (math.length - 1) + 'END';
 }});
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Notes: a block  :::note Title ... :::  becomes a collapsed box opened by a "?" toggle.
+const notes = [];
+const withNotes = protectedMd.replace(/^:::note[ \t]+(.+)\n([\s\S]*?)^:::[ \t]*$/gm, (_, title, body) => {{
+  notes.push(`<details class="note"><summary>${{title}}</summary><div class="note-body">${{marked.parse(body)}}</div></details>`);
+  return 'NOTEBLOCK' + (notes.length - 1) + 'END';
+}});
 const main = document.getElementById('c');
-main.innerHTML = marked.parse(protectedMd).replace(/KATEXMATH(\d+)END/g, (_, i) => esc(math[+i]));
+main.innerHTML = marked.parse(withNotes)
+  .replace(/<p>NOTEBLOCK(\d+)END<\/p>/g, (_, i) => notes[+i])
+  .replace(/KATEXMATH(\d+)END/g, (_, i) => esc(math[+i]));
 
 // References: text of each numbered entry.
 const refs = {{}};

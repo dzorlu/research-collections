@@ -69,6 +69,22 @@ decomposes into bias and variance [[5]](#ref-5):
 
 $$\mathbb{E}\,\|\hat g_B - g\|^2 = \underbrace{\|\mathbb{E}[\hat g_B] - g\|^2}_{\text{bias}^2} + \underbrace{\mathbb{E}\,\|\hat g_B - \mathbb{E}[\hat g_B]\|^2}_{\text{variance}}.$$
 
+:::note bias–variance decomposition
+For any estimator $\hat\theta$ of a target $\theta$, with $m = \mathbb{E}[\hat\theta]$:
+
+$$\hat\theta - \theta = (\hat\theta - m) + (m - \theta).$$
+
+Square and take expectations. The cross term $2\,(m - \theta)\cdot\mathbb{E}[\hat\theta - m]$ is zero because
+$\mathbb{E}[\hat\theta - m] = 0$, leaving
+
+$$\mathbb{E}\,\|\hat\theta - \theta\|^2 = \underbrace{\mathbb{E}\,\|\hat\theta - m\|^2}_{\text{variance}} + \underbrace{\|m - \theta\|^2}_{\text{bias}^2}.$$
+
+Bias is systematic: the estimator's average is off target, and more samples do not move it. Variance is random
+fluctuation around that average; for a mean of $B$ independent samples it is $\operatorname{Var}(\text{one sample})/B$.
+The two trade off: a biased estimator with small variance can beat an unbiased one with large variance, and which
+wins depends on $B$. Here $\hat\theta = \hat g_B$ and $\theta = g$ [[5]](#ref-5).
+:::
+
 A batch averages $B$ independent rows, so $\mathbb{E}[\hat g_B] = \mathbb{E}[x]$ and
 $\operatorname{Var}(\hat g_B) = \operatorname{Var}(x)/B$:
 
