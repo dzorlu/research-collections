@@ -147,9 +147,17 @@ The subtracted piece is not a constant: it depends on which $y$ was drawn, and i
 
 The pieces differ from row to row, but weighted by how often each $y$ is drawn they sum to zero (last column).
 The reason: a reward of $b$ for every draw says nothing about which token is better, so on average it cannot push
-the model toward any token. Each draw does push its own token up, but tokens come up in proportion to $p$, and
-pushing every token up in proportion to its own probability leaves a softmax where it is: $e_y$ averages to $p$,
-so $p - e_y$ averages to $0$ [[3]](#ref-3)[[6]](#ref-6). The average row is unchanged, no bias; the rows sit closer
+the model toward any token. The simplest case is a fair coin, $p = (0.5, 0.5)$, paid $b$ whatever comes up:
+
+```python
+heads (half the time):  subtract b * (p - e_0) = b * (-0.5, +0.5)    # pushes heads up
+tails (half the time):  subtract b * (p - e_1) = b * (+0.5, -0.5)    # pushes tails up
+average:                b * (0, 0)
+```
+
+Each draw pushes its own token up, but tokens come up in proportion to $p$, and pushing every token up in
+proportion to its own probability leaves a softmax where it is: $e_y$ averages to $p$, so $p - e_y$ averages to
+$0$ [[3]](#ref-3)[[6]](#ref-6). The average row is unchanged, no bias; the rows sit closer
 to it, so the variance fell. Under the engine the pushes come in proportion to $p_{\text{engine}}$ instead and the
 pieces sum to $b\,(p - p_{\text{engine}}) \ne 0$, so section 6 uses $b = 0$.
 
