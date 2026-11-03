@@ -204,13 +204,15 @@ w_close = [0.83, 1.0,  2.0]
 w_far   = [0.72, 1.0, 20.0]
 ```
 
-It has mean 1 under the engine, and its variance is the chi-squared divergence, which controls the error of
-importance sampling [[11]](#ref-11):
+Under the engine the weight is random: it depends on which token is drawn. Its average is 1, because
+$\sum_k p_{\text{engine},k} \cdot p_k / p_{\text{engine},k} = \sum_k p_k = 1$. How far it spreads around 1 is its
+variance, and that number is the chi-squared divergence between the two distributions [[11]](#ref-11):
 
-$$\operatorname{Var}_{p_{\text{engine}}}(w) = \sum_k \frac{p_k^2}{p_{\text{engine},k}} - 1 = \chi^2(p \,\|\, p_{\text{engine}}).$$
+$$\operatorname{Var}_{p_{\text{engine}}}(w) = \mathbb{E}[w^2] - 1 = \sum_k \frac{p_k^2}{p_{\text{engine},k}} - 1 = \chi^2(p \,\|\, p_{\text{engine}}).$$
 
 This is 0.12 for close and 3.66 for far. A token the engine rarely writes contributes $p_k^2 / p_{\text{engine},k}$,
-so it dominates.
+so it dominates. An importance-sampled row is $w_y$ times the plain row, so its variance grows with this number
+(section 6.2).
 
 ![distance](figs/bv_distance.png)
 
