@@ -139,14 +139,25 @@ Replace $A = r_y$ with $A = r_y - b$ and multiply out the row:
 
 $$(r_y - b)\,(p - e_y) = \underbrace{r_y\,(p - e_y)}_{\text{row without baseline}} \;-\; \underbrace{b\,(p - e_y)}_{\text{what the baseline subtracts}}.$$
 
-The subtracted piece is not a constant: it depends on which $y$ was drawn and changes sign. A fair coin paid $b$
-whatever comes up:
+The subtracted piece is not a constant: it depends on which $y$ was drawn and changes sign, and in proportion to
+how often each $y$ is drawn the pieces cancel.
 
-```python
-heads (half the time):  b * (p - e_0) = b * (-0.5, +0.5)
-tails (half the time):  b * (p - e_1) = b * (+0.5, -0.5)
-average:                b * (0, 0)
-```
+:::note a constant reward moves nothing: every step
+Three tokens, $p = (0.6, 0.3, 0.1)$, reward $2$ whatever is drawn, so $A = 2$ for every row.
+
+| | $y = 0$ | $y = 1$ | $y = 2$ |
+|---|---|---|---|
+| how often, $p_y$ | 0.6 | 0.3 | 0.1 |
+| $e_y$ | (1, 0, 0) | (0, 1, 0) | (0, 0, 1) |
+| $p - e_y$ | (−0.4, 0.3, 0.1) | (0.6, −0.7, 0.1) | (0.6, 0.3, −0.9) |
+| row $= 2\,(p - e_y)$ | (−0.8, 0.6, 0.2) | (1.2, −1.4, 0.2) | (1.2, 0.6, −1.8) |
+| $p_y \times$ row | (−0.48, 0.36, 0.12) | (0.36, −0.42, 0.06) | (0.12, 0.06, −0.18) |
+
+Sum of the last line, coordinate by coordinate: $-0.48 + 0.36 + 0.12 = 0$, $0.36 - 0.42 + 0.06 = 0$,
+$0.12 + 0.06 - 0.18 = 0$. Each row pushes its own token up (training subtracts the row) and the others down; token 0
+gets a push of $-0.8$ often, token 2 a push of $-1.8$ rarely, and each token's upward pushes equal what the other
+rows push it down. A baseline is this table with $-b$ in place of $2$.
+:::
 
 The toy, with $b = 0.2$:
 
@@ -310,9 +321,78 @@ PPO blocks a token that barely moved and passes one that moved a lot. In the DPP
 second kind (Figure 5 in [[2]](#ref-2)), and the mean $|p - p_{\text{engine}}|$ rose before reward fell (Figure 3
 in [[2]](#ref-2)).
 
-## 8. Summary
+## 8. What each algorithm trades
 
-Table 4: what each choice of $w$ does.
+Every method fixes the two factors of the row $x = w\,A\,(p - e_y)$, and each choice moves one term of
+$\|\text{bias}\|^2 + \operatorname{Var}(x)/B$ against the other.
+
+### 8.1 The advantage
+
+**Group-mean baseline** (GRPO [[7]](#ref-7)): $A = r_y - b$ with $b$ the mean reward of the $G$ responses to the
+same prompt. A shift, so the subtracted piece averages to zero (section 5) and only the variance falls. One catch:
+the mean includes the response's own reward, which shrinks the average row by $(G - 1)/G$. RLOO [[20]](#ref-20)
+averages the other $G - 1$ responses, keeping $b$ independent of the response.
+
+**Std and length division** (GRPO [[7]](#ref-7)): $A = (r_y - b)/\operatorname{std}$, and the token sum divided by
+response length. These are rescales, not shifts. A shift subtracts a piece with mean zero; a rescale multiplies the
+row by a factor computed from the same group, which does not average out: the average row becomes $g$ reweighted
+across prompts and lengths. Variance falls, since every prompt's rows arrive at one scale. Dr. GRPO [[8]](#ref-8)
+drops both. The toy has one prompt, so its std factor is a constant and shows no bias.
+
+### 8.2 The weight
+
+$w$ is a function of $\rho = p_y / p_{\text{engine},y}$, taken against the engine as in section 6.3. In practice
+CISPO, PPO and GSPO take it against the recompute, the trainer's own log-probs before the step.
+
+- **REINFORCE**, $w = 1$: the lowest variance; bias grows with TV.
+- **IS**, $w = \rho$: no bias; variance grows with $\chi^2$, dominated by the rare row's $p_2^2 / p_{\text{engine},2}$.
+- **TIS**, $w = \min(\rho, 2)$: the part of $\chi^2$ above the cap becomes bias; the best cap grows with $B$ (Figure 7).
+- **CISPO** [[21]](#ref-21), $w = \min(\rho, 4)$ with the ratio held fixed under differentiation: TIS with a higher
+  cap, and no row is zeroed. On the far engine, less bias and more variance than TIS; the same error at $B = 16$
+  and the better of the two at $B = 256$ (Table 4).
+- **PPO** [[14]](#ref-14), $w = \rho$ in the band, $0$ outside it in the direction $A$ favors: a zeroed row has bias
+  $-g$ on that token and no variance. DAPO's clip-higher [[23]](#ref-23) widens the upper edge, so fewer rare tokens
+  with positive $A$ are zeroed: less bias, more variance.
+- **GSPO** [[22]](#ref-22): one ratio per response, the geometric mean of the per-token ratios, zeroed outside a
+  tight band for every token of the response. Averaging log-ratios cuts the ratio's variance; whole-response zeros
+  under a tight band add bias. On the one-position toy the sequence ratio is $\rho_2$ and GSPO coincides with PPO.
+- **DPPO** [[2]](#ref-2), $w = \rho$, zeroed when $|p - p_{\text{engine}}| > \delta$ in the direction $A$ favors:
+  the zero is placed by moved mass, not by $\rho$. A rare token passes uncapped, so DPPO carries IS's variance there;
+  a confident token that moved far is zeroed (Table 3). Close engine: passes, equals IS. Far engine: zeroed, equals
+  PPO. The bias on zeroed tokens buys the across-step bound of section 7.
+
+Table 4: Table 1 with CISPO (cap 4) added and the error at a larger batch ($b = 0$, per-sample variance).
+
+| engine | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error, $B = 16$ | error, $B = 256$ |
+|---|---|---|---|---|---|---|---|
+| close | REINFORCE | 1 | $-0.10\,v$ | 0.0098 | 0.088 | 0.015 | 0.010 |
+| close | IS, TIS, CISPO, DPPO | 2 | 0 | 0 | 0.353 | 0.022 | 0.0014 |
+| close | PPO (ratio to engine) | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
+| far | REINFORCE | 1 | $-0.19\,v$ | 0.0354 | 0.010 | 0.036 | 0.035 |
+| far | IS | 20 | 0 | 0 | 3.881 | 0.243 | 0.015 |
+| far | TIS (cap 2) | 2 | $-0.18\,v$ | 0.0318 | 0.039 | 0.034 | 0.032 |
+| far | CISPO (cap 4) | 4 | $-0.16\,v$ | 0.0251 | 0.155 | 0.035 | 0.026 |
+| far | PPO, DPPO | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
+
+Table 5: each choice, the term it lowers and the term it raises.
+
+| choice | $A$ | $w$ | lowers | raises |
+|---|---|---|---|---|
+| no baseline | $r_y$ | | nothing: the reference point | nothing |
+| group mean (GRPO) | $r_y - b$ | | variance | bias: a shrink along $g$ by $(G-1)/G$ |
+| leave-one-out mean (RLOO) | $r_y - b$, own reward excluded | | variance | nothing |
+| std, length division (GRPO) | $(r_y - b)/\operatorname{std}$, $/\text{length}$ | | variance: one scale across prompts | bias: $g$ reweighted by group spread and length |
+| REINFORCE | | $1$ | variance | bias, with TV |
+| IS | | $\rho$ | bias, to zero | variance, with $\chi^2$ |
+| TIS | | $\min(\rho, 2)$ | variance above the cap | bias where the cap binds |
+| CISPO | | $\min(\rho, 4)$, ratio fixed under the gradient | bias, relative to TIS; no zeroed rows | variance, relative to TIS |
+| PPO | | $\rho$; $0$ outside the band in the favored direction | variance on zeroed tokens; next-step bias (section 7) | bias $-g$ on zeroed tokens |
+| GSPO | | sequence ratio; $0$ outside a tight band, per response | variance from per-token ratios | bias: whole responses zeroed |
+| DPPO | | $\rho$; $0$ when moved mass $> \delta$ in the favored direction | next-step bias; fewer zeros on rare tokens than PPO | bias $-g$ on zeroed tokens; IS's variance on rare tokens that pass |
+
+## 9. Summary
+
+Table 6: what each choice of $w$ does.
 
 | method | $w$ | bias | variance |
 |---|---|---|---|
@@ -348,3 +428,7 @@ Next: the same measurement on a real training run, per method.
 17. <a id="ref-17"></a>S. Kakade, J. Langford. *Approximately Optimal Approximate Reinforcement Learning.* ICML, 2002.
 18. <a id="ref-18"></a>J. Schulman, S. Levine, P. Moritz, M. Jordan, P. Abbeel. *Trust Region Policy Optimization.* arXiv:1502.05477, 2015.
 19. <a id="ref-19"></a>J. Achiam, D. Held, A. Tamar, P. Abbeel. *Constrained Policy Optimization.* arXiv:1705.10528, 2017.
+20. <a id="ref-20"></a>A. Ahmadian, C. Cremer, M. Gallé, M. Fadaee, J. Kreutzer, O. Pietquin, A. Üstün, S. Hooker. *Back to Basics: Revisiting REINFORCE Style Optimization for Learning from Human Feedback in LLMs* (RLOO). arXiv:2402.14740, 2024.
+21. <a id="ref-21"></a>MiniMax (A. Chen et al.). *MiniMax-M1: Scaling Test-Time Compute Efficiently with Lightning Attention* (CISPO). arXiv:2506.13585, 2025.
+22. <a id="ref-22"></a>C. Zheng, S. Liu, M. Li, X.-H. Chen, B. Yu, C. Gao, K. Dang, Y. Liu, R. Men, A. Yang, J. Zhou, J. Lin. *Group Sequence Policy Optimization* (GSPO). arXiv:2507.18071, 2025.
+23. <a id="ref-23"></a>Q. Yu et al. *DAPO: An Open-Source LLM Reinforcement Learning System at Scale.* arXiv:2503.14476, 2025.

@@ -102,6 +102,10 @@ for (const el of main.children) {{
     }}
   }});
 }}
+// Tables: cells stay on one line unless the table would overflow the page; then let them wrap.
+main.querySelectorAll('table').forEach(t => {{
+  if (t.scrollWidth > t.clientWidth) t.querySelectorAll('th, td').forEach(c => c.style.whiteSpace = 'normal');
+}});
 // Contents, with the current section highlighted.
 const toc = document.getElementById('toc');
 const h1 = main.querySelector('h1'); toc.innerHTML = `<div class="title">${{h1 ? h1.textContent : ''}}</div>`;
