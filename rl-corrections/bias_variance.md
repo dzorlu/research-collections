@@ -226,15 +226,17 @@ That gap is why caps and trust regions exist (6.2 to 6.4).
 
 ### 6.2 Three weights
 
-A row is now $x = w_2\,v$ if $y = 2$ and $0$ otherwise, with $y = 2$ at rate $p_{\text{engine},2}$. With the far
-engine, $p_{\text{engine},2} = 0.01$:
+Far engine, $b = 0$, so only token 2's row is nonzero and it is $w_2\,v$. Three choices of $w$:
 
-- **REINFORCE**, $w = 1$: $\mathbb{E}[x] = 0.01\,v$, a twentieth of $g$. Bias $-0.19\,v$, $\|\text{bias}\|^2 = 0.035$.
-- **IS**, $w = p / p_{\text{engine}}$, so $w_2 = 20$: $\mathbb{E}[x] = 0.01 \cdot 20\,v = g$, unbiased. But 85% of
-  batches of 16 never see token 2 and estimate $0$; the 14% that see it once estimate $\tfrac{20}{16}\,v$, six
-  times $g$.
-- **TIS**, $w = \min(p / p_{\text{engine}},\ 2)$: in between, mostly bias. Truncating weights to trade variance for
-  bias goes back to Ionides [[13]](#ref-13); for LLM training it was proposed against engine mismatch [[1]](#ref-1).
+| | $w_2$ | $\mathbb{E}[x]$ | bias | one batch of 16 |
+|---|---|---|---|---|
+| REINFORCE, $w = 1$ | 1 | $0.01\,v$ | $-0.19\,v$ | token 2 in about 1 row of 100: the push is a twentieth of $g$ |
+| IS, $w = p / p_{\text{engine}}$ | 20 | $0.2\,v = g$ | 0 | 85% of batches see no token 2 and estimate $0$; 14% see it once and estimate $\tfrac{20}{16}\,v$, six times $g$ |
+| TIS, $w = \min(p / p_{\text{engine}},\ 2)$ | 2 | $0.02\,v$ | $-0.18\,v$ | REINFORCE with twice the push |
+
+REINFORCE under-pushes every batch by the same amount. IS is right on average and wrong in almost every batch. TIS
+caps the weight, which gives up most of IS's correction to avoid its swings; capping goes back to Ionides
+[[13]](#ref-13) and was proposed for engine mismatch in LLM training by [[1]](#ref-1).
 
 ![weights](figs/bv_weights_far.png)
 
