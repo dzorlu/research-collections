@@ -179,28 +179,6 @@ axes[0].legend(frameon=False)
 fig.tight_layout()
 fig.savefig('figs/bv_methods.png', dpi=150)
 
-# Figure 4: TV and chi-squared as the engine makes token 2 rarer: p_engine = [0.7 - e, 0.3, e].
-e = torch.logspace(torch.log10(torch.tensor(0.2)), torch.log10(torch.tensor(0.005)), 60)   # [60]
-p_engines = torch.stack([0.7 - e, torch.full_like(e, 0.3), e], -1)                         # [60, V]
-tv = 0.5 * (p - p_engines).abs().sum(-1)                                                    # [60]
-chi2 = (p ** 2 / p_engines).sum(-1) - 1                                                     # [60]
-fig, axes = plt.subplots(1, 2, figsize=(10, 3.4), sharex=True)
-for ax, y, color, name in zip(axes, [tv, chi2], [BLUE, ORANGE], ['TV', 'chi-squared']):
-  ax.plot(e.numpy(), y.numpy(), color=color, linewidth=2)
-  ax.set_xscale('log')
-  ax.set_xticks([0.2, 0.1, 0.05, 0.02, 0.01, 0.005], ['0.2\n= model', '0.1', '0.05', '0.02', '0.01', '0.005'])
-  ax.plot(0.2, 0, 'o', color=color, markersize=7, markeredgecolor='#fcfcfb', markeredgewidth=2)   # engine = model: 0
-  ax.set_title(name, fontsize=10, loc='left')
-  ax.set_xlabel("engine's probability of token 2")
-  for label, pe in ENGINES.items():
-    exact_y = 0.5 * (p - pe).abs().sum() if name == 'TV' else (p ** 2 / pe).sum() - 1
-    ax.plot(pe[2].item(), exact_y.item(), 'o', color=color, markersize=7, markeredgecolor='#fcfcfb', markeredgewidth=2)
-    ax.annotate(f' {label}: {exact_y.item():.2f}', (pe[2].item(), exact_y.item()), fontsize=9, color=INK,
-                xytext=(4, 4), textcoords='offset points')
-axes[0].invert_xaxis()
-fig.tight_layout()
-fig.savefig('figs/bv_distance.png', dpi=150)
-
 # Figure 5: the cap trade, far engine. Error vs cap for two batch sizes.
 caps = torch.logspace(0, torch.log10(torch.tensor(20.0)), 80)   # [80]
 fig, axes = plt.subplots(1, 2, figsize=(10, 3.6), sharex=True)

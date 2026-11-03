@@ -190,34 +190,35 @@ far   = [0.69, 0.30, 0.01]    # almost never writes token 2
 
 ### 6.1 Two distances between engine and model
 
-**Total variation** measures how much probability mass moved [[9]](#ref-9):
+The engine's error on each token can be read as a difference or as a ratio. The far engine:
+
+| token $k$ | $p_k$ | $p_{\text{engine},k}$ | difference $p_k - p_{\text{engine},k}$ | ratio $p_k / p_{\text{engine},k}$ |
+|---|---|---|---|---|
+| 0 | 0.50 | 0.69 | −0.19 | 0.72 |
+| 1 | 0.30 | 0.30 | 0 | 1.0 |
+| 2 | 0.20 | 0.01 | +0.19 | 20 |
+
+**Total variation** adds up the differences [[9]](#ref-9):
 
 $$\mathrm{TV} = \tfrac{1}{2}\textstyle\sum_k |p_k - p_{\text{engine},k}|,$$
 
-which is 0.10 for close (0.1 moved from token 0 to token 2) and 0.19 for far.
+half because each move is counted where it leaves and where it lands. It is the mass that moved, so it never
+exceeds 1.
 
-**Chi-squared** measures how large the correcting weights get. The importance weight is
-$w_k = p_k / p_{\text{engine},k}$ [[10]](#ref-10)[[12]](#ref-12):
-
-```python
-w_close = [0.83, 1.0,  2.0]
-w_far   = [0.72, 1.0, 20.0]
-```
-
-Under the engine the weight is random: it depends on which token is drawn. Its average is 1, because
-$\sum_k p_{\text{engine},k} \cdot p_k / p_{\text{engine},k} = \sum_k p_k = 1$. How far it spreads around 1 is its
-variance, and that number is the chi-squared divergence between the two distributions [[11]](#ref-11):
+**Chi-squared** is the variance of the ratio. The ratio is the importance weight, $w_k = p_k / p_{\text{engine},k}$
+[[10]](#ref-10)[[12]](#ref-12). Under the engine it is random, averages to 1 (since
+$\sum_k p_{\text{engine},k} \cdot p_k / p_{\text{engine},k} = 1$), and its variance is [[11]](#ref-11)
 
 $$\operatorname{Var}_{p_{\text{engine}}}(w) = \mathbb{E}[w^2] - 1 = \sum_k \frac{p_k^2}{p_{\text{engine},k}} - 1 = \chi^2(p \,\|\, p_{\text{engine}}).$$
 
-This is 0.12 for close and 3.66 for far. A token the engine rarely writes contributes $p_k^2 / p_{\text{engine},k}$,
-so it dominates. An importance-sampled row is $w_y$ times the plain row, so its variance grows with this number
-(section 6.2).
+| | close engine, (0.6, 0.3, 0.1) | far engine, (0.69, 0.30, 0.01) |
+|---|---|---|
+| TV $= \tfrac12 \sum_k \lvert p_k - p_{\text{engine},k} \rvert$ | $\tfrac12 (0.1 + 0 + 0.1) = 0.10$ | $\tfrac12 (0.19 + 0 + 0.19) = 0.19$ |
+| weights $w$ | (0.83, 1.0, 2.0) | (0.72, 1.0, 20) |
+| $\chi^2 = \sum_k p_{\text{engine},k}\, w_k^2 - 1$ | $0.6 \cdot 0.83^2 + 0.3 \cdot 1 + 0.1 \cdot 2^2 - 1 = 0.12$ | $0.69 \cdot 0.72^2 + 0.30 \cdot 1 + 0.01 \cdot 20^2 - 1 = 3.66$ |
 
-![distance](figs/bv_distance.png)
-
-*Figure 4: engine $(0.7 - \epsilon,\ 0.3,\ \epsilon)$ as $\epsilon$, the engine's probability of token 2, falls from
-0.2 (same as the model) to 0.005. TV levels off at 0.2. Chi-squared explodes.*
+Token 2 moved 0.19 either way. TV sees the difference, which is bounded by the mass that exists. $\chi^2$ sees the
+ratio squared, which is unbounded as $p_{\text{engine},2} \to 0$: token 2 alone contributes $0.01 \cdot 20^2 = 4.0$.
 
 TV sets the bias of ignoring the mismatch; $\chi^2$ sets the variance of correcting it. From close to far, TV
 doubles and $\chi^2$ grows thirty-fold, so the same move costs REINFORCE a little more bias and IS far more variance.
@@ -237,7 +238,7 @@ engine, $p_{\text{engine},2} = 0.01$:
 
 ![weights](figs/bv_weights_far.png)
 
-*Figure 5: the far engine, token 2's coordinate of the batch estimate. Left: 300 single batches of 16. Every
+*Figure 4: the far engine, token 2's coordinate of the batch estimate. Left: 300 single batches of 16. Every
 REINFORCE and TIS batch lands near 0; most IS batches land at 0 and a few at -1 or -2. Right: running average over
 batches. REINFORCE and TIS settle near 0 (bias). IS swings for hundreds of batches (variance) before settling on
 the true -0.16.*
@@ -253,11 +254,11 @@ Two more choices of $w$, both built on the ratio $\rho_y = p_y / p_{\text{engine
 
 ![methods](figs/bv_methods.png)
 
-*Figure 6: squared error of the batch estimate at $B = 16$. Close engine (left): IS, TIS and DPPO coincide (the cap
+*Figure 5: squared error of the batch estimate at $B = 16$. Close engine (left): IS, TIS and DPPO coincide (the cap
 of 2 does not bind, and DPPO passes since only 0.10 moved). Far engine (right): IS is mostly variance, the rest are
 mostly bias.*
 
-Table 1: the numbers behind Figure 6 ($b = 0$, per-sample variance, error at $B = 16$). Every bias is a multiple
+Table 1: the numbers behind Figure 5 ($b = 0$, per-sample variance, error at $B = 16$). Every bias is a multiple
 of $v$, so one coefficient gives it.
 
 | engine | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error |
@@ -283,7 +284,7 @@ A cap trades variance for bias, and the best trade depends on $B$:
 
 ![cap](figs/bv_cap.png)
 
-*Figure 7: far engine, error versus the cap on $w$. At $B = 16$ the best cap is about 3. At $B = 256$ the variance
+*Figure 6: far engine, error versus the cap on $w$. At $B = 16$ the best cap is about 3. At $B = 256$ the variance
 term is 16 times smaller, so the best cap rises to about 14.*
 
 Common TIS implementations cap at 2 [[1]](#ref-1). The same trade appears in classic off-policy RL as V-trace
@@ -311,7 +312,7 @@ Table 2: the gain the weighted batch predicts (surrogate) vs the true gain in av
 The performance difference lemma [[17]](#ref-17) writes the true gain exactly, and TRPO [[18]](#ref-18)[[19]](#ref-19)
 bounds the gap by the TV between the two policies. DPPO adapts the bound to LLM responses (Theorem 3.2 in
 [[2]](#ref-2)): the gap is at most a constant times the TV summed over the response. Keeping per-token TV small is a
-trust region, and it is what the zeros in Figure 6 pay for.
+trust region, and it is what the zeros in Figure 5 pay for.
 
 PPO measures movement by $|\rho - 1|$. DPPO measures $|p - p_{\text{engine}}| = p_{\text{engine}}\,|\rho - 1|$, the
 token's actual share of TV.
@@ -352,7 +353,7 @@ CISPO, PPO and GSPO take it against the recompute, the trainer's own log-probs b
 
 - **REINFORCE**, $w = 1$: the lowest variance; bias grows with TV.
 - **IS**, $w = \rho$: no bias; variance grows with $\chi^2$, dominated by the rare row's $p_2^2 / p_{\text{engine},2}$.
-- **TIS**, $w = \min(\rho, 2)$: the part of $\chi^2$ above the cap becomes bias; the best cap grows with $B$ (Figure 7).
+- **TIS**, $w = \min(\rho, 2)$: the part of $\chi^2$ above the cap becomes bias; the best cap grows with $B$ (Figure 6).
 - **CISPO** [[21]](#ref-21), $w = \min(\rho, 4)$ with the ratio held fixed under differentiation: TIS with a higher
   cap, and no row is zeroed. On the far engine, less bias and more variance than TIS; the same error at $B = 16$
   and the better of the two at $B = 256$ (Table 4).
