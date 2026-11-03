@@ -154,7 +154,9 @@ Each sample now adds `-0.8 * w[2]` if it wrote token 2, and 0 otherwise.
 
 ![weights](figs/bv_weights_far.png)
 
-*Figure 3: the far engine, 20,000 batches of 16. REINFORCE and TIS are tight but centered in the wrong place (bias).
+*Figure 3: the far engine. Left: 300 single batches of 16. Every REINFORCE and TIS batch lands near 0; most IS batches
+land at 0 and a few at -1 or -2. Right: average more and more batches. REINFORCE and TIS settle near 0, the wrong
+place (bias). IS swings for hundreds of batches (variance) before settling on the true -0.16.*
 IS is centered on the truth on average, but no single batch lands near it (variance).*
 
 ### 6.3 Every method, both engines

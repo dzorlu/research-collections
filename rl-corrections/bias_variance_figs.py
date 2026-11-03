@@ -86,15 +86,35 @@ axes[1].set_xlabel(f"batch estimate of token 2's gradient (B = {B}, {N_BATCHES:,
 fig.tight_layout()
 fig.savefig('figs/bv_baseline.png', dpi=150)
 
-# Figure 2: three weights, far engine. Where the estimates land.
+# Figure 2: three weights, far engine. Left: individual batches. Right: what averaging many batches converges to.
 methods = ['REINFORCE', 'IS', 'TIS (cap 2)']
-fig, axes = plt.subplots(3, 1, figsize=(7, 5.8), sharex=True, sharey=True)
-for ax, m, color in zip(axes, methods, [BLUE, ORANGE, AQUA]):
+colors = [BLUE, ORANGE, AQUA]
+fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(10.5, 3.8), gridspec_kw={'width_ratios': [1, 1.3]})
+n_show = 300
+for i, (m, color) in enumerate(zip(methods, colors)):
   w = weights(m, ENGINES['far'])
-  bias, var = exact(w, ENGINES['far'])
-  hist(ax, batches(w, ENGINES['far']), color, -2.2, 0.2)
-  ax.set_title(f'{m}:  bias {bias:+.3f},  variance per sample {var:.3f}', fontsize=10, loc='left', color=INK)
-axes[2].set_xlabel(f"batch estimate of token 2's gradient, far engine (B = {B}, {N_BATCHES:,} batches)\ndashed: true gradient -0.16;  triangle: average over batches")
+  est = batches(w, ENGINES['far'])                                   # [N_BATCHES]
+  jitter = (torch.rand(n_show) - 0.5) * 0.5                           # [n_show]
+  ax_l.scatter(est[:n_show].numpy(), (i + jitter).numpy(), s=10, color=color, alpha=0.5, linewidths=0)
+  running = est.cumsum(0) / torch.arange(1, len(est) + 1)            # [N_BATCHES]
+  ax_r.plot(torch.arange(1, len(est) + 1).numpy(), running.numpy(), color=color, linewidth=2, label=f'{m}: ends at {running[-1].item():.3f}')
+for ax in (ax_l, ax_r):
+  ax.grid(axis='y' if ax is ax_r else 'x')
+ax_l.axvline(TRUE, color=INK, linestyle='--', linewidth=1.2)
+ax_l.set_yticks(range(3), methods)
+ax_l.invert_yaxis()
+ax_l.grid(axis='y', visible=False)
+ax_l.set_xlabel(f'estimate from one batch of {B}  (dashed: true -0.16)')
+ax_l.set_title(f'{n_show} single batches', fontsize=10, loc='left')
+ax_r.axhline(TRUE, color=INK, linestyle='--', linewidth=1.2)
+ax_r.set_xscale('log')
+ax_r.set_xlim(1, N_BATCHES)
+ax_r.legend(frameon=False, loc='lower right', fontsize=9)
+ax_r.annotate('true -0.16', (1.2, TRUE), xytext=(0, 4), textcoords='offset points', fontsize=9, color=INK)
+ax_r.set_ylim(-0.6, 0.05)
+ax_r.set_xlabel('number of batches averaged')
+ax_r.set_ylabel('average estimate')
+ax_r.set_title('averaging more batches: where each method ends up', fontsize=10, loc='left')
 fig.tight_layout()
 fig.savefig('figs/bv_weights_far.png', dpi=150)
 
