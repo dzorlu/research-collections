@@ -219,6 +219,10 @@ so it dominates. An importance-sampled row is $w_y$ times the plain row, so its 
 *Figure 4: engine $(0.7 - \epsilon,\ 0.3,\ \epsilon)$ as $\epsilon$, the engine's probability of token 2, falls from
 0.2 (same as the model) to 0.005. TV levels off at 0.2. Chi-squared explodes.*
 
+TV sets the bias of ignoring the mismatch; $\chi^2$ sets the variance of correcting it. From close to far, TV
+doubles and $\chi^2$ grows thirty-fold, so the same move costs REINFORCE a little more bias and IS far more variance.
+That gap is why caps and trust regions exist (6.2 to 6.4).
+
 ### 6.2 Three weights
 
 A row is now $x = w_2\,v$ if $y = 2$ and $0$ otherwise, with $y = 2$ at rate $p_{\text{engine},2}$. With the far
