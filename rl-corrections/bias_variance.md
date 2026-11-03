@@ -35,12 +35,29 @@ R_of = [0.0, 0.0, 1.0]    # [V]  reward if token k is written: only token 2 is r
 J = 0.5*0 + 0.3*0 + 0.2*1 = 0.2    # average reward over everything the model could write
 ```
 
-The true gradient is how `J` changes when the logits change. Differentiating `J` by hand (or with any autodiff
-tool) gives `[0.10, 0.06, -0.16]`, written as a loss gradient like `dlogits`. Token 2's `-0.16` says: push token 2
-up.
+The true gradient says how `J` changes when each logit changes. Find it by nudging one logit at a time by 0.01 and
+watching `J`:
 
-`J` is a sum over every response the model could write, so its gradient is too. With three responses we can add
-them all up. A real model has `V**S` possible responses, far more than atoms in the universe, so training samples a
+```python
+nudge logit 0:  p = [0.5025, 0.2985, 0.1990]  ->  J = 0.1990,  slope (0.1990 - 0.2) / 0.01 = -0.10
+nudge logit 1:  p = [0.4985, 0.3021, 0.1994]  ->  J = 0.1994,  slope -0.06
+nudge logit 2:  p = [0.4990, 0.2994, 0.2016]  ->  J = 0.2016,  slope +0.16
+```
+
+Raising logit 2 raises `J`, because token 2 is the rewarded one. Raising the others steals probability from token 2.
+So the gradient of `J` is `[-0.10, -0.06, +0.16]`. The update in section 2 is written as a loss to minimize, which
+flips the sign: the true `dlogits` is `[0.10, 0.06, -0.16]`.
+
+The same numbers come from averaging section 2's update over what the model writes (with its sign flipped back to
+`onehot - p`). Each token contributes how often it is written, times its reward, times `onehot - p`:
+
+```python
+0.5 * 0 * ([1,0,0] - p) + 0.3 * 0 * ([0,1,0] - p) + 0.2 * 1 * ([0,0,1] - p)
+  = 0.2 * [-0.5, -0.3, 0.8] = [-0.10, -0.06, 0.16]    # the gradient of J again
+```
+
+This second form is an average over every response the model could write. With three responses we can add them all
+up. A real model has `V**S` possible responses, far more than atoms in the universe, so training samples a
 batch of `B` and averages instead. The rest of this post follows one number, token 2's `-0.16`, and asks how the
 batch's version of it behaves.
 
