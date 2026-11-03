@@ -18,7 +18,7 @@ body {{ margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 -apple-
 #toc a.h3 {{ padding-left:14px; }}
 #toc a.active {{ color:var(--ink); font-weight:600; }}
 #toc .title {{ font-weight:600; color:var(--ink); margin-bottom:10px; }}
-main {{ margin-left:270px; max-width:720px; padding:40px 320px 80px 0; box-sizing:content-box; }}
+main {{ margin-left:270px; max-width:820px; padding:40px 300px 80px 0; box-sizing:content-box; }}
 pre {{ background:var(--code); padding:12px; overflow-x:auto; border-radius:6px; font-size:13px; }}
 code {{ font:13px Menlo,monospace; }}
 p code, li code, td code {{ background:var(--code); padding:1px 4px; border-radius:3px; }}
@@ -28,11 +28,11 @@ th, td {{ border:1px solid var(--line); padding:6px 10px; white-space:nowrap; }}
 img {{ max-width:100%; }} em {{ color:var(--muted); }}
 sup.cite a {{ color:var(--accent); text-decoration:none; font-size:11px; }}
 sup.cite + sup.cite::before {{ content:','; font-size:11px; color:var(--accent); }}
-.sidenote {{ float:right; clear:right; margin-right:-320px; width:280px; font-size:12px; line-height:1.45;
+.sidenote {{ float:right; clear:right; margin-right:-300px; width:270px; font-size:12px; line-height:1.45;
              color:var(--muted); margin-top:4px; margin-bottom:10px; }}
 .sidenote b {{ color:var(--accent); }}
 #refs li {{ font-size:13px; color:var(--muted); }}
-@media (max-width: 1250px) {{
+@media (max-width: 1400px) {{
   #toc {{ display:none; }} main {{ margin:0 auto; padding:24px 16px 60px; }}
   .sidenote {{ float:none; display:block; margin:6px 0 10px; width:auto; border-left:2px solid var(--line); padding-left:8px; }}
   table {{ max-width:100%; }}

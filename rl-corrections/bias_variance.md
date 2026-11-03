@@ -50,7 +50,10 @@ tokens (section 6). A real model can't sum over all $V^S$ responses, so it avera
 Call the update of one sampled token a row, $x = w\,A\,(p - e_y)$, and the average of $B$ rows $\hat g_B$. In
 section 3's table only the $y = 2$ row is nonzero. Call it $v$:
 
-$$v = p - e_2 = (0.5,\ 0.3,\ -0.8), \qquad \|v\|^2 = 0.25 + 0.09 + 0.64 = 0.98, \qquad g = 0.2\,v = (0.10,\ 0.06,\ -0.16).$$
+$$\begin{gathered}
+v = p - e_2 = (0.5,\ 0.3,\ -0.8), \qquad g = 0.2\,v = (0.10,\ 0.06,\ -0.16), \\
+\|v\|^2 = 0.25 + 0.09 + 0.64 = 0.98.
+\end{gathered}$$
 
 With $q$ the probability that a sampled token is 2, one row is $x = v$ with probability $q$ and $0$ otherwise:
 a Bernoulli($q$) scaled by $v$. A batch average is $v$ times the fraction of 2s it drew.
