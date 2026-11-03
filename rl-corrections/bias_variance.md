@@ -146,7 +146,7 @@ Over the model's own samples $e_y$ averages to $p$, so $p - e_y$ averages to zer
 The fourth column sums to zero, so the baseline moves each row but the moves cancel: token 2's row shrinks toward
 $g$ and the other two move off zero, and all three sit closer to their common average. Greensmith et al. derive the
 variance-minimizing $b$ [[6]](#ref-6). Under the engine $e_y$ averages to $p_{\text{engine}}$ instead, the column
-sums to $p - p_{\text{engine}} \ne 0$, and the baseline does shift the average (section 6).
+sums to $p - p_{\text{engine}} \ne 0$, and the baseline does shift the average; section 6 therefore uses $b = 0$.
 
 ![baseline](figs/bv_baseline.png)
 
