@@ -188,8 +188,10 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 3.4), sharex=True)
 for ax, y, color, name in zip(axes, [tv, chi2], [BLUE, ORANGE], ['TV', 'chi-squared']):
   ax.plot(e.numpy(), y.numpy(), color=color, linewidth=2)
   ax.set_xscale('log')
+  ax.set_xticks([0.2, 0.1, 0.05, 0.02, 0.01, 0.005], ['0.2\n= model', '0.1', '0.05', '0.02', '0.01', '0.005'])
+  ax.plot(0.2, 0, 'o', color=color, markersize=7, markeredgecolor='#fcfcfb', markeredgewidth=2)   # engine = model: 0
   ax.set_title(name, fontsize=10, loc='left')
-  ax.set_xlabel("engine's probability of token 2 (model: 0.2)")
+  ax.set_xlabel("engine's probability of token 2")
   for label, pe in ENGINES.items():
     exact_y = 0.5 * (p - pe).abs().sum() if name == 'TV' else (p ** 2 / pe).sum() - 1
     ax.plot(pe[2].item(), exact_y.item(), 'o', color=color, markersize=7, markeredgecolor='#fcfcfb', markeredgewidth=2)
