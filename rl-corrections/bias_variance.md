@@ -131,20 +131,22 @@ trades one term for the other.
 
 ## 5. Baseline: less variance, no bias
 
-A baseline subtracts a constant from the reward, $A = r_y - b$. It leaves the average row unchanged, because
-$\mathbb{E}_{y \sim p}[p - e_y] = p - p = 0$, and changes only the variance [[3]](#ref-3)[[6]](#ref-6). Model
-sampling itself, with $b = 0$ and $b = J = 0.2$:
+A baseline subtracts a constant from the reward, $A = r_y - b$, which subtracts $b\,(p - e_y)$ from every row.
+Over the model's own samples $e_y$ averages to $p$, so $p - e_y$ averages to zero and the average row is unchanged
+[[3]](#ref-3)[[6]](#ref-6). With $b = 0$ and $b = J = 0.2$:
 
-| $y$ | model writes | row, $b = 0$ | row, $b = 0.2$ |
-|---|---|---|---|
-| 0 | 0.5 | (0, 0, 0) | (0.10, −0.06, −0.04) |
-| 1 | 0.3 | (0, 0, 0) | (−0.10, 0.14, −0.04) |
-| 2 | 0.2 | (0.50, 0.30, −0.80) | (0.40, 0.24, −0.64) |
-| | **average** | **(0.10, 0.06, −0.16)** | **(0.10, 0.06, −0.16)** |
-| | **$\operatorname{Var}(x)$** | **0.157** | **0.103** |
+| $y$ | $p_y$ | $p - e_y$ | $p_y\,(p - e_y)$ | row, $b = 0$ | row, $b = 0.2$ |
+|---|---|---|---|---|---|
+| 0 | 0.5 | (−0.5, 0.3, 0.2) | (−0.25, 0.15, 0.10) | (0, 0, 0) | (0.10, −0.06, −0.04) |
+| 1 | 0.3 | (0.5, −0.7, 0.2) | (0.15, −0.21, 0.06) | (0, 0, 0) | (−0.10, 0.14, −0.04) |
+| 2 | 0.2 | (0.5, 0.3, −0.8) | (0.10, 0.06, −0.16) | (0.50, 0.30, −0.80) | (0.40, 0.24, −0.64) |
+| | | **sum** | **(0, 0, 0)** | **average (0.10, 0.06, −0.16)** | **average (0.10, 0.06, −0.16)** |
+| | | | | **$\operatorname{Var}(x)$ 0.157** | **$\operatorname{Var}(x)$ 0.103** |
 
-With the baseline, token 2's row shrinks toward $g$ and the other two move off zero, so all three sit closer to
-their common average. Greensmith et al. derive the variance-minimizing $b$ [[6]](#ref-6).
+The fourth column sums to zero, so the baseline moves each row but the moves cancel: token 2's row shrinks toward
+$g$ and the other two move off zero, and all three sit closer to their common average. Greensmith et al. derive the
+variance-minimizing $b$ [[6]](#ref-6). Under the engine $e_y$ averages to $p_{\text{engine}}$ instead, the column
+sums to $p - p_{\text{engine}} \ne 0$, and the baseline does shift the average (section 6).
 
 ![baseline](figs/bv_baseline.png)
 
