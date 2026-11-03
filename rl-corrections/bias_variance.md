@@ -76,12 +76,13 @@ batch average lands from it.
 
 ## 4. One sample, one guess
 
-One position (`S = 1`), no baseline (`A` = reward), `w = 1`. Each sample adds one of two values to token 2's entry:
+One position (`S = 1`), no baseline (`A` = reward), `w = 1`. From here on we track only the third entry of `dlogits`
+(token 2's logit), whose true value is `-0.16`. Each sample gives it one of two values, `A * (p[2] - y_onehot[2])`:
 
 ```python
 y = 2:      A = 1  ->  1 * (0.2 - 1) = -0.8    # written 20% of the time
 y = 0 or 1: A = 0  ->  0                       # written 80% of the time
-average = 0.2 * -0.8 = -0.16                   # the true gradient
+average = 0.2 * -0.8 = -0.16                   # third entry of the true dlogits [0.10, 0.06, -0.16]
 ```
 
 The batch's estimate is the average of its `B` samples.
