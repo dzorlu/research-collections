@@ -85,19 +85,37 @@ y = 0 or 1: A = 0  ->  0                       # written 80% of the time
 average = 0.2 * -0.8 = -0.16                   # third entry of the true dlogits [0.10, 0.06, -0.16]
 ```
 
-The batch's estimate is the average of its `B` samples.
+A batch averages `B` of these samples. How good is that average? Measure how far it lands from `-0.16`, square
+it so misses in either direction count, and average over many batches. Call that the **error**.
 
-Two numbers describe the estimate:
-
-- **Bias**: its average over many batches, minus the true value. Bias does not shrink with more samples.
-- **Variance**: how far one sample lands from the average, squared and averaged. A batch of `B` divides it by `B`.
+Start with one sample per batch (`B = 1`):
 
 ```python
-error = bias**2 + variance / B
+lands at -0.8 (20%):  miss = -0.8 + 0.16 = -0.64,  squared 0.4096
+lands at  0   (80%):  miss =  0   + 0.16 = +0.16,  squared 0.0256
+error = 0.2 * 0.4096 + 0.8 * 0.0256 = 0.102
 ```
 
-This split of the mean squared error is standard [[5]](#ref-5). Averaging `B` independent samples divides the variance by
-`B` and leaves the bias alone.
+The misses cancel on average, because the samples average to exactly `-0.16`. All of this error is scatter, called
+the **variance**. Averaging `B` samples shrinks scatter: with `B = 16` the error is `0.102 / 16 = 0.0064`.
+
+Now suppose token 2 is written only 10% of the time instead of 20%, which is what happens in section 6 when another
+model writes the tokens:
+
+```python
+lands at -0.8 (10%), 0 (90%)  ->  average -0.08, off by 0.08 from -0.16
+scatter = 0.1 * (-0.8 + 0.08)**2 + 0.9 * (0 + 0.08)**2 = 0.058
+error = 0.08**2 + 0.058 / B       # B = 16: 0.0064 + 0.0036 = 0.010
+```
+
+The `0.08` miss is the **bias**: the gap between the estimate's own average and the true value. More samples do not
+fix it: the batch average moves toward `-0.08`, not `-0.16`. So the error always splits into two parts:
+
+```python
+error = bias**2 + variance / B    # variance: the scatter of one sample
+```
+
+This is the standard split of mean squared error [[5]](#ref-5). A bigger batch shrinks only the second part.
 
 ## 5. Baseline: less variance, no bias
 
