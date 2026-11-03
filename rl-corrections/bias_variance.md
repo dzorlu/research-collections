@@ -68,10 +68,11 @@ token 2:    0.2       * 1  * [ 0.5,  0.3, -0.8]  =  [0.10, 0.06, -0.16]
 ```
 
 This is the policy gradient identity: the gradient of the average reward equals the average, over what the model
-writes, of `A * (p - y_onehot)` [[3]](#ref-3)[[4]](#ref-4). Here we can list all three tokens. A real model has `V**S`
-possible responses, far more than atoms in the universe, so training samples `B` of them and averages those rows
-instead. The rest of this post follows one number, token 2's `-0.16`, and asks how the batch's version of it
-behaves.
+writes, of `A * (p - y_onehot)` [[3]](#ref-3)[[4]](#ref-4). So the true gradient is an average over every response
+the model could write. Here that is three responses. A language model with a 100,000-token vocabulary writing
+1,000-token responses has `100000**1000` of them, so training cannot do the sum. It samples `B` responses and
+averages their rows instead. The rest of this post follows one number, token 2's `-0.16`, and asks how far that
+batch average lands from it.
 
 ## 4. One sample, one guess
 
