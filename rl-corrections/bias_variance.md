@@ -94,16 +94,16 @@ $\operatorname{Var}(\hat g_B) = \operatorname{Var}(x)/B$:
 
 $$\mathbb{E}\,\|\hat g_B - g\|^2 = \|\mathbb{E}[x] - g\|^2 + \frac{\operatorname{Var}(x)}{B}.$$
 
-Only $\operatorname{Var}(x)/B$ shrinks with $B$. For our row, $x = v$ with probability $q$ and $0$ otherwise:
+Only $\operatorname{Var}(x)/B$ shrinks with $B$. Our row is $x = v\,Z$ with $Z \sim \text{Bernoulli}(q)$:
 
-$$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = q\,\|v - q v\|^2 + (1-q)\,\|q v\|^2 = q(1-q)\,\|v\|^2, \qquad \|v\|^2 = 0.98.$$
+$$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = \|v\|^2\, q(1-q), \qquad \|v\|^2 = 0.98.$$
 
 | | model, $q = 0.2$ | engine, $q = 0.1$ |
 |---|---|---|
 | $\mathbb{E}[x] = q\,v$ | $0.2\,v$ = (0.10, 0.06, −0.16) | $0.1\,v$ = (0.05, 0.03, −0.08) |
 | bias $= \mathbb{E}[x] - g$ | (0, 0, 0) | (−0.05, −0.03, +0.08) $= -0.1\,v$ |
 | $\|\text{bias}\|^2$ | 0 | $0.05^2 + 0.03^2 + 0.08^2 = 0.0098$ |
-| $\operatorname{Var}(x) = q\,\|v - \mathbb{E}[x]\|^2 + (1-q)\,\|0 - \mathbb{E}[x]\|^2$ | $0.2 \cdot 0.64 \cdot 0.98 + 0.8 \cdot 0.04 \cdot 0.98 = 0.157$ | $0.1 \cdot 0.81 \cdot 0.98 + 0.9 \cdot 0.01 \cdot 0.98 = 0.088$ |
+| $\operatorname{Var}(x) = \|v\|^2\, q(1-q)$ | $0.98 \cdot 0.2 \cdot 0.8 = 0.157$ | $0.98 \cdot 0.1 \cdot 0.9 = 0.088$ |
 | error $= \|\text{bias}\|^2 + \operatorname{Var}(x)/B$ | $0.157 / B$ | $0.0098 + 0.088 / B$ |
 | at $B = 16$ | 0.0098 | $0.0098 + 0.0055 = 0.0153$ |
 
