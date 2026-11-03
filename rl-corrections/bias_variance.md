@@ -133,41 +133,43 @@ trades one term for the other.
 
 A baseline replaces $A = r_y$ with $A = r_y - b$. Multiply out the row:
 
-$$(r_y - b)\,(p - e_y) = \underbrace{r_y\,(p - e_y)}_{\text{row without baseline}} \;-\; \underbrace{b\,(p - e_y)}_{\text{what the baseline subtracts}}.$$
+$$(r_y - b)\,(p - e_y) = r_y\,(p - e_y) \;-\; b\,(p - e_y).$$
 
-The subtracted piece is not a constant: it depends on which $y$ was drawn, and it changes sign. With $b = 0.2$:
-
-| $y$ | $p_y$ | $p - e_y$ | $A$, $b = 0$ | row, $b = 0$ | $A$, $b = 0.2$ | row, $b = 0.2$ | subtracted, $b\,(p - e_y)$ | $p_y \times$ subtracted |
-|---|---|---|---|---|---|---|---|---|
-| 0 | 0.5 | (−0.5, 0.3, 0.2) | 0 | (0, 0, 0) | −0.2 | (0.10, −0.06, −0.04) | (−0.10, 0.06, 0.04) | (−0.05, 0.03, 0.02) |
-| 1 | 0.3 | (0.5, −0.7, 0.2) | 0 | (0, 0, 0) | −0.2 | (−0.10, 0.14, −0.04) | (0.10, −0.14, 0.04) | (0.03, −0.04, 0.01) |
-| 2 | 0.2 | (0.5, 0.3, −0.8) | 1 | (0.50, 0.30, −0.80) | 0.8 | (0.40, 0.24, −0.64) | (0.10, 0.06, −0.16) | (0.02, 0.01, −0.03) |
-| | | | | **avg (0.10, 0.06, −0.16)** | | **avg (0.10, 0.06, −0.16)** | | **sum (0, 0, 0)** |
-| | | | | **$\operatorname{Var}(x)$ 0.157** | | **$\operatorname{Var}(x)$ 0.103** | | |
-
-The pieces differ from row to row, but weighted by how often each $y$ is drawn they sum to zero (last column).
-The reason: a reward of $b$ for every draw says nothing about which token is better, so on average it cannot push
-the model toward any token. The simplest case is a fair coin, $p = (0.5, 0.5)$, paid $b$ whatever comes up:
+The subtracted piece averages to zero over the model's own samples, because $e_y$ lands on each token as often as
+$p$ says: $\mathbb{E}[e_y] = p$. A reward of $b$ for every draw carries no information about which token is better,
+so it cannot push the model anywhere on average [[3]](#ref-3)[[6]](#ref-6). A fair coin paid $b$ whatever comes up:
 
 ```python
-heads (half the time):  subtract b * (p - e_0) = b * (-0.5, +0.5)    # pushes heads up
-tails (half the time):  subtract b * (p - e_1) = b * (+0.5, -0.5)    # pushes tails up
+heads (half the time):  b * (p - e_0) = b * (-0.5, +0.5)
+tails (half the time):  b * (p - e_1) = b * (+0.5, -0.5)
 average:                b * (0, 0)
 ```
 
-Each draw pushes its own token up, but tokens come up in proportion to $p$, and pushing every token up in
-proportion to its own probability leaves a softmax where it is: $e_y$ averages to $p$, so $p - e_y$ averages to
-$0$ [[3]](#ref-3)[[6]](#ref-6). The average row is unchanged, no bias; the rows sit closer
-to it, so the variance fell. Under the engine the pushes come in proportion to $p_{\text{engine}}$ instead and the
-pieces sum to $b\,(p - p_{\text{engine}}) \ne 0$, so section 6 uses $b = 0$.
+The toy, $r = (0, 0, 1)$, with $b = 0$ and $b = J = 0.2$:
+
+| $y$ | $p_y$ | $p - e_y$ | row, $b = 0$ | row, $b = 0.2$ |
+|---|---|---|---|---|
+| 0 | 0.5 | (−0.5, 0.3, 0.2) | (0, 0, 0) | $-0.2 \cdot (p - e_0)$ = (0.10, −0.06, −0.04) |
+| 1 | 0.3 | (0.5, −0.7, 0.2) | (0, 0, 0) | $-0.2 \cdot (p - e_1)$ = (−0.10, 0.14, −0.04) |
+| 2 | 0.2 | (0.5, 0.3, −0.8) | (0.50, 0.30, −0.80) | $0.8 \cdot (p - e_2)$ = (0.40, 0.24, −0.64) |
+| | | **average** | **(0.10, 0.06, −0.16)** | **(0.10, 0.06, −0.16)** |
+| | | **$\operatorname{Var}(x)$** | **0.157** | **0.103** |
+
+Same average, so no bias. The rows sit closer to it, so lower variance.
 
 ![baseline](figs/bv_baseline.png)
 
-*Figure 3: 20,000 batches of 16, model sampling itself, showing token 2's coordinate of the batch estimate. Both
-baselines center on the true value; $b = 0.2$ is narrower.*
+*Figure 3: 20,000 batches of 16, model sampling itself, token 2's coordinate of the batch estimate. Both center on
+the true value; $b = 0.2$ is narrower.*
+
+This holds only for the model's own samples. Under the engine $\mathbb{E}[e_y] = p_{\text{engine}}$, the subtracted
+piece averages to $b\,(p - p_{\text{engine}}) \ne 0$, and a baseline does add bias. Section 6 uses $b = 0$.
+
+### 5.1 GRPO
 
 GRPO uses the group's mean reward as $b$ [[7]](#ref-7). Its other two steps, dividing by the group's reward standard
-deviation and by response length, rescale $A$ and so add bias [[8]](#ref-8).
+deviation and by response length, are not baselines: they rescale $A$, which changes the average row and so adds
+bias [[8]](#ref-8).
 
 ## 6. When the engine writes the tokens
 
