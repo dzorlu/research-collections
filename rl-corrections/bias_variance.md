@@ -166,13 +166,12 @@ The toy, $r = (0, 0, 1)$, without a baseline and with $b = 0.2$:
 | 0 | 0.5 | 0 | (−0.5, 0.3, 0.2) | 0 | (0, 0, 0) | −0.2 | (0.10, −0.06, −0.04) | (−0.10, 0.06, 0.04) | (−0.05, 0.03, 0.02) |
 | 1 | 0.3 | 0 | (0.5, −0.7, 0.2) | 0 | (0, 0, 0) | −0.2 | (−0.10, 0.14, −0.04) | (0.10, −0.14, 0.04) | (0.03, −0.04, 0.01) |
 | 2 | 0.2 | 1 | (0.5, 0.3, −0.8) | 1 | (0.50, 0.30, −0.80) | 0.8 | (0.40, 0.24, −0.64) | (0.10, 0.06, −0.16) | (0.02, 0.01, −0.03) |
-| | | | | | **avg (0.10, 0.06, −0.16)** | | **avg (0.10, 0.06, −0.16)** | | **sum = change in avg = (0, 0, 0)** |
-| | | | | | **bias = avg − $g$ = (0, 0, 0)** | | **bias = avg − $g$ = (0, 0, 0)** | | |
+| | | | | | **avg (0.10, 0.06, −0.16) $= g$** | | **avg (0.10, 0.06, −0.16) $= g$** | | **sum (0, 0, 0): bias the baseline adds** |
 | | | | | | **$\operatorname{Var}(x)$ 0.157** | | **$\operatorname{Var}(x)$ 0.103** | | |
 
-Weighted by how often each $y$ is drawn, the subtracted pieces sum to zero (last column), so the baseline changes
-the average row by nothing and the bias stays at zero. They sum to zero because $e_y$ lands on
-each token as often as $p$ says: $\mathbb{E}[e_y] = p$ [[3]](#ref-3)[[6]](#ref-6). The rows sit closer to the unchanged average, so lower variance.
+The average row is $g$ in both columns. The bias the baseline adds is the weighted sum of what it subtracts (last
+column), and that is zero because $e_y$ lands on each token as often as $p$ says: $\mathbb{E}[e_y] = p$
+[[3]](#ref-3)[[6]](#ref-6). The rows sit closer to the unchanged average, so lower variance.
 
 ![baseline](figs/bv_baseline.png)
 
