@@ -31,7 +31,7 @@ The goal is the model's average reward. A toy with one position and three tokens
 
 ```python
 p      = [0.5, 0.3, 0.2]  # [V]  how often the model writes each token
-reward = [0.0, 0.0, 1.0]  # [V]  reward[k] if token k is written; = one_hot(target) with target = 2
+reward = [0.0, 0.0, 1.0]  # [V]  reward for writing each token: only token 2 is right
 J = 0.5*0 + 0.3*0 + 0.2*1 = 0.2    # average reward over everything the model could write
 ```
 
