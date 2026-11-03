@@ -117,7 +117,16 @@ engine, or the row changed ($w \ne 1$, $A$ rescaled).
 
 The model's error goes to 0 as $B$ grows; the engine's never falls below $\|\text{bias}\|^2$, 0.0098. Yet for $B < 7$
 the engine's error is the smaller one: its lower variance outweighs its bias until the batch is large enough for the
-variance term to fall below 0.0098. Section 5 lowers $\operatorname{Var}(x)$ without touching the bias; every method in section 6
+variance term to fall below 0.0098.
+
+![error vs q](figs/bv_q.png)
+
+*Figure 2: $\|\text{bias}\|^2 = 0.98\,(q - 0.2)^2$ and $\operatorname{Var}(x)/B = 0.98\,q(1-q)/B$ as the sampler's
+probability of token 2 varies. The engine at $q = 0.1$ beats the model at $B = 4$ and loses at $B = 16$.*
+
+The engine's variance is lower because at $q = 0.1$ most rows are $0$, so they agree with each other more than the
+model's do; $q(1-q)$ shrinks toward either end. But they agree on $0.1\,v$, not $g$. Here low variance and high bias
+are the same fact seen from two sides. Section 5 lowers $\operatorname{Var}(x)$ without touching the bias; every method in section 6
 trades one term for the other.
 
 ## 5. Baseline: less variance, no bias
@@ -139,7 +148,7 @@ their common average. Greensmith et al. derive the variance-minimizing $b$ [[6]]
 
 ![baseline](figs/bv_baseline.png)
 
-*Figure 2: 20,000 batches of 16, model sampling itself, showing token 2's coordinate of the batch estimate. Both
+*Figure 3: 20,000 batches of 16, model sampling itself, showing token 2's coordinate of the batch estimate. Both
 baselines center on the true value; $b = 0.2$ is narrower.*
 
 GRPO uses the group's mean reward as $b$ [[7]](#ref-7). Its other two steps, dividing by the group's reward standard
@@ -181,7 +190,7 @@ so it dominates.
 
 ![distance](figs/bv_distance.png)
 
-*Figure 3: engine $(0.7 - \epsilon,\ 0.3,\ \epsilon)$ as $\epsilon$, the engine's probability of token 2, falls from
+*Figure 4: engine $(0.7 - \epsilon,\ 0.3,\ \epsilon)$ as $\epsilon$, the engine's probability of token 2, falls from
 0.2 (same as the model) to 0.005. TV levels off at 0.2. Chi-squared explodes.*
 
 ### 6.2 Three weights
@@ -198,7 +207,7 @@ engine, $p_{\text{engine},2} = 0.01$:
 
 ![weights](figs/bv_weights_far.png)
 
-*Figure 4: the far engine, token 2's coordinate of the batch estimate. Left: 300 single batches of 16. Every
+*Figure 5: the far engine, token 2's coordinate of the batch estimate. Left: 300 single batches of 16. Every
 REINFORCE and TIS batch lands near 0; most IS batches land at 0 and a few at -1 or -2. Right: running average over
 batches. REINFORCE and TIS settle near 0 (bias). IS swings for hundreds of batches (variance) before settling on
 the true -0.16.*
@@ -214,11 +223,11 @@ Two more choices of $w$, both built on the ratio $\rho_y = p_y / p_{\text{engine
 
 ![methods](figs/bv_methods.png)
 
-*Figure 5: squared error of the batch estimate at $B = 16$. Close engine (left): IS, TIS and DPPO coincide (the cap
+*Figure 6: squared error of the batch estimate at $B = 16$. Close engine (left): IS, TIS and DPPO coincide (the cap
 of 2 does not bind, and DPPO passes since only 0.10 moved). Far engine (right): IS is mostly variance, the rest are
 mostly bias.*
 
-Table 1: the numbers behind Figure 5 ($b = 0$, per-sample variance, error at $B = 16$). Every bias is a multiple
+Table 1: the numbers behind Figure 6 ($b = 0$, per-sample variance, error at $B = 16$). Every bias is a multiple
 of $v$, so one coefficient gives it.
 
 | engine | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error |
@@ -244,7 +253,7 @@ A cap trades variance for bias, and the best trade depends on $B$:
 
 ![cap](figs/bv_cap.png)
 
-*Figure 6: far engine, error versus the cap on $w$. At $B = 16$ the best cap is about 3. At $B = 256$ the variance
+*Figure 7: far engine, error versus the cap on $w$. At $B = 16$ the best cap is about 3. At $B = 256$ the variance
 term is 16 times smaller, so the best cap rises to about 14.*
 
 Common TIS implementations cap at 2 [[1]](#ref-1). The same trade appears in classic off-policy RL as V-trace
@@ -272,7 +281,7 @@ Table 2: the gain the weighted batch predicts (surrogate) vs the true gain in av
 The performance difference lemma [[17]](#ref-17) writes the true gain exactly, and TRPO [[18]](#ref-18)[[19]](#ref-19)
 bounds the gap by the TV between the two policies. DPPO adapts the bound to LLM responses (Theorem 3.2 in
 [[2]](#ref-2)): the gap is at most a constant times the TV summed over the response. Keeping per-token TV small is a
-trust region, and it is what the zeros in Figure 5 pay for.
+trust region, and it is what the zeros in Figure 6 pay for.
 
 PPO measures movement by $|\rho - 1|$. DPPO measures $|p - p_{\text{engine}}| = p_{\text{engine}}\,|\rho - 1|$, the
 token's actual share of TV.

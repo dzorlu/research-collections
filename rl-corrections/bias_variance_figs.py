@@ -97,7 +97,29 @@ ax.legend(frameon=False, loc='upper left')
 fig.tight_layout()
 fig.savefig('figs/bv_bias_scatter.png', dpi=150)
 
-# Figure 2: the baseline moves the spread, not the center (model samples itself).
+# Figure 2: ||bias||^2 and variance / B as the sampler's probability of token 2, q, varies. w = 1, b = 0.
+v = p - E[2]                                                            # [V]  the y = 2 row
+qs = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.6), sharey=True)
+for ax, batch in zip(axes, [4, 16]):
+  bias2 = [(v.norm() ** 2 * (q - p[2]) ** 2).item() for q in qs]
+  var_b = [(v.norm() ** 2 * q * (1 - q) / batch).item() for q in qs]
+  x = range(len(qs))
+  ax.bar(x, bias2, color=BLUE, width=0.6, label='||bias||²')
+  ax.bar(x, var_b, bottom=bias2, color=ORANGE, width=0.6, label='variance / B', edgecolor='#fcfcfb', linewidth=2)
+  ax.set_xticks(list(x), [f'{q:g}' for q in qs])
+  for q, name in [(0.1, 'engine'), (0.2, 'model')]:
+    i = qs.index(q)
+    ax.annotate(name, (i, bias2[i] + var_b[i]), xytext=(0, 4), textcoords='offset points', ha='center', fontsize=9, color=INK)
+  ax.set_title(f'B = {batch}', fontsize=10, loc='left')
+  ax.set_xlabel("q: the sampler's probability of token 2 (model: 0.2)")
+  ax.grid(axis='x', visible=False)
+axes[0].set_ylabel('squared error of the batch estimate')
+axes[0].legend(frameon=False)
+fig.tight_layout()
+fig.savefig('figs/bv_q.png', dpi=150)
+
+# Figure 3: the baseline moves the spread, not the center (model samples itself).
 fig, axes = plt.subplots(2, 1, figsize=(7, 4.4), sharex=True, sharey=True)
 for ax, b, color in zip(axes, [0.0, 0.2], [BLUE, ORANGE]):
   est = batches(torch.ones(V), p, b)
