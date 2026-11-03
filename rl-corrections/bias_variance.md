@@ -30,7 +30,7 @@ For a batch of `B` responses of `S` tokens each, average over all `B * S` tokens
 
 ## 3. The true gradient
 
-The goal is the model's average reward. A toy with one position and three tokens:
+The goal is the model's average reward, `J`. A toy with one position and three tokens:
 
 ```python
 p = [0.5, 0.3, 0.2]               # [V]  how often the model writes each token
@@ -38,37 +38,47 @@ p = [0.5, 0.3, 0.2]               # [V]  how often the model writes each token
 J = 0.5*0 + 0.3*0 + 0.2*1 = 0.2   # average reward over everything the model could write
 ```
 
-The true gradient says how `J` changes when each logit changes. Find it by nudging one logit at a time by 0.01 and
-watching `J`:
+The true gradient is the exact slope of `J` with respect to each logit: nothing sampled, nothing estimated. For a
+softmax it has a closed form (from `J = sum_k p_k * reward_k` and the softmax derivative):
 
 ```python
-nudge logit 0:  p = [0.5025, 0.2985, 0.1990]  ->  J = 0.1990,  slope (0.1990 - 0.2) / 0.01 = -0.10
-nudge logit 1:  p = [0.4985, 0.3021, 0.1994]  ->  J = 0.1994,  slope -0.06
-nudge logit 2:  p = [0.4990, 0.2994, 0.2016]  ->  J = 0.2016,  slope +0.16
+# slope of J for logit k:  p_k * (reward_k - J)
+[0.5 * (0 - 0.2),  0.3 * (0 - 0.2),  0.2 * (1 - 0.2)]  =  [-0.10, -0.06, +0.16]
 ```
 
-Raising logit 2 raises `J`, because token 2 is the rewarded one. Raising the others steals probability from token 2.
-So the gradient of `J` is `[-0.10, -0.06, +0.16]`. The update in section 2 is written as a loss to minimize, which
-flips the sign: the true `dlogits` is `[0.10, 0.06, -0.16]`.
+You can check one entry by hand: raise logit 2 by 0.01 and `J` moves from 0.2 to 0.2016, a slope of 0.16.
 
-The same numbers come from averaging section 2's update over what the model writes (with its sign flipped back to
-`onehot - p`). Each token contributes how often it is written, times its `A`, times `onehot - p`. With no baseline,
-`A` is just the reward:
+Three things to read off it:
+
+- **The sign is `reward_k - J`.** A token goes up if it beats the model's current average reward and down if it
+  falls short. `J` already acts as a baseline inside the true gradient; section 5 uses the same number, `b = 0.2`.
+- **The size is scaled by `p_k`.** The gradient weighs each token by how often the model itself writes it. That is
+  what breaks in section 6, when a different model writes the tokens.
+- **The entries sum to 0.** A softmax only sees differences between logits, so pushing token 2 up is the same as
+  pushing the others down.
+
+Section 2's update is a loss to minimize, which flips the sign. The target for every method below is
 
 ```python
-#           how often   A        onehot - p
-token 0:    0.5       * 0      * [ 0.5, -0.3, -0.2]  =  [ 0.00,  0.00, 0.00]
-token 1:    0.3       * 0      * [-0.5,  0.7, -0.2]  =  [ 0.00,  0.00, 0.00]
-token 2:    0.2       * 1      * [-0.5, -0.3,  0.8]  =  [-0.10, -0.06, 0.16]
-                                                 sum =  [-0.10, -0.06, 0.16]    # the gradient of J again
+true dlogits = [0.10, 0.06, -0.16]
 ```
 
-This second form is the policy gradient identity: the gradient of an average reward equals the average, over what
-the model writes, of reward times the gradient of `log p[y]` [[3]](#ref-3)[[4]](#ref-4). For a softmax that gradient is
-`onehot - p`. It is an average over every response the model could write. With three responses we can add them all
-up. A real model has `V**S` possible responses, far more than atoms in the universe, so training samples a
-batch of `B` and averages instead. The rest of this post follows one number, token 2's `-0.16`, and asks how the
-batch's version of it behaves.
+**Where sampling comes in.** The same numbers come from section 2's update, written out for every token the model
+could write and weighted by how often it writes it. With `w = 1` and no baseline, `A` is just the reward:
+
+```python
+#           how often   A    p - y_onehot
+token 0:    0.5       * 0  * [-0.5,  0.3,  0.2]  =  [0.00, 0.00,  0.00]
+token 1:    0.3       * 0  * [ 0.5, -0.7,  0.2]  =  [0.00, 0.00,  0.00]
+token 2:    0.2       * 1  * [ 0.5,  0.3, -0.8]  =  [0.10, 0.06, -0.16]
+                                            sum  =  [0.10, 0.06, -0.16]    # the true dlogits
+```
+
+This is the policy gradient identity: the gradient of the average reward equals the average, over what the model
+writes, of `A * (p - y_onehot)` [[3]](#ref-3)[[4]](#ref-4). Here we can list all three tokens. A real model has `V**S`
+possible responses, far more than atoms in the universe, so training samples `B` of them and averages those rows
+instead. The rest of this post follows one number, token 2's `-0.16`, and asks how the batch's version of it
+behaves.
 
 ## 4. One sample, one guess
 
