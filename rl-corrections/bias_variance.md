@@ -46,16 +46,9 @@ softmax it has a closed form (from `J = sum_k p_k * reward_k` and the softmax de
 [0.5 * (0 - 0.2),  0.3 * (0 - 0.2),  0.2 * (1 - 0.2)]  =  [-0.10, -0.06, +0.16]
 ```
 
-You can check one entry by hand: raise logit 2 by 0.01 and `J` moves from 0.2 to 0.2016, a slope of 0.16.
-
-Three things to read off it:
-
-- **The sign is `reward_k - J`.** A token goes up if it beats the model's current average reward and down if it
-  falls short. `J` already acts as a baseline inside the true gradient; section 5 uses the same number, `b = 0.2`.
-- **The size is scaled by `p_k`.** The gradient weighs each token by how often the model itself writes it. That is
-  what breaks in section 6, when a different model writes the tokens.
-- **The entries sum to 0.** A softmax only sees differences between logits, so pushing token 2 up is the same as
-  pushing the others down.
+Each entry is a probability times a reward relative to the average. Tokens that beat `J` go up, the rest go down, so
+`J` already acts as a baseline inside the true gradient (section 5). The factor `p_k` weighs each token by how often
+the model itself writes it; section 6 is what happens when a different model does the writing.
 
 Section 2's update is a loss to minimize, which flips the sign. The target for every method below is
 
