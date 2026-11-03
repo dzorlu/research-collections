@@ -226,36 +226,45 @@ That gap is why caps and trust regions exist (6.2 to 6.4).
 
 ### 6.2 Three weights
 
-Far engine, $b = 0$. Only token 2's row is nonzero: $x = w_2\,${{$v$ @@ v = p − e_2 = (0.5, 0.3, −0.8), the y = 2 row of section 3's table; defined in section 4}} with
-probability {{$q = p_{\text{engine},2} = 0.01$ @@ the far engine's probability of token 2, from the table in 6.1}}, else $0$. Section 4's formulas with the weight in place:
+Far engine, $b = 0$. The engine produces the rewarded token, token 2, in 1 row out of 100; the model would produce
+it in 20. Only token 2's row is nonzero, and it is $w_2\,${{$v$ @@ v = p − e_2 = (0.5, 0.3, −0.8), the y = 2 row of section 3's table; defined in section 4}}, so a batch's estimate is
+$v$ times its token-2 count, times $w_2$, over 16. The truth is {{$g = 0.2\,v$ @@ section 3's table: only the y = 2 row is nonzero, weighted by p_2 = 0.2}}. Seven batches of 16, with one token-2 row among
+them, under three choices of $w_2$:
+
+| batch | token-2 rows | REINFORCE, $w_2 = 1$ | IS, $w_2 = 20$ | TIS, $w_2 = 2$ |
+|---|---|---|---|---|
+| 1 | 0 | 0 | 0 | 0 |
+| 2 | 0 | 0 | 0 | 0 |
+| 3 | 1 | $\tfrac{1}{16}\,v = 0.31\,g$ | $\tfrac{20}{16}\,v = 6.25\,g$ | $\tfrac{2}{16}\,v = 0.63\,g$ |
+| 4 | 0 | 0 | 0 | 0 |
+| 5 | 0 | 0 | 0 | 0 |
+| 6 | 0 | 0 | 0 | 0 |
+| 7 | 0 | 0 | 0 | 0 |
+| average over many batches | 0.16 of 16 | $0.01\,v = 0.05\,g$ | $0.2\,v = g$ | $0.02\,v = 0.10\,g$ |
+
+- **REINFORCE** counts the row once. Even the batch that has it delivers a third of the truth; the rest deliver
+  nothing. The average settles at a twentieth of the truth. Bias.
+- **IS** counts the row 20 times, which is exactly how under-represented it is. The average settles on the truth.
+  But no batch is near it: six say zero, one says six times too much. Variance.
+- **TIS** [[13]](#ref-13)[[1]](#ref-1) counts it twice. A tenth of the truth on average, in lumps of 0.6: nearly
+  REINFORCE's bias with a little of IS's variance.
+
+The mismatch does not go away; $w_2$ only chooses whether it shows up as consistently short or as widely scattered.
+In the formulas of section 4, with $q = p_{\text{engine},2} = 0.01$:
 
 $$\begin{gathered}
 \mathbb{E}[x] = q\,w_2\,v, \qquad \text{bias} = \mathbb{E}[x] - g = (q\,w_2 - p_2)\,v, \\
 \operatorname{Var}(x) = w_2^2\,\|v\|^2\,q(1-q), \qquad \text{error} = \|\text{bias}\|^2 + \frac{\operatorname{Var}(x)}{B},
 \end{gathered}$$
 
-using {{$g = p_2\,v = 0.2\,v$ @@ section 3's table: only the y = 2 row is nonzero, weighted by p_2 = 0.2}} and {{$\|v\|^2 = 0.98$ @@ 0.5² + 0.3² + 0.8² = 0.98}}.
-
-The engine produces token 2 in 1 row of 100; the model would in 20. The only lever is $w_2$, how much each token-2
-row counts. {{$q\,w_2$ @@ how often token 2's row appears (q) times how much it counts when it does (w_2): its average weight}} is the push the batch delivers on average, and the target is $p_2 = 0.2$. Three settings of the lever:
-
 | | $w_2$ | $q\,w_2$ | $\|\text{bias}\|^2 = 0.98\,(q\,w_2 - 0.2)^2$ | $\operatorname{Var}(x) = w_2^2 \cdot 0.98 \cdot 0.01 \cdot 0.99$ | error, $B = 16$ |
 |---|---|---|---|---|---|
-| REINFORCE, $w = 1$ | 1 | 0.01 | 0.035 | 0.010 | $0.035 + 0.010/16 = 0.036$ |
-| IS, $w = p / p_{\text{engine}}$ | 20 | 0.20 | 0 | 3.88 | $0 + 3.88/16 = 0.243$ |
-| TIS, $w = \min(p / p_{\text{engine}},\ 2)$ | 2 | 0.02 | 0.032 | 0.039 | $0.032 + 0.039/16 = 0.034$ |
+| REINFORCE | 1 | 0.01 | 0.035 | 0.010 | $0.035 + 0.010/16 = 0.036$ |
+| IS | 20 | 0.20 | 0 | 3.88 | $0 + 3.88/16 = 0.243$ |
+| TIS | 2 | 0.02 | 0.032 | 0.039 | $0.032 + 0.039/16 = 0.034$ |
 
-- **REINFORCE** counts each token-2 row once. Token 2 shows up in 1% of rows instead of 20%, so the push is a
-  twentieth of what it should be, every batch. Bias.
-- **IS** counts each token-2 row 20 times, so the average push is right. But a batch either has no token-2 row
-  (estimate $0$) or one, counted $\times 20$ (estimate six times the truth). Variance.
-- **TIS** [[13]](#ref-13)[[1]](#ref-1) counts each one twice. The push is a tenth of what it should be, and a batch is $0$ or $0.6\times$ the
-  truth: nearly REINFORCE's bias with a little of IS's variance.
-
-The mismatch does not go away; $w_2$ only chooses whether it shows up as consistently short or as widely scattered.
-
-In this toy the two errors are the two distances of 6.1: REINFORCE's $\|\text{bias}\|^2 = 0.98\,(p_2 - q)^2$ is the
-moved mass squared, TV; IS's $\operatorname{Var}(x) = 0.98\,(p_2^2/q - p_2^2)$ is token 2's term of $\chi^2$.
+These are the two distances of 6.1: REINFORCE's $\|\text{bias}\|^2 = 0.98\,(p_2 - q)^2$ is the moved mass squared,
+TV; IS's $\operatorname{Var}(x) = 0.98\,(p_2^2/q - p_2^2)$ is token 2's term of $\chi^2$.
 
 ![weights](figs/bv_weights_far.png)
 
