@@ -52,8 +52,11 @@ The same numbers come from averaging section 2's update over what the model writ
 `onehot - p`). Each token contributes how often it is written, times its reward, times `onehot - p`:
 
 ```python
-0.5 * 0 * ([1,0,0] - p) + 0.3 * 0 * ([0,1,0] - p) + 0.2 * 1 * ([0,0,1] - p)
-  = 0.2 * [-0.5, -0.3, 0.8] = [-0.10, -0.06, 0.16]    # the gradient of J again
+#           how often   reward   onehot - p
+token 0:    0.5       * 0      * [ 0.5, -0.3, -0.2]  =  [ 0.00,  0.00, 0.00]
+token 1:    0.3       * 0      * [-0.5,  0.7, -0.2]  =  [ 0.00,  0.00, 0.00]
+token 2:    0.2       * 1      * [-0.5, -0.3,  0.8]  =  [-0.10, -0.06, 0.16]
+                                                 sum =  [-0.10, -0.06, 0.16]    # the gradient of J again
 ```
 
 This second form is an average over every response the model could write. With three responses we can add them all
