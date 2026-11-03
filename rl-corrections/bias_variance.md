@@ -226,32 +226,40 @@ That gap is why caps and trust regions exist (6.2 to 6.4).
 
 ### 6.2 Three weights
 
-Far engine, $b = 0$, so the only nonzero row is token 2's: $x = w_2\,v$ with probability $q = p_{\text{engine},2} = 0.01$,
-else $0$. Section 4's formulas with the weight in place:
+Far engine, $b = 0$. Only token 2's row is nonzero: $x = w_2\,${{$v$ @@ v = p − e_2 = (0.5, 0.3, −0.8), the y = 2 row of section 3's table; defined in section 4}} with
+probability {{$q = p_{\text{engine},2} = 0.01$ @@ the far engine's probability of token 2, from the table in 6.1}}, else $0$. Section 4's formulas with the weight in place:
 
-$$\mathbb{E}[x] = q\,w_2\,v, \qquad \text{bias} = (q\,w_2 - 0.2)\,v, \qquad \operatorname{Var}(x) = w_2^2\,\|v\|^2\,q(1-q), \qquad \text{error} = \|\text{bias}\|^2 + \operatorname{Var}(x)/B.$$
+$$\begin{gathered}
+\mathbb{E}[x] = q\,w_2\,v, \qquad \text{bias} = \mathbb{E}[x] - g = (q\,w_2 - p_2)\,v, \\
+\operatorname{Var}(x) = w_2^2\,\|v\|^2\,q(1-q), \qquad \text{error} = \|\text{bias}\|^2 + \frac{\operatorname{Var}(x)}{B},
+\end{gathered}$$
 
-$q\,w_2$ is the weight token 2's row gets on average: how often it appears times how much it counts when it does.
-The truth needs $0.2$, the model's own frequency. Each method picks $w_2$:
+using {{$g = p_2\,v = 0.2\,v$ @@ section 3's table: only the y = 2 row is nonzero, weighted by p_2 = 0.2}} and {{$\|v\|^2 = 0.98$ @@ 0.5² + 0.3² + 0.8² = 0.98}}.
 
-| | $w_2$ | $q\,w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error, $B = 16$ |
+The bias is set by one number, {{$q\,w_2$ @@ how often token 2's row appears (q) times how much it counts when it does (w_2): its average weight}}. The target is the model's own frequency, $p_2 = 0.2$; the engine
+supplies $q = 0.01$; $w_2$ is each method's way of making up the difference:
+
+| | $w_2$ | $q\,w_2$ | bias $= (q\,w_2 - 0.2)\,v$ | $\|\text{bias}\|^2 = 0.98\,(q\,w_2 - 0.2)^2$ | $\operatorname{Var}(x) = w_2^2 \cdot 0.98 \cdot 0.01 \cdot 0.99$ | error, $B = 16$ |
 |---|---|---|---|---|---|---|
-| REINFORCE, $w = 1$ | 1 | 0.01 | $-0.19\,v$ | $0.98 \cdot 0.19^2 = 0.035$ | $1 \cdot 0.98 \cdot 0.01 \cdot 0.99 = 0.010$ | $0.035 + 0.0006 = 0.036$ |
-| IS, $w = p / p_{\text{engine}}$ | 20 | 0.20 | 0 | 0 | $400 \cdot 0.98 \cdot 0.01 \cdot 0.99 = 3.88$ | $0 + 0.243 = 0.243$ |
-| TIS, $w = \min(p / p_{\text{engine}},\ 2)$ | 2 | 0.02 | $-0.18\,v$ | $0.98 \cdot 0.18^2 = 0.032$ | $4 \cdot 0.98 \cdot 0.01 \cdot 0.99 = 0.039$ | $0.032 + 0.0024 = 0.034$ |
+| REINFORCE, $w = 1$ | 1 | 0.01 | $-0.19\,v$ | 0.035 | 0.010 | $0.035 + 0.010/16 = 0.036$ |
+| IS, $w = p / p_{\text{engine}}$ | $0.2 / 0.01 = 20$ | 0.20 | 0 | 0 | 3.88 | $0 + 3.88/16 = 0.243$ |
+| TIS, $w = \min(p / p_{\text{engine}},\ 2)$ | 2 | 0.02 | $-0.18\,v$ | 0.032 | 0.039 | $0.032 + 0.039/16 = 0.034$ |
 
-REINFORCE leaves $q\,w_2$ at $0.01$, a twentieth of what the truth needs: nearly all bias, and little variance
-because almost every row is $0$. IS sets $w_2 = 0.2/q$ so that $q\,w_2 = 0.2$ exactly: no bias for any $q$, but
-$w_2^2 = 400$ multiplies the variance. TIS caps $w_2$ at 2, which removes almost all of IS's variance and keeps
-almost all of REINFORCE's bias. Capping goes back to Ionides [[13]](#ref-13) and was proposed for engine mismatch in
-LLM training by [[1]](#ref-1).
+- **REINFORCE** leaves $q\,w_2 = 0.01$, a twentieth of the target. Almost all of its error is bias. Its variance is
+  small because 99 rows in 100 are $0$.
+- **IS** chooses $w_2 = p_2 / q = 20$ so that $q\,w_2 = 0.2$ exactly. No bias. The price is $w_2^2 = 400$ in the
+  variance.
+- **TIS** caps $w_2$ at 2, so $q\,w_2 = 0.02$. Its bias is nearly REINFORCE's; its variance is $4\times$
+  REINFORCE's instead of $400\times$. Capping goes back to Ionides [[13]](#ref-13); for engine mismatch in LLM
+  training it was proposed by [[1]](#ref-1).
 
 ![weights](figs/bv_weights_far.png)
 
-*Figure 4: the far engine, token 2's coordinate of the batch estimate. Left: 300 single batches of 16. Every
-REINFORCE and TIS batch lands near 0; most IS batches land at 0 and a few at -1 or -2. Right: running average over
-batches. REINFORCE and TIS settle near 0 (bias). IS swings for hundreds of batches (variance) before settling on
-the true -0.16.*
+*Figure 4: the far engine, token 2's coordinate of the batch estimate, $-0.8$ times the batch's average $w_2$ on
+token 2. A batch of 16 draws token 2 zero times with probability $0.99^{16} = 85\%$ and once with $14\%$, so the
+estimate is $0$ or $-0.8\,w_2/16$: REINFORCE $-0.05$, TIS $-0.10$, IS $-1.0$ (and $-2.0$ on the rare two). Left: 300
+batches. Right: the running average settles on $-0.8\,q\,w_2$: REINFORCE $-0.008$, TIS $-0.016$, IS $-0.16$, the
+truth, after hundreds of batches of swinging.*
 
 ### 6.3 Every method, both engines
 

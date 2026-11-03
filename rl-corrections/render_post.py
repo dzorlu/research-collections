@@ -47,6 +47,9 @@ details.note[open] summary::before {{ content:'×'; }}
 .note-body {{ margin-top:8px; padding:12px 16px; border-left:3px solid var(--accent); background:var(--code); border-radius:0 6px 6px 0;
          font-size:14px; }}
 .note-body p:first-child {{ margin-top:0; }} .note-body p:last-child {{ margin-bottom:0; }}
+.tip {{ border-bottom:1px dotted var(--accent); cursor:help; position:relative; }}
+.tip:hover::after {{ content:attr(data-tip); position:absolute; left:0; top:1.5em; z-index:10; background:var(--ink); color:#fff;
+         padding:6px 10px; border-radius:4px; font:12px/1.4 -apple-system,system-ui,sans-serif; width:max-content; max-width:320px; white-space:normal; }}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 </head><body>
@@ -71,8 +74,11 @@ const withNotes = protectedMd.replace(/^:::note[ \t]+(.+)\n([\s\S]*?)^:::[ \t]*$
   notes.push(`<details class="note"><summary>${{title}}</summary><div class="note-body">${{marked.parse(body)}}</div></details>`);
   return 'NOTEBLOCK' + (notes.length - 1) + 'END';
 }});
+// Tooltips: {{text @@ note}} -> hover note saying where a symbol or number comes from.
+const withTips = withNotes.replace(/\{{\{{([\s\S]+?) @@ ([\s\S]+?)\}}\}}/g,
+  (_, t, tip) => `<span class="tip" data-tip="${{esc(tip).replace(/"/g, '&quot;')}}">${{t}}</span>`);
 const main = document.getElementById('c');
-main.innerHTML = marked.parse(withNotes)
+main.innerHTML = marked.parse(withTips)
   .replace(/<p>NOTEBLOCK(\d+)END<\/p>/g, (_, i) => notes[+i])
   .replace(/KATEXMATH(\d+)END/g, (_, i) => esc(math[+i]));
 
