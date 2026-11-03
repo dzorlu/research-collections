@@ -94,8 +94,13 @@ $\operatorname{Var}(\hat g_B) = \operatorname{Var}(x)/B$:
 
 $$\mathbb{E}\,\|\hat g_B - g\|^2 = \|\mathbb{E}[x] - g\|^2 + \frac{\operatorname{Var}(x)}{B}.$$
 
-Only $\operatorname{Var}(x)/B$ shrinks with $B$. For our row, $x = v$ with probability $q$ and $0$ otherwise,
-with $\|v\|^2 = 0.98$:
+Only $\operatorname{Var}(x)/B$ shrinks with $B$: the bias is a property of a single row and averaging rows does
+not change it.
+
+Both terms come from the single-row distribution, $x = v$ with probability $q$ and $0$ otherwise. Its mean is
+$q\,v$, so the bias is $q\,v - g = (q - 0.2)\,v$. Its variance is the two cases' squared distances from that mean,
+weighted by their probabilities; both distances are multiples of $v$, so $\|v\|^2 = 0.98$ factors out. The table
+evaluates each for the model and the engine:
 
 | | model, $q = 0.2$ | engine, $q = 0.1$ |
 |---|---|---|
