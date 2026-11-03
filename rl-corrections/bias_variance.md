@@ -243,23 +243,23 @@ supplies $q = 0.01$; $w_2$ is each method's way of making up the difference:
 |---|---|---|---|---|---|---|
 | REINFORCE, $w = 1$ | 1 | 0.01 | $-0.19\,v$ | 0.035 | 0.010 | $0.035 + 0.010/16 = 0.036$ |
 | IS, $w = p / p_{\text{engine}}$ | $0.2 / 0.01 = 20$ | 0.20 | 0 | 0 | 3.88 | $0 + 3.88/16 = 0.243$ |
-| TIS, $w = \min(p / p_{\text{engine}},\ 2)$ | 2 | 0.02 | $-0.18\,v$ | 0.032 | 0.039 | $0.032 + 0.039/16 = 0.034$ |
+| TIS, $w = \min(p / p_{\text{engine}},\ 2)$ [[13]](#ref-13)[[1]](#ref-1) | 2 | 0.02 | $-0.18\,v$ | 0.032 | 0.039 | $0.032 + 0.039/16 = 0.034$ |
 
-- **REINFORCE** leaves $q\,w_2 = 0.01$, a twentieth of the target. Almost all of its error is bias. Its variance is
-  small because 99 rows in 100 are $0$.
-- **IS** chooses $w_2 = p_2 / q = 20$ so that $q\,w_2 = 0.2$ exactly. No bias. The price is $w_2^2 = 400$ in the
-  variance.
-- **TIS** caps $w_2$ at 2, so $q\,w_2 = 0.02$. Its bias is nearly REINFORCE's; its variance is $4\times$
-  REINFORCE's instead of $400\times$. Capping goes back to Ionides [[13]](#ref-13); for engine mismatch in LLM
-  training it was proposed by [[1]](#ref-1).
+- **REINFORCE** counts each token-2 row once. Token 2 shows up in 1% of rows instead of 20%, so the push is a
+  twentieth of what it should be, every batch. Bias.
+- **IS** counts each token-2 row 20 times, so the average push is right. But a batch either has no token-2 row
+  (estimate $0$) or one, counted $\times 20$ (estimate six times the truth). Variance.
+- **TIS** counts each one twice. The push is a tenth of what it should be, and a batch is $0$ or $0.6\times$ the
+  truth: nearly REINFORCE's bias with a little of IS's variance.
+
+In this toy the two errors are the two distances of 6.1: REINFORCE's $\|\text{bias}\|^2 = 0.98\,(p_2 - q)^2$ is the
+moved mass squared, TV; IS's $\operatorname{Var}(x) = 0.98\,(p_2^2/q - p_2^2)$ is token 2's term of $\chi^2$.
 
 ![weights](figs/bv_weights_far.png)
 
-*Figure 4: the far engine, token 2's coordinate of the batch estimate, $-0.8$ times the batch's average $w_2$ on
-token 2. A batch of 16 draws token 2 zero times with probability $0.99^{16} = 85\%$ and once with $14\%$, so the
-estimate is $0$ or $-0.8\,w_2/16$: REINFORCE $-0.05$, TIS $-0.10$, IS $-1.0$ (and $-2.0$ on the rare two). Left: 300
-batches. Right: the running average settles on $-0.8\,q\,w_2$: REINFORCE $-0.008$, TIS $-0.016$, IS $-0.16$, the
-truth, after hundreds of batches of swinging.*
+*Figure 4: left, one dot per batch of 16, placed at its estimate; the dashed line is the truth. Right, the average
+of the first $n$ batches as $n$ grows. REINFORCE and TIS settle short of the truth (bias); IS scatters widely and
+takes hundreds of batches to settle on it (variance).*
 
 ### 6.3 Every method, both engines
 
