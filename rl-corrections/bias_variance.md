@@ -226,17 +226,25 @@ That gap is why caps and trust regions exist (6.2 to 6.4).
 
 ### 6.2 Three weights
 
-Far engine, $b = 0$, so only token 2's row is nonzero and it is $w_2\,v$. Three choices of $w$:
+Far engine, $b = 0$, so the only nonzero row is token 2's: $x = w_2\,v$ with probability $q = p_{\text{engine},2} = 0.01$,
+else $0$. Section 4's formulas with the weight in place:
 
-| | $w_2$ | $\mathbb{E}[x]$ | bias | one batch of 16 |
-|---|---|---|---|---|
-| REINFORCE, $w = 1$ | 1 | $0.01\,v$ | $-0.19\,v$ | token 2 in about 1 row of 100: the push is a twentieth of $g$ |
-| IS, $w = p / p_{\text{engine}}$ | 20 | $0.2\,v = g$ | 0 | 85% of batches see no token 2 and estimate $0$; 14% see it once and estimate $\tfrac{20}{16}\,v$, six times $g$ |
-| TIS, $w = \min(p / p_{\text{engine}},\ 2)$ | 2 | $0.02\,v$ | $-0.18\,v$ | REINFORCE with twice the push |
+$$\mathbb{E}[x] = q\,w_2\,v, \qquad \text{bias} = (q\,w_2 - 0.2)\,v, \qquad \operatorname{Var}(x) = w_2^2\,\|v\|^2\,q(1-q), \qquad \text{error} = \|\text{bias}\|^2 + \operatorname{Var}(x)/B.$$
 
-REINFORCE under-pushes every batch by the same amount. IS is right on average and wrong in almost every batch. TIS
-caps the weight, which gives up most of IS's correction to avoid its swings; capping goes back to Ionides
-[[13]](#ref-13) and was proposed for engine mismatch in LLM training by [[1]](#ref-1).
+$q\,w_2$ is the weight token 2's row gets on average: how often it appears times how much it counts when it does.
+The truth needs $0.2$, the model's own frequency. Each method picks $w_2$:
+
+| | $w_2$ | $q\,w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error, $B = 16$ |
+|---|---|---|---|---|---|---|
+| REINFORCE, $w = 1$ | 1 | 0.01 | $-0.19\,v$ | $0.98 \cdot 0.19^2 = 0.035$ | $1 \cdot 0.98 \cdot 0.01 \cdot 0.99 = 0.010$ | $0.035 + 0.0006 = 0.036$ |
+| IS, $w = p / p_{\text{engine}}$ | 20 | 0.20 | 0 | 0 | $400 \cdot 0.98 \cdot 0.01 \cdot 0.99 = 3.88$ | $0 + 0.243 = 0.243$ |
+| TIS, $w = \min(p / p_{\text{engine}},\ 2)$ | 2 | 0.02 | $-0.18\,v$ | $0.98 \cdot 0.18^2 = 0.032$ | $4 \cdot 0.98 \cdot 0.01 \cdot 0.99 = 0.039$ | $0.032 + 0.0024 = 0.034$ |
+
+REINFORCE leaves $q\,w_2$ at $0.01$, a twentieth of what the truth needs: nearly all bias, and little variance
+because almost every row is $0$. IS sets $w_2 = 0.2/q$ so that $q\,w_2 = 0.2$ exactly: no bias for any $q$, but
+$w_2^2 = 400$ multiplies the variance. TIS caps $w_2$ at 2, which removes almost all of IS's variance and keeps
+almost all of REINFORCE's bias. Capping goes back to Ionides [[13]](#ref-13) and was proposed for engine mismatch in
+LLM training by [[1]](#ref-1).
 
 ![weights](figs/bv_weights_far.png)
 
