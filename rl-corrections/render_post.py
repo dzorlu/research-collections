@@ -22,8 +22,9 @@ main {{ margin-left:270px; max-width:720px; padding:40px 320px 80px 0; box-sizin
 pre {{ background:var(--code); padding:12px; overflow-x:auto; border-radius:6px; font-size:13px; }}
 code {{ font:13px Menlo,monospace; }}
 p code, li code, td code {{ background:var(--code); padding:1px 4px; border-radius:3px; }}
-table {{ border-collapse:collapse; margin:12px 0; display:block; overflow-x:auto; font-size:14px; }}
-th, td {{ border:1px solid var(--line); padding:6px 10px; }} th {{ background:#f0efec; }}
+table {{ border-collapse:collapse; margin:12px 0; display:block; overflow-x:auto; font-size:14px;
+         width:max-content; max-width:calc(100% + 300px); }}
+th, td {{ border:1px solid var(--line); padding:6px 10px; white-space:nowrap; }} th {{ background:#f0efec; }}
 img {{ max-width:100%; }} em {{ color:var(--muted); }}
 sup.cite a {{ color:var(--accent); text-decoration:none; font-size:11px; }}
 sup.cite + sup.cite::before {{ content:','; font-size:11px; color:var(--accent); }}
@@ -34,6 +35,7 @@ sup.cite + sup.cite::before {{ content:','; font-size:11px; color:var(--accent);
 @media (max-width: 1250px) {{
   #toc {{ display:none; }} main {{ margin:0 auto; padding:24px 16px 60px; }}
   .sidenote {{ float:none; display:block; margin:6px 0 10px; width:auto; border-left:2px solid var(--line); padding-left:8px; }}
+  table {{ max-width:100%; }}
 }}
 .katex-display {{ overflow-x:auto; overflow-y:hidden; padding:2px 0; }}
 </style>
