@@ -172,8 +172,7 @@ The toy, $r = (0, 0, 1)$, without a baseline and with $b = 0.2$:
 
 Weighted by how often each $y$ is drawn, the subtracted pieces sum to zero (last column), so the baseline changes
 the average row by nothing and the bias stays at zero. They sum to zero because $e_y$ lands on
-each token as often as $p$ says: $\mathbb{E}[e_y] = p$ [[3]](#ref-3)[[6]](#ref-6). The average row is unchanged,
-no bias. The rows sit closer to it, so lower variance.
+each token as often as $p$ says: $\mathbb{E}[e_y] = p$ [[3]](#ref-3)[[6]](#ref-6). The rows sit closer to the unchanged average, so lower variance.
 
 ![baseline](figs/bv_baseline.png)
 
