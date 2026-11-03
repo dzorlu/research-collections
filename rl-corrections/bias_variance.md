@@ -5,7 +5,7 @@
 RL for language models works like this: sample responses, score them, and nudge the model toward the good ones. The
 nudge is computed from a sampled batch, so it is only an estimate of the gradient we want. And the samples usually
 come from a different copy of the model than the one being trained: a separate inference engine, fast but a few
-updates behind and numerically slightly different.
+updates behind and numerically slightly different [[1]](#ref-1)[[2]](#ref-2).
 
 Methods like PPO, importance sampling, TIS and DPPO each change that estimate. This post asks: how far is the
 estimate from the gradient we want, and what does each method do to the gap?
@@ -13,13 +13,13 @@ estimate from the gradient we want, and what does each method do to the gap?
 ## 2. The update
 
 The model turns logits into probabilities `p` with a softmax. When a token `y` is written and gets advantage `A`
-(how much better than usual the response was), the policy gradient on the logits is:
+(how much better than usual the response was), the policy gradient on the logits is [[3]](#ref-3):
 
 ```python
 dlogits = w * A * (p - y_onehot)    # [V]  one written token; V = vocabulary size
 ```
 
-`y_onehot` is 1 at the written token and 0 elsewhere. `w` is a per-token weight: 1 in plain REINFORCE, and the knob
+`y_onehot` is 1 at the written token and 0 elsewhere. `p - y_onehot` is the gradient of `-log p[y]` for a softmax. `w` is a per-token weight: 1 in plain REINFORCE, and the knob
 every correction method turns. This is the gradient of the loss, so training subtracts it: a negative entry pushes
 that token's logit up.
 
@@ -59,7 +59,9 @@ token 2:    0.2       * 1      * [-0.5, -0.3,  0.8]  =  [-0.10, -0.06, 0.16]
                                                  sum =  [-0.10, -0.06, 0.16]    # the gradient of J again
 ```
 
-This second form is an average over every response the model could write. With three responses we can add them all
+This second form is the policy gradient identity: the gradient of an average reward equals the average, over what
+the model writes, of reward times the gradient of `log p[y]` [[3]](#ref-3)[[4]](#ref-4). For a softmax that gradient is
+`onehot - p`. It is an average over every response the model could write. With three responses we can add them all
 up. A real model has `V**S` possible responses, far more than atoms in the universe, so training samples a
 batch of `B` and averages instead. The rest of this post follows one number, token 2's `-0.16`, and asks how the
 batch's version of it behaves.
@@ -85,18 +87,22 @@ Two numbers describe the estimate:
 error = bias**2 + variance / B
 ```
 
+This split of the mean squared error is standard [[5]](#ref-5). Averaging `B` independent samples divides the variance by
+`B` and leaves the bias alone.
+
 ## 5. Baseline: less variance, no bias
 
 Use `A = reward - b` with `b = 0.2`, the average reward. The samples change, their average does not: over the
-model's own samples, `p - y_onehot` averages to 0, so subtracting `b` times it subtracts 0.
+model's own samples, `p - y_onehot` averages to 0, so subtracting `b` times it subtracts 0. This is why baselines are free [[3]](#ref-3)[[6]](#ref-6); Greensmith et al. also derive the
+baseline that minimizes variance [[6]](#ref-6).
 
 ![baseline](figs/bv_baseline.png)
 
 *Figure 1: 20,000 batches of 16, model sampling itself. Both baselines center on the true value (no bias). With
 `b = 0.2` the spread shrinks from 0.102 to 0.058 per sample.*
 
-GRPO uses the group's mean reward as `b`. (Its other two steps, dividing by the group's reward std and by response
-length, do add bias; see [Dr. GRPO](https://arxiv.org/abs/2503.20783).)
+GRPO uses the group's mean reward as `b` [[7]](#ref-7). Its other two steps, dividing by the group's reward std and by
+response length, do add bias [[8]](#ref-8).
 
 ## 6. When the engine writes the tokens
 
@@ -118,9 +124,11 @@ p - close = [-0.1, 0.0, +0.1]    # take 0.1 from token 0, give it to token 2
 ```
 
 `sum(|p - close|)` is 0.2, but it counts every move twice, once where it leaves and once where it lands. So the
-amount moved is `TV = 0.5 * sum(|p - p_engine|)`: 0.10 for close, 0.19 for far.
+amount moved is `TV = 0.5 * sum(|p - p_engine|)`: 0.10 for close, 0.19 for far. This is the total variation
+distance [[9]](#ref-9).
 
-**Chi-squared: how big the weights get.** The weight that undoes the mismatch is `w = p / p_engine`:
+**Chi-squared: how big the weights get.** The weight that undoes the mismatch is `w = p / p_engine`, the importance
+weight [[10]](#ref-10)[[12]](#ref-12):
 
 ```python
 w_close = [0.83, 1.0,  2.0]    # [V]
@@ -135,7 +143,8 @@ close: 0.6*0.83**2  + 0.3*1**2 + 0.1*2**2   - 1 = 0.12
 far:   0.69*0.72**2 + 0.3*1**2 + 0.01*20**2 - 1 = 3.66
 ```
 
-That is the chi-squared distance. Each token adds `p**2 / p_engine`, so a token the engine rarely writes blows it up.
+That is the chi-squared distance; the second moment of the importance weight is exactly `1 + chi-squared`, and it
+controls the error of importance sampling [[11]](#ref-11). Each token adds `p**2 / p_engine`, so a token the engine rarely writes blows it up.
 
 ![distance](figs/bv_distance.png)
 
@@ -150,14 +159,14 @@ Each sample now adds `-0.8 * w[2]` if it wrote token 2, and 0 otherwise.
   far engine. Bias `+0.152`: it barely pushes token 2.
 - **IS**, `w = p / p_engine = 20` on token 2: the average is `-0.8 * 20 * 0.01 = -0.16`, exact. But 85% of batches
   of 16 never see token 2 and estimate 0; the 14% that see it once estimate `-1.0`.
-- **TIS**, `w` capped at 2: in between, mostly bias.
+- **TIS**, `w` capped at 2: in between, mostly bias. Truncating weights to trade variance for bias goes back to
+  Ionides [[13]](#ref-13); for LLM training it was proposed against engine mismatch [[1]](#ref-1).
 
 ![weights](figs/bv_weights_far.png)
 
 *Figure 3: the far engine. Left: 300 single batches of 16. Every REINFORCE and TIS batch lands near 0; most IS batches
 land at 0 and a few at -1 or -2. Right: average more and more batches. REINFORCE and TIS settle near 0, the wrong
 place (bias). IS swings for hundreds of batches (variance) before settling on the true -0.16.*
-IS is centered on the truth on average, but no single batch lands near it (variance).*
 
 ### 6.3 Every method, both engines
 
@@ -184,7 +193,8 @@ Table 1: the numbers behind Figure 4 (`b = 0`, per-sample variance, error at `B 
 Three things to take from this:
 
 1. **Unbiased is not the same as better.** With the close engine, plain REINFORCE beats IS at `B = 16`.
-2. **The trust-region methods look worst here, by design.** PPO (with its ratio taken against the engine) and DPPO set `w = 0` on token 2, so they estimate 0. They are not trying to
+2. **The trust-region methods look worst here, by design.** PPO [[14]](#ref-14) (with its ratio taken against the engine)
+   and DPPO [[2]](#ref-2) set `w = 0` on token 2, so they estimate 0. They are not trying to
    estimate one gradient well. They stop the step on tokens that already moved too far. That benefit only shows up
    across steps (section 7).
 3. **PPO and DPPO disagree with the close engine.** Token 2's ratio is 2, so PPO blocks it. Only 0.10 of
@@ -199,8 +209,8 @@ A cap trades variance for bias. Where the best trade sits depends on the batch s
 *Figure 5: far engine, error versus the cap on `w`. At `B = 16` the best cap is about 3. At `B = 256` the variance is
 16 times smaller, so the best cap rises to about 14.*
 
-Common TIS implementations cap at 2. The same trade appears in classic RL as
-[V-trace](https://arxiv.org/abs/1802.01561) and [Retrace](https://arxiv.org/abs/1606.02647).
+Common TIS implementations cap at 2 [[1]](#ref-1). The same trade appears in classic RL as V-trace [[15]](#ref-15) and
+Retrace [[16]](#ref-16).
 
 ## 7. Across steps: the blind spot and the trust region
 
@@ -219,8 +229,9 @@ Table 2: the gain the weighted batch predicts (surrogate) vs the true gain in av
 | 0.3 | 0.1200 | 0.0300 | 0.0900 |
 
 The stepped model reaches "after `a`" more often, and it also improved there. The batch was written by the engine and
-never saw that. The DPPO paper ([arXiv 2602.04879](https://arxiv.org/abs/2602.04879), Theorem 3.2) proves the gap is
-at most a constant times the TV summed over the response. So keep TV small at every token. That is a trust region,
+never saw that. This gap is classic: the performance difference lemma [[17]](#ref-17) writes the true gain exactly, and TRPO
+[[18]](#ref-18)[[19]](#ref-19) bounds the gap by the TV between the two policies. The DPPO paper adapts the bound to LLM responses
+(Theorem 3.2 in [[2]](#ref-2)): the gap is at most a constant times the TV summed over the response. So keep TV small at every token. That is a trust region,
 and it is what the zeros in Figure 4 pay for.
 
 PPO measures movement with the ratio, `|r - 1|`. DPPO measures `|p - p_engine|`, which equals `p_engine * |r - 1|`,
@@ -234,7 +245,7 @@ Table 3: PPO and DPPO on a rare token with `A > 0` and a confident token with `A
 | confident | 0.99 → 0.80 | 0.81 | 0.19 | `w = 0.81` | `w = 0` |
 
 PPO blocks a token that barely moved and passes one that moved a lot. In the paper, collapse came from the second
-kind (Figure 5 there), and the mean `|p - p_engine|` rose before reward fell (Figure 3 there).
+kind (Figure 5 in [[2]](#ref-2)), and the mean `|p - p_engine|` rose before reward fell (Figure 3 in [[2]](#ref-2)).
 
 ## 8. Summary
 
@@ -251,3 +262,27 @@ TV is how much probability moved; ignoring it costs bias. Chi-squared is how big
 costs variance. A trust region adds a little bias now to keep the next step's bias (the blind spot) small.
 
 Next: the same measurement on a real training run, per method, instead of a toy.
+
+Figures are generated by `bias_variance_figs.py`; every number above was checked in PyTorch.
+
+## References
+
+1. <a id="ref-1"></a>F. Yao, L. Liu, D. Zhang, C. Dong, J. Shang, J. Gao. *Your Efficient RL Framework Secretly Brings You Off-Policy RL Training.* Blog, 2025. https://fengyao.notion.site/off-policy-rl
+2. <a id="ref-2"></a>P. Qi, X. Zhou, Z. Liu, T. Pang, C. Du, M. Lin, W. S. Lee. *Rethinking the Trust Region in LLM Reinforcement Learning* (DPPO). arXiv:2602.04879, 2026.
+3. <a id="ref-3"></a>R. J. Williams. *Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning* (REINFORCE). Machine Learning 8:229-256, 1992.
+4. <a id="ref-4"></a>R. S. Sutton, D. McAllester, S. Singh, Y. Mansour. *Policy Gradient Methods for Reinforcement Learning with Function Approximation.* NeurIPS, 2000.
+5. <a id="ref-5"></a>L. Wasserman. *All of Statistics.* Springer, 2004 (bias-variance decomposition of mean squared error).
+6. <a id="ref-6"></a>E. Greensmith, P. L. Bartlett, J. Baxter. *Variance Reduction Techniques for Gradient Estimates in Reinforcement Learning.* JMLR 5:1471-1530, 2004.
+7. <a id="ref-7"></a>Z. Shao et al. *DeepSeekMath* (GRPO). arXiv:2402.03300, 2024.
+8. <a id="ref-8"></a>Z. Liu et al. *Understanding R1-Zero-Like Training: A Critical Perspective* (Dr. GRPO). arXiv:2503.20783, 2025.
+9. <a id="ref-9"></a>D. A. Levin, Y. Peres, E. L. Wilmer. *Markov Chains and Mixing Times.* AMS, 2009 (total variation distance, chapter 4).
+10. <a id="ref-10"></a>A. B. Owen. *Monte Carlo Theory, Methods and Examples*, chapter 9: Importance Sampling. 2013. https://artowen.su.domains/mc/
+11. <a id="ref-11"></a>S. Agapiou, O. Papaspiliopoulos, D. Sanz-Alonso, A. M. Stuart. *Importance Sampling: Intrinsic Dimension and Computational Cost.* Statistical Science, 2017; arXiv:1511.06196 (eq. 2.4: second moment of the weight minus 1 is the chi-squared divergence).
+12. <a id="ref-12"></a>T. Degris, M. White, R. S. Sutton. *Off-Policy Actor-Critic.* ICML, 2012; arXiv:1205.4839.
+13. <a id="ref-13"></a>E. L. Ionides. *Truncated Importance Sampling.* Journal of Computational and Graphical Statistics 17(2):295-311, 2008.
+14. <a id="ref-14"></a>J. Schulman, F. Wolski, P. Dhariwal, A. Radford, O. Klimov. *Proximal Policy Optimization Algorithms.* arXiv:1707.06347, 2017.
+15. <a id="ref-15"></a>L. Espeholt et al. *IMPALA* (V-trace). arXiv:1802.01561, 2018.
+16. <a id="ref-16"></a>R. Munos, T. Stepleton, A. Harutyunyan, M. G. Bellemare. *Safe and Efficient Off-Policy Reinforcement Learning* (Retrace). arXiv:1606.02647, 2016.
+17. <a id="ref-17"></a>S. Kakade, J. Langford. *Approximately Optimal Approximate Reinforcement Learning.* ICML, 2002.
+18. <a id="ref-18"></a>J. Schulman, S. Levine, P. Moritz, M. Jordan, P. Abbeel. *Trust Region Policy Optimization.* arXiv:1502.05477, 2015.
+19. <a id="ref-19"></a>J. Achiam, D. Held, A. Tamar, P. Abbeel. *Constrained Policy Optimization.* arXiv:1705.10528, 2017.
