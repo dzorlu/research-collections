@@ -115,8 +115,9 @@ The model's bias is 0 because it writes token 2 at exactly the rate $g$ weights 
 (section 3). Bias appears when that match breaks: $y$ drawn from a different distribution than $p$, as with the
 engine, or the row changed ($w \ne 1$, $A$ rescaled).
 
-The model's error goes to 0 as $B$ grows; the engine's never falls below $\|\text{bias}\|^2$, 0.0098. Which is better depends on $B$: for $B < 7$ the engine's smaller variance outweighs its bias, beyond that
-the bias dominates. Section 5 lowers $\operatorname{Var}(x)$ without touching the bias; every method in section 6
+The model's error goes to 0 as $B$ grows; the engine's never falls below $\|\text{bias}\|^2$, 0.0098. Yet for $B < 7$
+the engine's error is the smaller one: its lower variance outweighs its bias until the batch is large enough for the
+variance term to fall below 0.0098. Section 5 lowers $\operatorname{Var}(x)$ without touching the bias; every method in section 6
 trades one term for the other.
 
 ## 5. Baseline: less variance, no bias
