@@ -167,15 +167,6 @@ no bias. The rows sit closer to it, so lower variance.
 *Figure 3: 20,000 batches of 16, model sampling itself, token 2's coordinate of the batch estimate. Both center on
 the true value; $b = 0.2$ is narrower.*
 
-This holds only for the model's own samples. Under the engine $\mathbb{E}[e_y] = p_{\text{engine}}$, the subtracted
-piece averages to $b\,(p - p_{\text{engine}}) \ne 0$, and a baseline does add bias. Section 6 uses $b = 0$.
-
-### 5.1 GRPO
-
-GRPO uses the group's mean reward as $b$ [[7]](#ref-7). Its other two steps, dividing by the group's reward standard
-deviation and by response length, are not baselines: they rescale $A$, which changes the average row and so adds
-bias [[8]](#ref-8).
-
 ## 6. When the engine writes the tokens
 
 Now $y \sim p_{\text{engine}}$ while the target is still $g$. Two engines, $b = 0$:
