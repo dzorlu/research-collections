@@ -119,7 +119,7 @@ import glob
 import os
 import time
 
-SUB_DIR = "04_submissions"
+SUB_DIR = "04_grader_inputs"
 SHOULD_PASS = {"sub_02.py", "sub_07.py"}                              # every other submission must fail
 
 results = {}

@@ -1,13 +1,34 @@
-# Implementations: practice plan for ML infra code
+# Implementations
 
-Goal: write training-infrastructure code from scratch, quickly and correctly, and reason about how it fails at
-scale. Three areas: (1) a component in a training pipeline, (2) tensor manipulation, (3) distributed computing and
-efficiency.
+Goal: write ML training code from scratch, quickly and correctly, and reason about how it fails at scale. Blank
+page, no AI; docs are fine.
 
-Hands-on drills for the RL side (policy losses, GRPO loop, attention, graders) are in
-[../interview-drills/](../interview-drills/).
+## 1. Drills
 
-## 1. A component in a training pipeline
+Each notebook has instructions, stub cells marked `# TODO`, and test cells that print `ok`.
+
+**Table 1. Drills.**
+
+| Notebook | Time | What you write |
+|---|---|---|
+| `01_policy_loss.ipynb` | 25 min | GRPO advantages; REINFORCE, PPO, CISPO, GSPO losses with masks and two normalizations; the same from logits |
+| `02_rl_loop.ipynb` | 45 + 10 min | reward, sampling and a GRPO + PPO loop on a toy task; then a hacked reward and a label-free check that catches it |
+| `03_attention.ipynb` | 25 min + bonus | causal multi-head attention with a KV cache (incl. chunked prefill); attention backward by hand; online softmax |
+| `04_grader.ipynb` | 45 min | a grader for "write attention by hand" that survives the 12 files in `04_grader_inputs/`, some of which cheat |
+
+Conventions:
+
+- `XX_name.ipynb` is the unsolved drill; `XX_name_solved.ipynb` is a worked version.
+- [LEARNINGS.md](LEARNINGS.md): what each drill taught.
+- `reference/`: reference solutions, one script per notebook; every test passes against them
+  (`cd implementations && python reference/02_rl_loop.py`). Open after trying.
+- `04_grader_inputs/`: the files drill 4's grader must judge (2 honest, 3 buggy, 7 cheating). Open them and
+  `ANSWER_KEY.md` only after your grader passes.
+
+Running: torch is in the `pglab` conda env, registered as the Jupyter kernel "Python (pglab, torch)".
+`jupyter lab` from this folder, or VS Code with the `pglab` interpreter.
+
+## 2. A component in a training pipeline
 
 Expect a training loop with one piece missing or broken. Write each from scratch:
 
@@ -19,7 +40,7 @@ Expect a training loop with one piece missing or broken. Write each from scratch
   interrupted and resumed gives the same loss curve as an uninterrupted one.
 - **Optimizer:** AdamW by hand, checked against `torch.optim.AdamW`.
 
-## 2. Tensor manipulation
+## 3. Tensor manipulation
 
 Vectorized, no Python loops.
 
@@ -30,11 +51,11 @@ Vectorized, no Python loops.
   the outputs back in the original order with the routing weights. The classic hard tensor question.
 - RoPE; splitting and merging heads.
 
-## 3. Distributed computing and efficiency
+## 4. Distributed computing and efficiency
 
-### 3.1 Cost arithmetic (whiteboard)
+### 4.1 Cost arithmetic (whiteboard)
 
-**Table 1. Numbers to derive on the spot.**
+**Table 2. Numbers to derive on the spot.**
 
 | Quantity | Rule |
 |---|---|
@@ -49,7 +70,7 @@ Vectorized, no Python loops.
 Story to rehearse: [../parallelism/](../parallelism/), GLM-5.3 on 48 GPUs: the memory arithmetic behind a real
 out-of-memory failure and why more pipeline stages fixed it.
 
-### 3.2 Code that runs on a laptop
+### 4.2 Code that runs on a laptop
 
 `torch.distributed` with the CPU `gloo` backend, 2 to 4 processes via `torch.multiprocessing`:
 
@@ -60,7 +81,7 @@ out-of-memory failure and why more pipeline stages fixed it.
 4. ZeRO-1: each rank owns a shard of the optimizer state, then all-gathers the updated weights.
 5. Bonus: bucket gradients and start the all-reduce while backward is still running.
 
-### 3.3 Failure reasoning, out loud
+### 4.3 Failure reasoning, out loud
 
 - Loss spikes: what to check, when to roll back to a checkpoint.
 - NaNs: finding the layer and step that produced them.
@@ -69,9 +90,9 @@ out-of-memory failure and why more pipeline stages fixed it.
 - Checkpoint and restart at scale: frequency, cost, resuming the data loader.
 - Deterministic reruns: what breaks determinism across restarts.
 
-## 4. One-day schedule
+## 5. One-day schedule
 
-**Table 2. If there is only one day.**
+**Table 3. If there is only one day.**
 
 | Block | Work |
 |---|---|

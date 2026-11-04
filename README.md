@@ -26,6 +26,10 @@ notebook.
   file:line and whether our runs use it. Includes a notebook that runs PPO and CISPO by hand through a
   two-layer network
   ([open in Colab](https://colab.research.google.com/github/dzorlu/research-collections/blob/main/rl-corrections/01-multi-step-clipping/cispo_backward.ipynb)).
+- [implementations/](implementations/): ML code written from scratch against tests: policy losses (REINFORCE,
+  PPO, CISPO, GSPO), a GRPO loop on a toy task with a reward hack to catch, attention with a KV cache and its
+  backward pass, and a grader that resists cheating submissions. Plus a practice plan for training-pipeline,
+  tensor and distributed-computing code.
 - [upstream-prs/](upstream-prs/): our open PRs to miles and SGLang, grouped by project, with what
   each one fixes and where it stands upstream.
 - [single-node-training/](single-node-training/): which open-weight model is the best one to train on one

@@ -20,7 +20,7 @@ Each row: what the submission does, which naive grader it fools, and the defense
 | sub_11 | fail | Zeroes `v` in place, returns zeros: the reference on the mutated `v` is also zeros | graders that compute the reference after the call on the same tensors | compute the reference first, or pass copies (a subprocess passes copies for free) |
 | sub_12 | fail | `from torch.nn.functional import scaled_dot_product_attention as attend` | graders that grep for the call site `F.scaled_dot_product_attention(` only | AST ban on imports and aliases, plus the runtime patch |
 
-## Holes the reference grader (`solutions/04_grader.py`) still has
+## Holes the reference grader (`reference/04_grader.py`) still has
 
 - **Other entry points.** It patches `F.scaled_dot_product_attention` and `torch._C._nn.scaled_dot_product_attention`,
   but not `torch.ops.aten.scaled_dot_product_attention`, `torch.ops.aten._scaled_dot_product_attention_math`, or
