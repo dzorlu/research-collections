@@ -49,7 +49,7 @@ tokens averages this over all $BS$ tokens.
 
 The true gradient is the update from section 2, averaged over which token gets written, each weighted by how often
 the model writes it. By the policy gradient identity this equals $-\nabla_z J$, the gradient of the average reward
-in loss sign [[3]](#ref-3)[[4]](#ref-4):
+$J = \sum_y p_y\, r_y$ in loss sign [[3]](#ref-3)[[4]](#ref-4):
 
 $$g = \sum_y p_y \cdot r_y\,(p - e_y) \qquad (w = 1,\ A = r_y).$$
 
@@ -83,12 +83,13 @@ v = p - e_2 = (0.5,\ 0.3,\ -0.8), \qquad g = 0.2\,v = (0.10,\ 0.06,\ -0.16), \\
 With $q$ the probability that a sampled token is 2, one row is $x = v$ with probability $q$ and $0$ otherwise:
 a Bernoulli($q$) scaled by $v$. A batch average is $v$ times the fraction of 2s it drew.
 
-The model writes token 2 at $q = p_2 = 0.2$. The close engine of section 6 writes it half as often,
-$p_{\text{engine},2} = 0.1$. Draw many batches of 16 from each:
+The model writes token 2 at $q = p_2 = 0.2$. Suppose instead a sampler that writes it half as often, $q = 0.1$;
+section 6 calls it the close engine. Draw many batches of 16 from each:
 
 ![model vs engine batches](figs/bv_bias_scatter.png)
 
-*Figure 1: where batches of 16 land, 20,000 from each sampler. Token 2's coordinate of $\hat g_B$; dashed is $g$.*
+*Figure 1: where batches of 16 land, 20,000 from each sampler. Dashed is $g$. Every figure draws token 2's
+coordinate of the estimate; every number in the tables is for the full vector.*
 
 Both spread around a center. The model's center is $g$; the engine's sits short of it. More batches tighten the
 spread but never move a center. The spread is variance; the offset of the center is bias:
@@ -167,9 +168,8 @@ section 6 lowers one term by raising the other, and the right choice moves with 
 
 ## 5. Baseline: less variance, no bias
 
-Praise every move and the player learns nothing about which moves were good. A baseline is that praise: it adds the
-same $-b$ to every reward, so on average it cannot push the model toward any token. It still changes each
-individual update, and that is where the variance goes.
+A baseline subtracts the same $b$ from every reward. A constant added to every reward cannot favor any token on
+average, so the average row is unchanged. Each individual row does change, and that is where the variance goes.
 
 Replace $A = r_y$ with $A = r_y - b$ and multiply out the row:
 
@@ -179,31 +179,31 @@ The subtracted piece is not a constant: it depends on which $y$ was drawn and ch
 how often each $y$ is drawn the pieces cancel.
 
 :::note a constant reward moves nothing: every step
-Three tokens, $p = (0.6, 0.3, 0.1)$, reward $2$ whatever is drawn, so $A = 2$ for every row.
+The toy's $p = (0.5, 0.3, 0.2)$, reward $2$ whatever is drawn, so $A = 2$ for every row.
 
 | | $y = 0$ | $y = 1$ | $y = 2$ |
 |---|---|---|---|
-| how often, $p_y$ | 0.6 | 0.3 | 0.1 |
+| how often, $p_y$ | 0.5 | 0.3 | 0.2 |
 | $e_y$ | (1, 0, 0) | (0, 1, 0) | (0, 0, 1) |
-| $p - e_y$ | (−0.4, 0.3, 0.1) | (0.6, −0.7, 0.1) | (0.6, 0.3, −0.9) |
-| row $= 2\,(p - e_y)$ | (−0.8, 0.6, 0.2) | (1.2, −1.4, 0.2) | (1.2, 0.6, −1.8) |
-| $p_y \times$ row | (−0.48, 0.36, 0.12) | (0.36, −0.42, 0.06) | (0.12, 0.06, −0.18) |
+| $p - e_y$ | (−0.5, 0.3, 0.2) | (0.5, −0.7, 0.2) | (0.5, 0.3, −0.8) |
+| row $= 2\,(p - e_y)$ | (−1.0, 0.6, 0.4) | (1.0, −1.4, 0.4) | (1.0, 0.6, −1.6) |
+| $p_y \times$ row | (−0.50, 0.30, 0.20) | (0.30, −0.42, 0.12) | (0.20, 0.12, −0.32) |
 
-Sum of the last line, coordinate by coordinate: $-0.48 + 0.36 + 0.12 = 0$, $0.36 - 0.42 + 0.06 = 0$,
-$0.12 + 0.06 - 0.18 = 0$. Each row pushes its own token up (training subtracts the row) and the others down; token 0
-gets a push of $-0.8$ often, token 2 a push of $-1.8$ rarely, and each token's upward pushes equal what the other
+Sum of the last line, coordinate by coordinate: $-0.50 + 0.30 + 0.20 = 0$, $0.30 - 0.42 + 0.12 = 0$,
+$0.20 + 0.12 - 0.32 = 0$. Each row pushes its own token up (training subtracts the row) and the others down; token 0
+gets a push of $-1.0$ often, token 2 a push of $-1.6$ rarely, and each token's upward pushes equal what the other
 rows push it down. A baseline is this table with $-b$ in place of $2$.
 :::
 
 The toy, $r = (0, 0, 1)$, without a baseline and with $b = 0.2$:
 
-| $y$ | $p_y$ | $r_y$ | $p - e_y$ | $A = r_y$ | row $= A\,(p - e_y)$ | $A = r_y - 0.2$ | row $= A\,(p - e_y)$ | subtracted $= 0.2\,(p - e_y)$ | $p_y \times$ subtracted |
-|---|---|---|---|---|---|---|---|---|---|
-| 0 | 0.5 | 0 | (−0.5, 0.3, 0.2) | 0 | (0, 0, 0) | −0.2 | (0.10, −0.06, −0.04) | (−0.10, 0.06, 0.04) | (−0.05, 0.03, 0.02) |
-| 1 | 0.3 | 0 | (0.5, −0.7, 0.2) | 0 | (0, 0, 0) | −0.2 | (−0.10, 0.14, −0.04) | (0.10, −0.14, 0.04) | (0.03, −0.04, 0.01) |
-| 2 | 0.2 | 1 | (0.5, 0.3, −0.8) | 1 | (0.50, 0.30, −0.80) | 0.8 | (0.40, 0.24, −0.64) | (0.10, 0.06, −0.16) | (0.02, 0.01, −0.03) |
-| | | | | | **avg (0.10, 0.06, −0.16) $= g$** | | **avg (0.10, 0.06, −0.16) $= g$** | | **sum (0, 0, 0): bias the baseline adds** |
-| | | | | | **$\operatorname{Var}(x)$ 0.157** | | **$\operatorname{Var}(x)$ 0.103** | | |
+| $y$ | $p_y$ | $p - e_y$ | $A = r_y$ | row $= A\,(p - e_y)$ | $A = r_y - 0.2$ | row $= A\,(p - e_y)$ | subtracted $= 0.2\,(p - e_y)$ | $p_y \times$ subtracted |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 0.5 | (−0.5, 0.3, 0.2) | 0 | (0, 0, 0) | −0.2 | (0.10, −0.06, −0.04) | (−0.10, 0.06, 0.04) | (−0.05, 0.03, 0.02) |
+| 1 | 0.3 | (0.5, −0.7, 0.2) | 0 | (0, 0, 0) | −0.2 | (−0.10, 0.14, −0.04) | (0.10, −0.14, 0.04) | (0.03, −0.04, 0.01) |
+| 2 | 0.2 | (0.5, 0.3, −0.8) | 1 | (0.50, 0.30, −0.80) | 0.8 | (0.40, 0.24, −0.64) | (0.10, 0.06, −0.16) | (0.02, 0.01, −0.03) |
+| | | | | **avg (0.10, 0.06, −0.16) $= g$** | | **avg (0.10, 0.06, −0.16) $= g$** | | **sum (0, 0, 0): bias the baseline adds** |
+| | | | | **$\operatorname{Var}(x)$ 0.157** | | **$\operatorname{Var}(x)$ 0.103** | | |
 
 The average row is $g$ in both columns. The bias the baseline adds is the weighted sum of what it subtracts (last
 column), and that is zero because $e_y$ lands on each token as often as $p$ says: $\mathbb{E}[e_y] = p$
@@ -263,12 +263,11 @@ $$\operatorname{Var}_{p_{\text{engine}}}(w) = \mathbb{E}[w^2] - 1 = \sum_k \frac
 | weights $w$ | (0.83, 1.0, 2.0) | (0.72, 1.0, 20) |
 | $\chi^2 = \sum_k p_{\text{engine},k}\, w_k^2 - 1$ | $0.6 \cdot 0.83^2 + 0.3 \cdot 1 + 0.1 \cdot 2^2 - 1 = 0.12$ | $0.69 \cdot 0.72^2 + 0.30 \cdot 1 + 0.01 \cdot 20^2 - 1 = 3.66$ |
 
-Token 2 moved 0.19 either way. TV sees the difference, which is bounded by the mass that exists. $\chi^2$ sees the
-ratio squared, which is unbounded as $p_{\text{engine},2} \to 0$: token 2 alone contributes $0.01 \cdot 20^2 = 4.0$.
+TV sees the difference, bounded by the mass that exists. $\chi^2$ sees the ratio squared, unbounded as
+$p_{\text{engine},2} \to 0$; in the far column, token 2's term is nearly all of $\chi^2$.
 
-TV sets the bias of ignoring the mismatch; $\chi^2$ sets the variance of correcting it. From close to far, TV
-doubles and $\chi^2$ grows thirty-fold, so the same move costs REINFORCE a little more bias and IS far more variance.
-That gap is why caps and trust regions exist (6.2 to 6.4).
+TV sets the bias of ignoring the mismatch; $\chi^2$ sets the variance of correcting it. From the close sampler to
+the far one, TV doubles and $\chi^2$ grows thirtyfold. 6.2 shows both costs on batches; 6.4 puts a cap between them.
 
 ### 6.2 Three weights
 
@@ -292,8 +291,8 @@ them, under three choices of $w_2$:
   nothing. The average settles at a twentieth of the truth. Bias.
 - **IS** counts the row 20 times, which is exactly how under-represented it is. The average settles on the truth.
   But no batch is near it: six say zero, one says six times too much. Variance.
-- **TIS** [[13]](#ref-13)[[1]](#ref-1) counts it twice. A tenth of the truth on average, in lumps of 0.6: nearly
-  REINFORCE's bias with a little of IS's variance.
+- **TIS** [[13]](#ref-13)[[1]](#ref-1) counts it twice. A tenth of the truth on average, delivered by one batch
+  in seven: most of REINFORCE's bias with a little of IS's variance.
 
 The mismatch does not go away; $w_2$ only chooses whether it shows up as consistently short or as widely scattered.
 In the formulas of section 4, with $q = p_{\text{engine},2} = 0.01$:
@@ -314,13 +313,17 @@ TV; IS's $\operatorname{Var}(x) = 0.98\,(p_2^2/q - p_2^2)$ is token 2's term of 
 
 ![weights](figs/bv_weights_far.png)
 
-*Figure 4: left, one dot per batch of 16, placed at its estimate; the dashed line is the truth. Right, the average
-of the first $n$ batches as $n$ grows. REINFORCE and TIS settle short of the truth (bias); IS scatters widely and
-takes hundreds of batches to settle on it (variance).*
+*Figure 4: the exact distribution of one batch estimate under each weight. 85% of batches hold no token-2 row and
+estimate 0; 14% hold one. Dashed is $g$; the triangle is the mean of the estimate. REINFORCE and TIS center short
+of $g$. IS centers on it, but its one informative batch in seven lands six times past it.*
 
-### 6.3 Every method, both engines
+### 6.3 Every method, both samplers
 
-Two more choices of $w$, both built on the ratio $\rho_y = p_y / p_{\text{engine},y}$:
+Three more choices of $w$, all built on the ratio $\rho_y = p_y / p_{\text{engine},y}$:
+
+- **CISPO** [[21]](#ref-21), ratio against $\theta_{\text{old}}$, clamps $\rho_y$ at a cap and stops the gradient
+  through the clamp, so a token above the cap gets $w = \text{cap}$ where PPO below gives $w = 0$. In this frame it
+  is TIS with a higher cap. The paper tunes the cap and does not publish it; 4 here.
 
 - **PPO** [[14]](#ref-14), ratio against $\theta_{\text{old}}$, sets $w = 0$ when $\rho_y$ leaves
   $[1 - \epsilon, 1 + \epsilon]$ in the direction $A$ favors, and $w = \rho_y$ otherwise. $\epsilon = 0.2$
@@ -328,31 +331,27 @@ Two more choices of $w$, both built on the ratio $\rho_y = p_y / p_{\text{engine
 - **DPPO** [[2]](#ref-2), ratio against the engine, sets $w = 0$ when $|p_y - p_{\text{engine},y}| > \delta$ (here
   $\delta = 0.15$) in the direction $A$ favors, and $w = \rho_y$ otherwise.
 
-![methods](figs/bv_methods.png)
+Table 1: every method on both samplers ($b = 0$, per-sample variance). Every bias is a multiple of $v$, so one
+coefficient gives it.
 
-*Figure 5: squared error of the batch estimate at $B = 16$. Close engine (left): IS, TIS and DPPO coincide (the cap
-of 2 does not bind, and DPPO passes since only 0.10 moved). Far engine (right): IS is mostly variance, the rest are
-mostly bias.*
+| sampler | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error, $B = 16$ | error, $B = 256$ |
+|---|---|---|---|---|---|---|---|
+| close | REINFORCE | 1 | $-0.10\,v$ | 0.0098 | 0.088 | 0.015 | 0.010 |
+| close | IS, TIS, CISPO, DPPO | 2 | 0 | 0 | 0.353 | 0.022 | 0.0014 |
+| close | PPO | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
+| far | REINFORCE | 1 | $-0.19\,v$ | 0.0354 | 0.010 | 0.036 | 0.035 |
+| far | IS | 20 | 0 | 0 | 3.881 | 0.243 | 0.015 |
+| far | TIS (cap 2) | 2 | $-0.18\,v$ | 0.0318 | 0.039 | 0.034 | 0.032 |
+| far | CISPO (cap 4) | 4 | $-0.16\,v$ | 0.0251 | 0.155 | 0.035 | 0.026 |
+| far | PPO, DPPO | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
 
-Table 1: the numbers behind Figure 5 ($b = 0$, per-sample variance, error at $B = 16$). Every bias is a multiple
-of $v$, so one coefficient gives it.
-
-| engine | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error |
-|---|---|---|---|---|---|---|
-| close | REINFORCE | 1 | $-0.10\,v$ | 0.0098 | 0.088 | 0.015 |
-| close | IS, TIS, DPPO | 2 | 0 | 0 | 0.353 | 0.022 |
-| close | PPO | 0 | $-g$ | 0.0392 | 0 | 0.039 |
-| far | REINFORCE | 1 | $-0.19\,v$ | 0.0354 | 0.010 | 0.036 |
-| far | IS | 20 | 0 | 0 | 3.881 | 0.243 |
-| far | TIS | 2 | $-0.18\,v$ | 0.0318 | 0.039 | 0.034 |
-| far | PPO, DPPO | 0 | $-g$ | 0.0392 | 0 | 0.039 |
-
-1. **Unbiased is not better.** With the close engine, REINFORCE beats IS at $B = 16$.
-2. **The trust-region methods look worst, by design.** PPO and DPPO set $w_2 = 0$, so they estimate the zero vector and their bias is $-g$. They do not
-   aim to estimate one gradient well; they stop the step on tokens that already moved too far. That pays off only
-   across steps (section 7).
-3. **PPO and DPPO disagree on the close engine.** $\rho_2 = 2$, so PPO blocks token 2. Only 0.10 of probability
-   moved, under $\delta = 0.15$, so DPPO keeps it.
+1. **Unbiased is not better at $B = 16$.** On the close sampler REINFORCE beats IS; on the far one TIS beats both.
+   At $B = 256$ the order flips on the close sampler and IS wins.
+2. **The trust-region methods look worst, by design.** PPO and DPPO set $w_2 = 0$, so they estimate the zero
+   vector and their bias is $-g$. They do not aim to estimate one gradient well; they stop the step on tokens that
+   already moved too far. That pays off only across steps (section 7).
+3. **PPO and DPPO disagree on the close sampler.** $\rho_2 = 2$, outside PPO's band, so PPO blocks token 2. Only
+   0.10 of probability moved, under $\delta = 0.15$, so DPPO keeps it.
 
 ### 6.4 Where to put the cap
 
@@ -360,10 +359,16 @@ A cap trades variance for bias, and the best trade depends on $B$:
 
 ![cap](figs/bv_cap.png)
 
-*Figure 6: far engine, error versus the cap on $w$. At $B = 16$ the best cap is about 3. At $B = 256$ the variance
-term is 16 times smaller, so the best cap rises to about 14.*
+*Figure 5: far sampler, error against the cap on $w$, at two batch sizes.*
 
-Common TIS implementations cap at 2 [[1]](#ref-1). The same trade appears in classic off-policy RL as V-trace
+| $B$ | best cap | error at best cap | cap 2 | cap 4 | no cap |
+|---|---|---|---|---|---|
+| 16 | 2.8 | 0.034 | 0.034 | 0.035 | 0.243 |
+| 256 | 14.2 | 0.011 | 0.032 | 0.026 | 0.015 |
+
+At $B = 256$ the variance term is 16 times smaller, so the cap can rise fivefold before the variance it lets in
+costs more than the bias it removes. Common TIS implementations cap at 2 [[1]](#ref-1), which is near the best at
+$B = 16$ and three times too low at $B = 256$. The same trade appears in classic off-policy RL as V-trace
 [[15]](#ref-15) and Retrace [[16]](#ref-16).
 
 ## 7. Across steps: the blind spot and the trust region
@@ -443,26 +448,24 @@ $\|\text{bias}\|^2 + \operatorname{Var}(x)/B$ against the other.
 
 **Group-mean baseline** (GRPO [[7]](#ref-7)): $A = r_y - b$ with $b$ the mean reward of the $G$ responses to the
 same prompt. A shift, so the subtracted piece averages to zero (section 5) and only the variance falls. One catch:
-the mean includes the response's own reward, which shrinks the average row by $(G - 1)/G$. RLOO [[20]](#ref-20)
-averages the other $G - 1$ responses, keeping $b$ independent of the response.
+the mean includes the response's own reward, which scales the average row by $(G - 1)/G$. A constant scale on $g$
+keeps its direction; the learning rate absorbs it. RLOO [[20]](#ref-20) averages the other $G - 1$ responses and
+removes it.
 
 **Std and length division** (GRPO [[7]](#ref-7)): $A = (r_y - b)/\operatorname{std}$, and the token sum divided by
-response length. These are rescales, not shifts. A shift subtracts a piece with mean zero; a rescale multiplies the
-row by a factor computed from the same group, which does not average out: the average row becomes $g$ reweighted
-across prompts and lengths. Variance falls, since every prompt's rows arrive at one scale. Dr. GRPO [[8]](#ref-8)
-drops both. The toy has one prompt, so its std factor is a constant and shows no bias.
+response length. These factors differ from prompt to prompt and response to response, so they do not scale $g$;
+they reweight it. Dr. GRPO [[8]](#ref-8) names both effects: the std division weights up prompts whose rewards are
+nearly all right or all wrong, and the length division penalizes a long wrong response less per token than a short
+one. It drops both. The toy has one prompt and one position, so neither factor varies and neither effect appears.
 
 ### 8.2 The weight
 
 $w$ is a function of $\rho = p_y / p_{\text{engine},y}$, against the engine for IS, TIS and DPPO and against
 $\theta_{\text{old}}$ for CISPO, PPO and GSPO (section 6).
 
-- **REINFORCE**, $w = 1$: the lowest variance; bias grows with TV.
-- **IS**, $w = \rho$: no bias; variance grows with $\chi^2$, dominated by the rare row's $p_2^2 / p_{\text{engine},2}$.
-- **TIS**, $w = \min(\rho, 2)$: the part of $\chi^2$ above the cap becomes bias; the best cap grows with $B$ (Figure 6).
-- **CISPO** [[21]](#ref-21), $w = \min(\rho, 4)$ with the ratio held fixed under differentiation: TIS with a higher
-  cap, and no row is zeroed. On the far engine, less bias and more variance than TIS; the same error at $B = 16$
-  and the better of the two at $B = 256$ (Table 4).
+REINFORCE, IS, TIS and CISPO are the cap at 1, at infinity, at 2 and at 4 (6.2, 6.4). The rest are variations
+on the zero:
+
 - **PPO** [[14]](#ref-14), $w = \rho$ in the band, $0$ outside it in the direction $A$ favors: a zeroed row has bias
   $-g$ on that token and no variance. DAPO's clip-higher [[23]](#ref-23) widens the upper edge, so fewer rare tokens
   with positive $A$ are zeroed: less bias, more variance.
@@ -471,30 +474,17 @@ $\theta_{\text{old}}$ for CISPO, PPO and GSPO (section 6).
   under a tight band add bias. On the one-position toy the sequence ratio is $\rho_2$ and GSPO coincides with PPO.
 - **DPPO** [[2]](#ref-2), $w = \rho$, zeroed when $|p - p_{\text{engine}}| > \delta$ in the direction $A$ favors:
   the zero is placed by moved mass, not by $\rho$. A rare token passes uncapped, so DPPO carries IS's variance there;
-  a confident token that moved far is zeroed (Table 3). Close engine: passes, equals IS. Far engine: zeroed, equals
-  PPO. The bias on zeroed tokens buys the across-step bound of section 7.
+  a confident token that moved far is zeroed (Table 3). On the close sampler it passes and equals IS; on the far one
+  it is zeroed and equals PPO. The bias on zeroed tokens buys the across-step bound of section 7.
 
-Table 4: Table 1 with CISPO (cap 4) added and the error at a larger batch ($b = 0$, per-sample variance).
-
-| engine | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error, $B = 16$ | error, $B = 256$ |
-|---|---|---|---|---|---|---|---|
-| close | REINFORCE | 1 | $-0.10\,v$ | 0.0098 | 0.088 | 0.015 | 0.010 |
-| close | IS, TIS, CISPO, DPPO | 2 | 0 | 0 | 0.353 | 0.022 | 0.0014 |
-| close | PPO | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
-| far | REINFORCE | 1 | $-0.19\,v$ | 0.0354 | 0.010 | 0.036 | 0.035 |
-| far | IS | 20 | 0 | 0 | 3.881 | 0.243 | 0.015 |
-| far | TIS (cap 2) | 2 | $-0.18\,v$ | 0.0318 | 0.039 | 0.034 | 0.032 |
-| far | CISPO (cap 4) | 4 | $-0.16\,v$ | 0.0251 | 0.155 | 0.035 | 0.026 |
-| far | PPO, DPPO | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
-
-Table 5: each choice, the term it lowers and the term it raises.
+Table 4: each choice, the term it lowers and the term it raises.
 
 | choice | $A$ | $w$ | lowers | raises |
 |---|---|---|---|---|
 | no baseline | $r_y$ | | nothing: the reference point | nothing |
-| group mean (GRPO) | $r_y - b$ | | variance | bias: a shrink along $g$ by $(G-1)/G$ |
+| group mean (GRPO) | $r_y - b$ | | variance | a scale of $g$ by $(G-1)/G$, direction unchanged |
 | leave-one-out mean (RLOO) | $r_y - b$, own reward excluded | | variance | nothing |
-| std, length division (GRPO) | $(r_y - b)/\operatorname{std}$, $/\text{length}$ | | variance: one scale across prompts | bias: $g$ reweighted by group spread and length |
+| std, length division (GRPO) | $(r_y - b)/\operatorname{std}$, $/\text{length}$ | | the spread of $A$ across prompts | bias: $g$ reweighted by group spread and length |
 | REINFORCE | | $1$ | variance | bias, with TV |
 | IS | | $\rho$ | bias, to zero | variance, with $\chi^2$ |
 | TIS | | $\min(\rho, 2)$ | variance above the cap | bias where the cap binds |
@@ -502,8 +492,6 @@ Table 5: each choice, the term it lowers and the term it raises.
 | PPO | | $\rho$; $0$ outside the band in the favored direction | variance on zeroed tokens; next-step bias (section 7) | bias $-g$ on zeroed tokens |
 | GSPO | | sequence ratio; $0$ outside a tight band, per response | variance from per-token ratios | bias: whole responses zeroed |
 | DPPO | | $\rho$; $0$ when moved mass $> \delta$ in the favored direction | next-step bias; fewer zeros on rare tokens than PPO | bias $-g$ on zeroed tokens; IS's variance on rare tokens that pass |
-
-Next: the same measurement on a real training run, per method.
 
 ## References
 
