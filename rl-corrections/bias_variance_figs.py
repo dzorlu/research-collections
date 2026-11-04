@@ -38,8 +38,8 @@ def weights(method, p_engine):
     return r
   if method == 'TIS (cap 2)':
     return r.clamp(max=2.0)
-  if method == 'PPO (ratio to engine)':
-    return torch.where(r > 1.28, 0.0, r)               # A > 0 only matters on token 2
+  if method == 'PPO (eps 0.2)':
+    return torch.where(r > 1.2, 0.0, r)                # A > 0 only matters on token 2
   if method == 'DPPO (delta 0.15)':
     return torch.where((r > 1) & (moved > 0.15), 0.0, r)
   raise ValueError(method)
@@ -131,53 +131,34 @@ axes[1].set_xlabel(f"token 2's coordinate of the batch estimate (B = {B}, {N_BAT
 fig.tight_layout()
 fig.savefig('figs/bv_baseline.png', dpi=150)
 
-# Figure 2: three weights, far engine. Left: individual batches. Right: what averaging many batches converges to.
+# Figure 4: three weights, far engine. The exact distribution of one batch estimate (token 2's coordinate).
+# A batch of B rows from the far engine holds k token-2 rows with k ~ Binomial(B, 0.01); its estimate is w_2 * k / B * v.
 methods = ['REINFORCE', 'IS', 'TIS (cap 2)']
 colors = [BLUE, ORANGE, AQUA]
-fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(10.5, 3.8), gridspec_kw={'width_ratios': [1, 1.3]})
-n_show = 300
-for i, (m, color) in enumerate(zip(methods, colors)):
-  w = weights(m, ENGINES['far'])
-  est = batches(w, ENGINES['far'])                                   # [N_BATCHES]
-  jitter = (torch.rand(n_show) - 0.5) * 0.5                           # [n_show]
-  ax_l.scatter(est[:n_show].numpy(), (i + jitter).numpy(), s=10, color=color, alpha=0.5, linewidths=0)
-  running = est.cumsum(0) / torch.arange(1, len(est) + 1)            # [N_BATCHES]
-  ax_r.plot(torch.arange(1, len(est) + 1).numpy(), running.numpy(), color=color, linewidth=2, label=f'{m}: ends at {running[-1].item():.3f}')
-for ax in (ax_l, ax_r):
-  ax.grid(axis='y' if ax is ax_r else 'x')
-ax_l.axvline(TRUE2, color=INK, linestyle='--', linewidth=1.2)
-ax_l.set_yticks(range(3), methods)
-ax_l.invert_yaxis()
-ax_l.grid(axis='y', visible=False)
-ax_l.set_xlabel(f"token 2's coordinate, one batch of {B}  (dashed: true -0.16)")
-ax_l.set_title(f'{n_show} single batches', fontsize=10, loc='left')
-ax_r.axhline(TRUE2, color=INK, linestyle='--', linewidth=1.2)
-ax_r.set_xscale('log')
-ax_r.set_xlim(1, N_BATCHES)
-ax_r.legend(frameon=False, loc='lower right', fontsize=9)
-ax_r.annotate('true -0.16', (1.2, TRUE2), xytext=(0, 4), textcoords='offset points', fontsize=9, color=INK)
-ax_r.set_ylim(-0.6, 0.05)
-ax_r.set_xlabel('number of batches averaged')
-ax_r.set_ylabel("average estimate, token 2's coordinate")
-ax_r.set_title('averaging more batches: where each method ends up', fontsize=10, loc='left')
+q = ENGINES['far'][2].item()
+k = torch.arange(0, 4)                                                            # [4]  token-2 rows in the batch
+pk = torch.distributions.Binomial(B, torch.tensor(q)).log_prob(k.float()).exp()   # [4]  P(k)
+fig, axes = plt.subplots(1, 3, figsize=(10.5, 3.4), sharey=True)
+for ax, m, color in zip(axes, methods, colors):
+  w2 = weights(m, ENGINES['far'])[2].item()
+  est = w2 * k / B * rows(torch.ones(V))[2, 2]                                    # [4]  token 2's coordinate of the estimate
+  mean = (pk * est).sum().item()
+  ax.bar(est.numpy(), pk.numpy(), width=0.045 * (est[-1] - est[0]).abs().item(), color=color)
+  for e, pr in zip(est.tolist(), pk.tolist()):
+    if pr < 0.005: continue
+    ax.annotate(f'{pr:.0%}', (e, pr), xytext=(0, 3), textcoords='offset points', ha='center', fontsize=8, color=MUTED)
+  ax.axvline(TRUE2, color=INK, linestyle='--', linewidth=1.2)
+  ax.plot(mean, 0, marker='^', color=INK, markersize=9, clip_on=False, zorder=5)
+  ax.set_title(f'{m}, w_2 = {w2:g}', fontsize=10, loc='left')
+  ax.set_xlabel(f"token 2's coordinate of one batch of {B}")
+  ax.grid(axis='x', visible=False)
+  ax.set_ylim(0, 1)
+axes[0].set_ylabel('probability of the batch')
 fig.tight_layout()
 fig.savefig('figs/bv_weights_far.png', dpi=150)
+print('far engine, B=16: P(k token-2 rows)', [f'{v:.3f}' for v in pk.tolist()])
 
-# Figure 3: error = ||bias||^2 + variance / B, per method, close and far engine.
-all_methods = ['REINFORCE', 'IS', 'TIS (cap 2)', 'PPO (ratio to engine)', 'DPPO (delta 0.15)']
-fig, axes = plt.subplots(1, 2, figsize=(10, 3.8))
-for ax, (name, p_engine) in zip(axes, ENGINES.items()):
-  b2, v = zip(*[(bias2, var / B) for bias2, var in (exact(weights(m, p_engine), p_engine) for m in all_methods)])
-  x = range(len(all_methods))
-  ax.bar(x, b2, color=BLUE, width=0.6, label='||bias||²')
-  ax.bar(x, v, bottom=b2, color=ORANGE, width=0.6, label=f'variance / B', edgecolor='#fcfcfb', linewidth=2)
-  ax.set_xticks(list(x), [m.replace(' (', '\n(') for m in all_methods], fontsize=8)
-  ax.set_title(f'{name} engine  (p_engine = {[round(v, 2) for v in p_engine.tolist()]})', fontsize=10, loc='left')
-  ax.grid(axis='x', visible=False)
-axes[0].set_ylabel(f'squared error of the batch estimate (B = {B})')
-axes[0].legend(frameon=False)
-fig.tight_layout()
-fig.savefig('figs/bv_methods.png', dpi=150)
+all_methods = ['REINFORCE', 'IS', 'TIS (cap 2)', 'PPO (eps 0.2)', 'DPPO (delta 0.15)']
 
 # Figure 5: the cap trade, far engine. Error vs cap for two batch sizes.
 caps = torch.logspace(0, torch.log10(torch.tensor(20.0)), 80)   # [80]
@@ -191,6 +172,8 @@ for ax, batch in zip(axes, [16, 256]):
   ax.plot(caps.numpy(), v.numpy(), color=ORANGE, linewidth=2, label='variance / B')
   ax.plot(caps.numpy(), (b2 + v).numpy(), color=AQUA, linewidth=2, label='error')
   best = (b2 + v).argmin()
+  print(f'cap trade B={batch}: best cap {caps[best].item():.1f}, error there {(b2 + v)[best].item():.4f}, '
+        f'error at cap 2 {(b2 + v)[(caps - 2).abs().argmin()].item():.4f}, at cap 4 {(b2 + v)[(caps - 4).abs().argmin()].item():.4f}, uncapped {(b2 + v)[-1].item():.4f}')
   ax.annotate(f'best cap {caps[best].item():.1f}', (caps[best].item(), (b2 + v)[best].item()), fontsize=9,
               xytext=(0, 18), textcoords='offset points', ha='center')
   ax.set_xscale('log')

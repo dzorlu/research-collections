@@ -22,16 +22,19 @@ number can be checked by hand.
 
 ## 1. The question
 
-RL for language models estimates the policy gradient from a sampled batch. The tokens are usually written by an
-inference engine rather than the model being trained: a separate copy that is a few updates behind and numerically
-slightly different [[1]](#ref-1)[[2]](#ref-2). Importance sampling (IS), truncated IS (TIS), PPO and DPPO each modify
-the estimator to cope with that mismatch. This post measures, on a toy where everything is exact, how far each
-modified estimator lands from the true gradient, split into bias and variance.
+RL for language models estimates the policy gradient from a sampled batch. The tokens in the batch were rarely
+written by the model being trained. They come from an inference engine that is numerically different from the
+trainer [[1]](#ref-1)[[2]](#ref-2), and the trainer takes several steps on one batch, so by the second step its
+parameters are no longer the ones that wrote the tokens [[14]](#ref-14). Importance sampling (IS), truncated IS
+(TIS), CISPO, PPO, GSPO and DPPO each modify the per-token weight to cope with that; GRPO and RLOO modify the
+advantage. This post measures, on a toy where everything is exact, how far each estimator lands from the true
+gradient, split into bias and variance.
 
 ## 2. The update
 
 Let $z \in \mathbb{R}^V$ be the logits at one position, $p = \operatorname{softmax}(z)$ the trained model's
-distribution, and $p_{\text{engine}}$ the distribution of the engine that samples. For a sampled token $y$ with
+distribution, and $p_{\text{engine}}$ the distribution that actually wrote the tokens (section 6 says what it is in
+each method). For a sampled token $y$ with
 one-hot $e_y$, advantage $A$ and per-token weight $w$, the policy-gradient update on the logits is [[3]](#ref-3)
 
 $$\text{dlogits} = w\,A\,(p - e_y).$$
@@ -199,9 +202,19 @@ column), and that is zero because $e_y$ lands on each token as often as $p$ says
 *Figure 3: 20,000 batches of 16, model sampling itself, token 2's coordinate of the batch estimate. Both center on
 the true value; $b = 0.2$ is narrower.*
 
-## 6. When the engine writes the tokens
+## 6. When the model did not write the tokens
 
-Now $y \sim p_{\text{engine}}$ while the target is still $g$. Two engines, $b = 0$:
+Sections 4 and 5 assumed $y \sim p$. In training the tokens come from a distribution that differs from $p$ in one
+of two ways. Both show up as the same thing in the row: a ratio $\rho_y = p_y / p_{\text{engine},y}$ that is not 1.
+
+| mismatch | what wrote the tokens | why it differs from $p$ | methods whose ratio is against it |
+|---|---|---|---|
+| engine vs trainer | the inference engine, same parameters | different kernels, precision and batching [[1]](#ref-1) | IS, TIS, DPPO; REINFORCE ignores it |
+| old vs new parameters | the trainer at $\theta_{\text{old}}$, the parameters when the batch was sampled | several optimizer steps are taken on one batch; after the first, $\theta$ has moved [[14]](#ref-14) | PPO, CISPO, GSPO |
+
+The toy needs only $p$ and the distribution that wrote the tokens, so one symbol serves both: $p_{\text{engine}}$
+below is the engine for the first group and $p_{\theta_{\text{old}}}$ for the second. The arithmetic is identical.
+The two mismatches differ in what happens next, which is section 7. Two samplers, $b = 0$:
 
 ```python
 p     = [0.5,  0.3,  0.2 ]    # model
@@ -297,10 +310,11 @@ takes hundreds of batches to settle on it (variance).*
 
 Two more choices of $w$, both built on the ratio $\rho_y = p_y / p_{\text{engine},y}$:
 
-- **PPO** [[14]](#ref-14), with the ratio taken against the engine, sets $w = 0$ when $\rho_y$ leaves
-  $[1 - \epsilon, 1 + \epsilon]$ in the direction $A$ favors, and $w = \rho_y$ otherwise.
-- **DPPO** [[2]](#ref-2) sets $w = 0$ when $|p_y - p_{\text{engine},y}| > \delta$ (here $\delta = 0.15$) in the
-  direction $A$ favors, and $w = \rho_y$ otherwise.
+- **PPO** [[14]](#ref-14), ratio against $\theta_{\text{old}}$, sets $w = 0$ when $\rho_y$ leaves
+  $[1 - \epsilon, 1 + \epsilon]$ in the direction $A$ favors, and $w = \rho_y$ otherwise. $\epsilon = 0.2$
+  throughout, the paper's default.
+- **DPPO** [[2]](#ref-2), ratio against the engine, sets $w = 0$ when $|p_y - p_{\text{engine},y}| > \delta$ (here
+  $\delta = 0.15$) in the direction $A$ favors, and $w = \rho_y$ otherwise.
 
 ![methods](figs/bv_methods.png)
 
@@ -315,7 +329,7 @@ of $v$, so one coefficient gives it.
 |---|---|---|---|---|---|---|
 | close | REINFORCE | 1 | $-0.10\,v$ | 0.0098 | 0.088 | 0.015 |
 | close | IS, TIS, DPPO | 2 | 0 | 0 | 0.353 | 0.022 |
-| close | PPO (ratio to engine) | 0 | $-g$ | 0.0392 | 0 | 0.039 |
+| close | PPO | 0 | $-g$ | 0.0392 | 0 | 0.039 |
 | far | REINFORCE | 1 | $-0.19\,v$ | 0.0354 | 0.010 | 0.036 |
 | far | IS | 20 | 0 | 0 | 3.881 | 0.243 |
 | far | TIS | 2 | $-0.18\,v$ | 0.0318 | 0.039 | 0.034 |
@@ -398,8 +412,8 @@ drops both. The toy has one prompt, so its std factor is a constant and shows no
 
 ### 8.2 The weight
 
-$w$ is a function of $\rho = p_y / p_{\text{engine},y}$, taken against the engine as in section 6.3. In practice
-CISPO, PPO and GSPO take it against the recompute, the trainer's own log-probs before the step.
+$w$ is a function of $\rho = p_y / p_{\text{engine},y}$, against the engine for IS, TIS and DPPO and against
+$\theta_{\text{old}}$ for CISPO, PPO and GSPO (section 6).
 
 - **REINFORCE**, $w = 1$: the lowest variance; bias grows with TV.
 - **IS**, $w = \rho$: no bias; variance grows with $\chi^2$, dominated by the rare row's $p_2^2 / p_{\text{engine},2}$.
@@ -424,7 +438,7 @@ Table 4: Table 1 with CISPO (cap 4) added and the error at a larger batch ($b = 
 |---|---|---|---|---|---|---|---|
 | close | REINFORCE | 1 | $-0.10\,v$ | 0.0098 | 0.088 | 0.015 | 0.010 |
 | close | IS, TIS, CISPO, DPPO | 2 | 0 | 0 | 0.353 | 0.022 | 0.0014 |
-| close | PPO (ratio to engine) | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
+| close | PPO | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
 | far | REINFORCE | 1 | $-0.19\,v$ | 0.0354 | 0.010 | 0.036 | 0.035 |
 | far | IS | 20 | 0 | 0 | 3.881 | 0.243 | 0.015 |
 | far | TIS (cap 2) | 2 | $-0.18\,v$ | 0.0318 | 0.039 | 0.034 | 0.032 |
