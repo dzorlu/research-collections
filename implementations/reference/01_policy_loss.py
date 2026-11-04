@@ -128,6 +128,5 @@ assert torch.allclose(logp_new.grad, expected, atol=1e-5), logp_new.grad
 print("ok")
 
 
-def policy_loss_from_logits(logits, y, logp_old, A, mask, mode, **kw):
-    logp = torch.log_softmax(logits, -1).gather(-1, y.unsqueeze(-1)).squeeze(-1)   # (B, T)
-    return policy_loss(logp, logp_old, A, mask, mode, **kw)
+def logp_from_logits(logits, y):
+    return torch.log_softmax(logits, -1).gather(-1, y.unsqueeze(-1)).squeeze(-1)   # (B, T)
