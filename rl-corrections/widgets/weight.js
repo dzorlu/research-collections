@@ -107,7 +107,7 @@ window.widgets.weight = function (el) {
     const path = (key, color) => svg.appendChild(svgEl('path', { d: rows.map(([c, s], i) => `${i ? 'L' : 'M'}${f.sx(c)},${f.sy(s[key])}`).join(' '), fill: 'none', stroke: color, 'stroke-width': 2 }));
     path('bias2', BLUE); svg.appendChild(svgEl('path', { d: rows.map(([c, s], i) => `${i ? 'L' : 'M'}${f.sx(c)},${f.sy(s.variance / B)}`).join(' '), fill: 'none', stroke: ORANGE, 'stroke-width': 2 }));
     path('error', AQUA);
-    const best = rows.reduce((a, b) => (b[1].error < a[1].error ? b : a));
+    const cStar = Math.min(rho, P2 / (q + (1 - q) / B)), best = [cStar, stats(q, cStar, B)];   // d error / d cap = 0
     svg.appendChild(svgEl('circle', { cx: f.sx(best[0]), cy: f.sy(best[1].error), r: 3.5, fill: AQUA, stroke: '#fff' }));
     svg.appendChild(svgEl('text', { x: f.sx(best[0]), y: f.sy(best[1].error) - 7, 'text-anchor': 'middle', 'font-size': 8, fill: INK }, `best cap ${best[0].toFixed(1)}`));
     if (w >= 1 && w <= rho) {

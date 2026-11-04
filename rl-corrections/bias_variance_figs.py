@@ -171,7 +171,7 @@ for ax, batch in zip(axes, [16, 256]):
   ax.plot(caps.numpy(), b2.numpy(), color=BLUE, linewidth=2, label='||bias||²')
   ax.plot(caps.numpy(), v.numpy(), color=ORANGE, linewidth=2, label='variance / B')
   ax.plot(caps.numpy(), (b2 + v).numpy(), color=AQUA, linewidth=2, label='error')
-  best = (b2 + v).argmin()
+  best = (b2 + v).argmin()   # closed form: cap* = p_2 / (q + (1 - q) / B), 2.78 at B = 16 and 14.4 at B = 256
   print(f'cap trade B={batch}: best cap {caps[best].item():.1f}, error there {(b2 + v)[best].item():.4f}, '
         f'error at cap 2 {(b2 + v)[(caps - 2).abs().argmin()].item():.4f}, at cap 4 {(b2 + v)[(caps - 4).abs().argmin()].item():.4f}, uncapped {(b2 + v)[-1].item():.4f}')
   ax.annotate(f'best cap {caps[best].item():.1f}', (caps[best].item(), (b2 + v)[best].item()), fontsize=9,

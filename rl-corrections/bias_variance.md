@@ -83,16 +83,20 @@ v = p - e_2 = (0.5,\ 0.3,\ -0.8), \qquad g = 0.2\,v = (0.10,\ 0.06,\ -0.16), \\
 With $q$ the probability that a sampled token is 2, one row is $x = v$ with probability $q$ and $0$ otherwise:
 a Bernoulli($q$) scaled by $v$. A batch average is $v$ times the fraction of 2s it drew.
 
+Two conventions from here on. A distribution of vectors is hard to draw, so every figure draws token 2's
+coordinate of the estimate, while every number in the tables is for the full vector. A symbol with a dotted
+underline shows where it comes from on hover.
+
 The model writes token 2 at $q = p_2 = 0.2$. Suppose instead a sampler that writes it half as often, $q = 0.1$;
 section 6 calls it the close engine. Draw many batches of 16 from each:
 
 ![model vs engine batches](figs/bv_bias_scatter.png)
 
-*Figure 1: where batches of 16 land, 20,000 from each sampler. Dashed is $g$. Every figure draws token 2's
-coordinate of the estimate; every number in the tables is for the full vector.*
+*Figure 1: where batches of 16 land, 20,000 from each sampler. Dashed is $g$.*
 
-Both spread around a center. The model's center is $g$; the engine's sits short of it. More batches tighten the
-spread but never move a center. The spread is variance; the offset of the center is bias:
+Each sampler's batches spread around a center. The model's center is $g$, the engine's is short of it, and more
+batches tighten the spread without moving either center. The spread is the variance and the offset of the center
+is the bias:
 
 **Error.** The error of the estimator is the mean squared miss over batches, $\mathbb{E}\,\|\hat g_B - g\|^2$. It
 decomposes into bias and variance [[5]](#ref-5):
@@ -138,7 +142,8 @@ $$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = {{\|v\|^2\, q(1-q) @@ the
 | error $= \|\text{bias}\|^2 + \operatorname{Var}(x)/B$ | $0.157 / B$ | $0.0098 + 0.088 / B$ |
 | at $B = 16$ | 0.0098 | $0.0098 + 0.0055 = 0.0153$ |
 
-The model's bias is 0 because it writes token 2 at exactly the rate $g$ weights the $y = 2$ row, $q = p_2$
+The two 0.0098 are a coincidence of the toy: the model's $0.157/16$ and the engine's $0.98 \cdot 0.1^2$ happen to
+agree. The model's bias is 0 because it writes token 2 at exactly the rate $g$ weights the $y = 2$ row, $q = p_2$
 (section 3). Bias appears when that match breaks: $y$ drawn from a different distribution than $p$, as with the
 engine, or the row changed ($w \ne 1$, $A$ rescaled).
 
@@ -207,7 +212,9 @@ The toy, $r = (0, 0, 1)$, without a baseline and with $b = 0.2$:
 
 The average row is $g$ in both columns. The bias the baseline adds is the weighted sum of what it subtracts (last
 column), and that is zero because $e_y$ lands on each token as often as $p$ says: $\mathbb{E}[e_y] = p$
-[[3]](#ref-3)[[6]](#ref-6). The rows sit closer to the unchanged average, so lower variance.
+[[3]](#ref-3)[[6]](#ref-6). The rows sit closer to the unchanged average, so lower variance. With three nonzero
+rows the variance is $\sum_y p_y \|\text{row}_y\|^2 - \|g\|^2$: $0.196 - 0.039 = 0.157$ without the baseline and
+$0.142 - 0.039 = 0.103$ with it.
 
 ![baseline](figs/bv_baseline.png)
 
@@ -236,7 +243,7 @@ far   = [0.69, 0.30, 0.01]    # almost never writes token 2
 
 ### 6.1 Two distances between engine and model
 
-The engine's error on each token can be read as a difference or as a ratio. The far engine:
+The engine's mismatch on each token can be read as a difference or as a ratio. The far engine:
 
 | token $k$ | $p_k$ | $p_{\text{engine},k}$ | difference $p_k - p_{\text{engine},k}$ | ratio $p_k / p_{\text{engine},k}$ |
 |---|---|---|---|---|
@@ -251,17 +258,17 @@ $$\mathrm{TV} = \tfrac{1}{2}\textstyle\sum_k |p_k - p_{\text{engine},k}|,$$
 half because each move is counted where it leaves and where it lands. It is the mass that moved, so it never
 exceeds 1.
 
-**Chi-squared** is the variance of the ratio. The ratio is the importance weight, $w_k = p_k / p_{\text{engine},k}$
-[[10]](#ref-10)[[12]](#ref-12). Under the engine it is random, averages to 1 (since
+**Chi-squared** is the variance of the ratio $\rho_k = p_k / p_{\text{engine},k}$, which importance sampling uses
+as its weight [[10]](#ref-10)[[12]](#ref-12). Under the engine the ratio is random, averages to 1 (since
 $\sum_k p_{\text{engine},k} \cdot p_k / p_{\text{engine},k} = 1$), and its variance is [[11]](#ref-11)
 
-$$\operatorname{Var}_{p_{\text{engine}}}(w) = \mathbb{E}[w^2] - 1 = \sum_k \frac{p_k^2}{p_{\text{engine},k}} - 1 = \chi^2(p \,\|\, p_{\text{engine}}).$$
+$$\operatorname{Var}_{p_{\text{engine}}}(\rho) = \mathbb{E}[\rho^2] - 1 = \sum_k \frac{p_k^2}{p_{\text{engine},k}} - 1 = \chi^2(p \,\|\, p_{\text{engine}}).$$
 
 | | close engine, (0.6, 0.3, 0.1) | far engine, (0.69, 0.30, 0.01) |
 |---|---|---|
 | TV $= \tfrac12 \sum_k \lvert p_k - p_{\text{engine},k} \rvert$ | $\tfrac12 (0.1 + 0 + 0.1) = 0.10$ | $\tfrac12 (0.19 + 0 + 0.19) = 0.19$ |
-| weights $w$ | (0.83, 1.0, 2.0) | (0.72, 1.0, 20) |
-| $\chi^2 = \sum_k p_{\text{engine},k}\, w_k^2 - 1$ | $0.6 \cdot 0.83^2 + 0.3 \cdot 1 + 0.1 \cdot 2^2 - 1 = 0.12$ | $0.69 \cdot 0.72^2 + 0.30 \cdot 1 + 0.01 \cdot 20^2 - 1 = 3.66$ |
+| ratios $\rho$ | (0.83, 1.0, 2.0) | (0.72, 1.0, 20) |
+| $\chi^2 = \sum_k p_{\text{engine},k}\, \rho_k^2 - 1$ | $0.6 \cdot 0.83^2 + 0.3 \cdot 1 + 0.1 \cdot 2^2 - 1 = 0.12$ | $0.69 \cdot 0.72^2 + 0.30 \cdot 1 + 0.01 \cdot 20^2 - 1 = 3.66$ |
 
 TV sees the difference, bounded by the mass that exists. $\chi^2$ sees the ratio squared, unbounded as
 $p_{\text{engine},2} \to 0$; in the far column, token 2's term is nearly all of $\chi^2$.
@@ -331,8 +338,9 @@ Three more choices of $w$, all built on the ratio $\rho_y = p_y / p_{\text{engin
 - **DPPO** [[2]](#ref-2), ratio against the engine, sets $w = 0$ when $|p_y - p_{\text{engine},y}| > \delta$ (here
   $\delta = 0.15$) in the direction $A$ favors, and $w = \rho_y$ otherwise.
 
-Table 1: every method on both samplers ($b = 0$, per-sample variance). Every bias is a multiple of $v$, so one
-coefficient gives it.
+Table 1: every method on both samplers, $b = 0$, $\operatorname{Var}(x)$ of one row. Every bias is a multiple of
+$v$, so one coefficient gives it. PPO's $w_2 = 0$ and DPPO's pass on the close sampler are explained in point 3
+below.
 
 | sampler | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error, $B = 16$ | error, $B = 256$ |
 |---|---|---|---|---|---|---|---|
@@ -346,31 +354,34 @@ coefficient gives it.
 | far | PPO, DPPO | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
 
 1. **Unbiased is not better at $B = 16$.** On the close sampler REINFORCE beats IS; on the far one TIS beats both.
-   At $B = 256$ the order flips on the close sampler and IS wins.
-2. **The trust-region methods look worst, by design.** PPO and DPPO set $w_2 = 0$, so they estimate the zero
-   vector and their bias is $-g$. They do not aim to estimate one gradient well; they stop the step on tokens that
-   already moved too far. That pays off only across steps (section 7).
+   At $B = 256$ IS wins on both.
+2. **The trust-region methods have the largest error, and that is their purpose.** PPO and DPPO set $w_2 = 0$,
+   so they estimate the zero vector and their bias is $-g$. They do not aim to estimate one gradient well; they
+   stop the step on tokens that already moved too far. That pays off only across steps (section 7).
 3. **PPO and DPPO disagree on the close sampler.** $\rho_2 = 2$, outside PPO's band, so PPO blocks token 2. Only
    0.10 of probability moved, under $\delta = 0.15$, so DPPO keeps it.
 
+Between REINFORCE's $w = 1$ and IS's $w = \rho$ lies every cap, and Table 1 tried only 2 and 4.
+
 ### 6.4 Where to put the cap
 
-A cap trades variance for bias, and the best trade depends on $B$. Far sampler:
+A cap trades variance for bias, and the best trade depends on $B$. With $w_2 = c$ in the error of 6.2, setting
+the derivative in $c$ to zero gives the best cap, $c^* = p_2 / \big(q + (1 - q)/B\big)$. Far sampler:
 
-| $B$ | best cap | error at best cap | cap 2 | cap 4 | no cap |
+| $B$ | best cap $c^*$ | error at $c^*$ | cap 2 | cap 4 | no cap |
 |---|---|---|---|---|---|
 | 16 | 2.8 | 0.034 | 0.034 | 0.035 | 0.243 |
-| 256 | 14.2 | 0.011 | 0.032 | 0.026 | 0.015 |
+| 256 | 14.4 | 0.011 | 0.032 | 0.026 | 0.015 |
 
-At $B = 256$ the variance term is 16 times smaller, so the cap can rise fivefold before the variance it lets in
-costs more than the bias it removes. Common TIS implementations cap at 2 [[1]](#ref-1), which is near the best at
-$B = 16$ and three times too low at $B = 256$. The same trade appears in classic off-policy RL as V-trace
-[[15]](#ref-15) and Retrace [[16]](#ref-16).
+At the larger batch the variance term is smaller, so the cap can rise further before the variance it lets in costs
+more than the bias it removes. Common TIS implementations cap at 2 [[1]](#ref-1), close to the best at $B = 16$
+and well below it at $B = 256$. The same trade appears in classic off-policy RL as V-trace [[15]](#ref-15) and
+Retrace [[16]](#ref-16).
 
-The whole of section 6 in one box. $q$ is the sampler's rate for token 2 (0.01 is the far sampler, 0.1 the close
-one, 0.2 the model itself), $w_2$ the weight on the row, $B$ the batch. Nothing is sampled; the three panels are the
-formulas of 6.2 drawn. Drag $w_2$ from 1 toward $\rho$ and watch the bias drain into variance; then raise $B$ and
-watch the best cap move right.
+The box below has the formulas of 6.2 under three sliders: $q$, the sampler's rate for token 2 (0.01 is the far
+sampler, 0.1 the close one, 0.2 the model itself); $w_2$, the weight on the row; and $B$. Nothing is sampled.
+Raising $w_2$ from 1 toward $\rho$ moves error from the bias term to the variance term; raising $B$ moves the best
+cap to the right.
 
 :::widget weight
 
@@ -396,10 +407,10 @@ value of the prefix:
 | after $a$ | $a$ | 0 | 0.1 | −0.1 |
 | after $a$ | $b$ | 1 | 0.1 | +0.9 |
 
-A step of size $d$ moves mass $d$ toward the better choice at both prefixes that have one: $P(\text{first} = b)$
-becomes $0.5 + d$ and $P(b \mid a)$ becomes $0.1 + d$. The improvement at a prefix is the mass moved times the
-advantage difference. The gain in $J$ is that improvement times how often the prefix is reached, and here the two
-disagree:
+Define a step of size $d$ as moving mass $d$ toward the better choice at the start and after $a$, and nothing
+after $b$: $P(\text{first} = b)$ becomes $0.5 + d$, $P(b \mid a)$ becomes $0.1 + d$, $P(b \mid b)$ stays 0.5. The
+improvement at a prefix is the mass moved times the advantage difference. The gain in $J$ is that improvement
+times how often the prefix is reached, and here the two disagree:
 
 | prefix | improvement $d \cdot \Delta A$ | reached, old policy | reached, stepped policy | surrogate (old rate) | true gain (new rate) |
 |---|---|---|---|---|---|
@@ -466,8 +477,8 @@ one. It drops both. The toy has one prompt and one position, so neither factor v
 $w$ is a function of $\rho = p_y / p_{\text{engine},y}$, against the engine for IS, TIS and DPPO and against
 $\theta_{\text{old}}$ for CISPO, PPO and GSPO (section 6).
 
-REINFORCE, IS, TIS and CISPO are the cap at 1, at infinity, at 2 and at 4 (6.2, 6.4). The rest are variations
-on the zero:
+IS, TIS and CISPO are the ratio uncapped, capped at 2 and capped at 4 (6.2, 6.4); REINFORCE ignores the ratio.
+The remaining methods differ in when they set $w = 0$:
 
 - **PPO** [[14]](#ref-14), $w = \rho$ in the band, $0$ outside it in the direction $A$ favors: a zeroed row has bias
   $-g$ on that token and no variance. DAPO's clip-higher [[23]](#ref-23) widens the upper edge, so fewer rare tokens
