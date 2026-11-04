@@ -356,41 +356,71 @@ Common TIS implementations cap at 2 [[1]](#ref-1). The same trade appears in cla
 
 ## 7. Across steps: the blind spot and the trust region
 
-Section 6 concerned one estimate. Over a step there is a second bias that no per-token $w$ removes: $w$ corrects
-which token is written at a prefix, not how often each prefix is reached.
+Section 6 asked how far one estimate lands from $g$. This section asks what the estimate is good for once the
+parameters move. A step is one optimizer update; after it the model's probabilities have changed, and the question
+is whether the batch predicted the change in reward correctly.
 
-Two-token toy: the first token is $a$ or $b$, and the reward is 1 if the second token is $b$. The engine writes the
-first token 50/50; after $a$ it writes $b$ with probability 0.1, after $b$ with probability 0.5, so $J = 0.3$. A step
-raises $P(\text{first} = a)$ by $d$ and $P(b \mid a)$ by $d$. The true gain is $J(d) - J(0) = 0.1\,d + d^2$. The
-surrogate (the importance-weighted objective evaluated on engine samples) keeps the engine's prefix frequencies and
-predicts $0.1\,d$. The gap, $d^2$, is the stepped model reaching "after $a$" more often while also improving there.
+It cannot, fully. Importance weighting corrects which token is written at each prefix. It does not correct how
+often each prefix is reached, because every prefix in the batch was reached at the old rate. The batch is blind to
+the step's effect on its own prefixes.
 
-Table 2: the gain the weighted batch predicts (surrogate) vs the true gain in average reward.
+A two-token toy. The first token is $a$ or $b$; reward is 1 if the second token is $b$. The old policy writes the
+first token 50/50, then $b$ with probability 0.1 after $a$ and 0.5 after $b$. Its average reward is
+$J = 0.5 \cdot 0.1 + 0.5 \cdot 0.5 = 0.3$. The advantage of each choice under the old policy, its value minus the
+value of the prefix:
 
-| $d$ | true gain | surrogate | gap |
+| prefix | choice | value | prefix value | $A$ |
+|---|---|---|---|---|
+| start | $a$ | 0.1 | 0.3 | −0.2 |
+| start | $b$ | 0.5 | 0.3 | +0.2 |
+| after $a$ | $a$ | 0 | 0.1 | −0.1 |
+| after $a$ | $b$ | 1 | 0.1 | +0.9 |
+
+A step of size $d$ moves mass $d$ toward the better choice at both prefixes that have one: $P(\text{first} = b)$
+becomes $0.5 + d$ and $P(b \mid a)$ becomes $0.1 + d$. The improvement at a prefix is the mass moved times the
+advantage difference. The gain in $J$ is that improvement times how often the prefix is reached, and here the two
+disagree:
+
+| prefix | improvement $d \cdot \Delta A$ | reached, old policy | reached, stepped policy | surrogate (old rate) | true gain (new rate) |
+|---|---|---|---|---|---|
+| start | $d \cdot 0.4 = 0.4\,d$ | 1 | 1 | $0.4\,d$ | $0.4\,d$ |
+| after $a$ | $d \cdot 1.0 = d$ | 0.5 | $0.5 - d$ | $0.5\,d$ | $0.5\,d - d^2$ |
+| after $b$ | 0 | 0.5 | $0.5 + d$ | 0 | 0 |
+| **total** | | | | $0.9\,d$ | $0.9\,d - d^2$ |
+
+The surrogate is what the weighted batch predicts: the improvement at each prefix, counted at the old rate. The
+true gain counts it at the new rate. The step made "after $a$" rarer, which is good for $J$ on its own, but it also
+means the improvement placed there is reached less often. The surrogate overpromises by $d^2$:
+
+Table 2: the gain the batch predicts vs the gain in $J$.
+
+| $d$ | surrogate | true gain | gap |
 |---|---|---|---|
-| 0.01 | 0.0011 | 0.0010 | 0.0001 |
-| 0.1 | 0.0200 | 0.0100 | 0.0100 |
-| 0.3 | 0.1200 | 0.0300 | 0.0900 |
+| 0.01 | 0.0090 | 0.0089 | −0.0001 |
+| 0.1 | 0.0900 | 0.0800 | −0.0100 |
+| 0.3 | 0.2700 | 0.1800 | −0.0900 |
 
-The performance difference lemma [[17]](#ref-17) writes the true gain exactly, and TRPO [[18]](#ref-18)[[19]](#ref-19)
-bounds the gap by the TV between the two policies. DPPO adapts the bound to LLM responses (Theorem 3.2 in
-[[2]](#ref-2)): the gap is at most a constant times the TV summed over the response. Keeping per-token TV small is a
-trust region, and it is what the zeros in Figure 5 pay for.
+The performance difference lemma [[17]](#ref-17) writes the true gain exactly as the sum over prefixes at the new
+rate. TRPO [[18]](#ref-18)[[19]](#ref-19) bounds the gap by the TV between old and new policies, and DPPO adapts
+the bound to LLM responses (Theorem 3.2 in [[2]](#ref-2)): the gap is at most a constant times the per-token TV
+summed over the response. So a step whose per-token TV is small has a surrogate it can trust. Keeping it small is
+a trust region, and the zeros in Table 1 are its price: a token that would move too far is dropped from the
+estimate, bias $-g$ on that token, so that the gap on the rest stays bounded.
 
-PPO measures movement by $|\rho - 1|$. DPPO measures $|p - p_{\text{engine}}| = p_{\text{engine}}\,|\rho - 1|$, the
-token's actual share of TV.
+PPO and DPPO measure "too far" differently. PPO uses the ratio, $|\rho - 1|$. DPPO uses the moved mass,
+$|p - p_{\text{engine}}| = p_{\text{engine}}\,|\rho - 1|$, which is the token's share of TV. The DPPO paper's own
+example (section 4.2 in [[2]](#ref-2)):
 
 Table 3: PPO and DPPO on a rare token with $A > 0$ and a confident token with $A < 0$.
 
-| token | $p_{\text{engine}} \to p$ | $\rho$ | moved | PPO | DPPO ($\delta = 0.15$) |
+| token | $p_{\text{engine}} \to p$ | $\rho$ | moved | PPO ($\epsilon = 0.2$) | DPPO ($\delta = 0.15$) |
 |---|---|---|---|---|---|
 | rare | 0.0001 → 0.01 | 100 | 0.0099 | $w = 0$ | $w = 100$ |
 | confident | 0.99 → 0.80 | 0.81 | 0.19 | $w = 0.81$ | $w = 0$ |
 
-PPO blocks a token that barely moved and passes one that moved a lot. In the DPPO paper, collapse came from the
-second kind (Figure 5 in [[2]](#ref-2)), and the mean $|p - p_{\text{engine}}|$ rose before reward fell (Figure 3
-in [[2]](#ref-2)).
+PPO blocks the token that barely moved and passes the one that carries most of the TV. In the paper's runs, masking
+tokens of the second kind, negative advantage and large moved mass, is what prevented collapse (Figure 5 in
+[[2]](#ref-2)).
 
 ## 8. What each algorithm trades
 
