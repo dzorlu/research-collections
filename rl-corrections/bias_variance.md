@@ -2,20 +2,22 @@
 
 ## Summary
 
-The policy gradient is estimated from a sampled batch, and the batch is usually written by an inference engine whose
-distribution $p_{\text{engine}}$ differs from the trained model's $p$. The estimate's mean squared error splits into
-$\|\text{bias}\|^2 + \operatorname{Var}(x)/B$, and every algorithm is a choice of advantage $A$ and per-token weight
-$w$ that moves one term against the other.
+The policy gradient is estimated from a sampled batch. The estimate's error has two parts. Bias is the offset of
+its average from the true gradient. Variance is its scatter around that average. Growing the batch shrinks only the
+variance: bias is paid once, variance is paid in proportion to one over the batch size. Every algorithm is a choice
+of advantage and per-token weight that lowers one part by raising the other, and which choice is best depends on
+the batch size.
 
-- A baseline lowers variance and adds no bias: the piece it subtracts, $b\,(p - e_y)$, averages to zero under the
-  model's own samples (section 5).
-- Ignoring the engine mismatch, $w = 1$, costs bias proportional to the mass that moved, TV. Correcting it with
-  $w = p / p_{\text{engine}}$ costs variance proportional to the squared weight, $\chi^2$. TV is bounded; $\chi^2$ is
-  not (section 6).
-- A cap on $w$ (TIS, CISPO) turns the unbounded cost back into a bounded one; the right cap grows with $B$ (6.4).
-- Trust regions (PPO, DPPO) zero out tokens that moved too far, accepting bias on them to bound a second,
-  across-step bias that no per-token weight removes (section 7).
-- Unbiased is not better. At small $B$ the biased estimator often wins (sections 4 and 6.3).
+- A baseline lowers variance and adds no bias, as long as the model wrote the tokens (section 5).
+- When something else wrote them, an inference engine or the model a few updates ago, there is no free fix.
+  Ignoring the mismatch costs bias in proportion to the probability mass that moved, which is bounded. Correcting it
+  with importance weights costs variance in proportion to the squared weights, which is not (section 6).
+- A cap on the weight (TIS, CISPO) bounds that variance at the price of some bias. The best cap grows with the
+  batch size (6.4).
+- Trust regions (PPO, DPPO, GSPO) drop tokens that moved too far. That is bias on those tokens, accepted so that
+  the batch's prediction of the next step stays honest (section 7).
+- Unbiased is not better. At a batch of 16 the lowest error on both toy samplers belongs to a biased estimator
+  (sections 4 and 6.3).
 
 Everything is worked on a toy with one position and three tokens, where the true gradient is exact and every
 number can be checked by hand.
@@ -139,9 +141,16 @@ The model's bias is 0 because it writes token 2 at exactly the rate $g$ weights 
 (section 3). Bias appears when that match breaks: $y$ drawn from a different distribution than $p$, as with the
 engine, or the row changed ($w \ne 1$, $A$ rescaled).
 
-The model's error goes to 0 as $B$ grows; the engine's never falls below $\|\text{bias}\|^2$, 0.0098. Yet for $B < 7$
-the engine's error is the smaller one: its lower variance outweighs its bias until the batch is large enough for the
-variance term to fall below 0.0098.
+Only the variance term depends on $B$:
+
+| $B$ | model, $0.157/B$ | engine, $0.0098 + 0.088/B$ |
+|---|---|---|
+| 4 | 0.039 | 0.032 |
+| 16 | 0.0098 | 0.0153 |
+| 256 | 0.0006 | 0.0101 |
+
+The model's error goes to 0. The engine's stops at its $\|\text{bias}\|^2$. Yet below $B = 7$ the engine has the
+smaller error, because its variance is lower and at a small batch variance is most of the error.
 
 ![error vs q](figs/bv_q.png)
 
@@ -149,9 +158,12 @@ variance term to fall below 0.0098.
 probability of token 2 varies. The engine at $q = 0.1$ beats the model at $B = 4$ and loses at $B = 16$.*
 
 The engine's variance is lower because at $q = 0.1$ most rows are $0$, so they agree with each other more than the
-model's do; $q(1-q)$ shrinks toward either end. But they agree on $0.1\,v$, not $g$. Here low variance and high bias
-are the same fact seen from two sides. Section 5 lowers $\operatorname{Var}(x)$ without touching the bias; every method in section 6
-trades one term for the other.
+model's do; $q(1-q)$ shrinks toward either end. But they agree on $0.1\,v$, not $g$.
+
+This is the trade the rest of the post is about. Bias is paid once: no batch size moves the center. Variance is
+paid $1/B$. So a biased estimator with less variance wins at small $B$ and loses at large $B$, and the crossover is
+a property of the pair, here $B = 7$. Section 5 lowers $\operatorname{Var}(x)$ without adding bias. Every method in
+section 6 lowers one term by raising the other, and the right choice moves with $B$.
 
 ## 5. Baseline: less variance, no bias
 
@@ -418,8 +430,8 @@ Table 3: PPO and DPPO on a rare token with $A > 0$ and a confident token with $A
 | rare | 0.0001 → 0.01 | 100 | 0.0099 | $w = 0$ | $w = 100$ |
 | confident | 0.99 → 0.80 | 0.81 | 0.19 | $w = 0.81$ | $w = 0$ |
 
-PPO blocks the token that barely moved and passes the one that carries most of the TV. In the paper's runs, masking
-tokens of the second kind, negative advantage and large moved mass, is what prevented collapse (Figure 5 in
+PPO blocks the token that barely moved and passes the one that carries most of the TV. In the paper's ablation,
+masking only the negative-advantage tokens that moved far is enough to keep training stable (Figure 5 in
 [[2]](#ref-2)).
 
 ## 8. What each algorithm trades
