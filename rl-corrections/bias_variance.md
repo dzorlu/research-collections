@@ -16,8 +16,7 @@ the batch size.
   batch size (6.4).
 - Trust regions (PPO, DPPO, GSPO) drop tokens that moved too far. That is bias on those tokens, accepted so that
   the batch's prediction of the next step stays honest (section 7).
-- Unbiased is not better. At a batch of 16 the lowest error on both toy samplers belongs to a biased estimator
-  (sections 4 and 6.3).
+- At a batch of 16 the lowest error on both toy samplers belongs to a biased estimator (sections 4 and 6.3).
 
 Everything is worked on a toy with one position and three tokens, where the true gradient is exact and every
 number can be checked by hand.
@@ -109,7 +108,7 @@ For any estimator $\hat\theta$ of a target $\theta$, with $m = \mathbb{E}[\hat\t
 $$\hat\theta - \theta = (\hat\theta - m) + (m - \theta).$$
 
 Square both sides, $\|a + b\|^2 = \|a\|^2 + 2\,a\cdot b + \|b\|^2$, and take expectations. The constant
-$m - \theta$ comes out of the cross term, and what is left of it is zero:
+$m - \theta$ comes out of the cross term, and what remains is zero:
 
 $$\mathbb{E}\big[2\,(\hat\theta - m)\cdot(m - \theta)\big] = 2\,(m - \theta)\cdot\big(\mathbb{E}[\hat\theta] - m\big) = 0.$$
 
@@ -117,10 +116,8 @@ So
 
 $$\mathbb{E}\,\|\hat\theta - \theta\|^2 = \underbrace{\mathbb{E}\,\|\hat\theta - m\|^2}_{\text{variance}} + \underbrace{\|m - \theta\|^2}_{\text{bias}^2}.$$
 
-Bias is systematic: the estimator's average is off target, and more samples do not move it. Variance is random
-fluctuation around that average; for a mean of $B$ independent samples it is $\operatorname{Var}(\text{one sample})/B$.
-The two trade off: a biased estimator with small variance can beat an unbiased one with large variance, and which
-wins depends on $B$. Here $\hat\theta = \hat g_B$ and $\theta = g$ [[5]](#ref-5).
+For a mean of $B$ independent samples the variance term is $\operatorname{Var}(\text{one sample})/B$. Here
+$\hat\theta = \hat g_B$ and $\theta = g$ [[5]](#ref-5).
 :::
 
 A batch averages $B$ independent rows, so $\mathbb{E}[\hat g_B] = \mathbb{E}[x]$ and
@@ -128,8 +125,7 @@ $\operatorname{Var}(\hat g_B) = \operatorname{Var}(x)/B$:
 
 $$\mathbb{E}\,\|\hat g_B - g\|^2 = \|\mathbb{E}[x] - g\|^2 + \frac{\operatorname{Var}(x)}{B}.$$
 
-Only $\operatorname{Var}(x)/B$ shrinks with $B$. In the toy only two rows occur, $v$ with probability $q$ and $0$
-otherwise, so
+In the toy only two rows occur, $v$ with probability $q$ and $0$ otherwise, so
 
 $$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = {{\|v\|^2\, q(1-q) @@ the variance of a coin that lands v with probability q and 0 otherwise: q(1−q), scaled by ‖v‖² = 0.98}}.$$
 
@@ -147,16 +143,13 @@ agree. The model's bias is 0 because it writes token 2 at exactly the rate $g$ w
 (section 3). Bias appears when that match breaks: $y$ drawn from a different distribution than $p$, as with the
 engine, or the row changed ($w \ne 1$, $A$ rescaled).
 
-Only the variance term depends on $B$:
+At three batch sizes:
 
 | $B$ | model, $0.157/B$ | engine, $0.0098 + 0.088/B$ |
 |---|---|---|
 | 4 | 0.039 | 0.032 |
 | 16 | 0.0098 | 0.0153 |
 | 256 | 0.0006 | 0.0101 |
-
-The model's error goes to 0. The engine's stops at its $\|\text{bias}\|^2$. Yet below $B = 7$ the engine has the
-smaller error, because its variance is lower and at a small batch variance is most of the error.
 
 ![error vs q](figs/bv_q.png)
 
@@ -166,10 +159,10 @@ probability of token 2 varies. The engine at $q = 0.1$ beats the model at $B = 4
 The engine's variance is lower because at $q = 0.1$ most rows are $0$, so they agree with each other more than the
 model's do; $q(1-q)$ shrinks toward either end. But they agree on $0.1\,v$, not $g$.
 
-This is the trade the rest of the post is about. Bias is paid once: no batch size moves the center. Variance is
-paid $1/B$. So a biased estimator with less variance wins at small $B$ and loses at large $B$, and the crossover is
-a property of the pair, here $B = 7$. Section 5 lowers $\operatorname{Var}(x)$ without adding bias. Every method in
-section 6 lowers one term by raising the other, and the right choice moves with $B$.
+Bias is paid once, because no batch size moves the center. Variance is paid $1/B$. A biased estimator with less
+variance therefore wins below some batch size and loses above it; for this pair the two errors cross at $B = 7$.
+Section 5 lowers $\operatorname{Var}(x)$ without adding bias. Each method in section 6 lowers one term by raising
+the other, and which is best depends on $B$.
 
 ## 5. Baseline: less variance, no bias
 
@@ -183,8 +176,8 @@ $$(r_y - b)\,(p - e_y) = \underbrace{r_y\,(p - e_y)}_{\text{row without baseline
 The subtracted piece is not a constant: it depends on which $y$ was drawn and changes sign, and in proportion to
 how often each $y$ is drawn the pieces cancel.
 
-:::note a constant reward moves nothing: every step
-The toy's $p = (0.5, 0.3, 0.2)$, reward $2$ whatever is drawn, so $A = 2$ for every row.
+:::note a constant reward moves nothing, step by step
+The toy's $p = (0.5, 0.3, 0.2)$ with a reward of $2$ whatever is drawn, so $A = 2$ for every row.
 
 | | $y = 0$ | $y = 1$ | $y = 2$ |
 |---|---|---|---|
@@ -195,9 +188,9 @@ The toy's $p = (0.5, 0.3, 0.2)$, reward $2$ whatever is drawn, so $A = 2$ for ev
 | $p_y \times$ row | (−0.50, 0.30, 0.20) | (0.30, −0.42, 0.12) | (0.20, 0.12, −0.32) |
 
 Sum of the last line, coordinate by coordinate: $-0.50 + 0.30 + 0.20 = 0$, $0.30 - 0.42 + 0.12 = 0$,
-$0.20 + 0.12 - 0.32 = 0$. Each row pushes its own token up (training subtracts the row) and the others down; token 0
-gets a push of $-1.0$ often, token 2 a push of $-1.6$ rarely, and each token's upward pushes equal what the other
-rows push it down. A baseline is this table with $-b$ in place of $2$.
+$0.20 + 0.12 - 0.32 = 0$. Each row raises its own token and lowers the others (training subtracts the row). Token
+0's row is drawn often and token 2's rarely, and in the weighted sum each token's raises cancel the lowerings it
+gets from the other rows. A baseline is this table with $-b$ in place of $2$.
 :::
 
 The toy, $r = (0, 0, 1)$, without a baseline and with $b = 0.2$:
@@ -218,8 +211,10 @@ $0.142 - 0.039 = 0.103$ with it.
 
 ![baseline](figs/bv_baseline.png)
 
-*Figure 3: 20,000 batches of 16, model sampling itself, token 2's coordinate of the batch estimate. Both center on
-the true value; $b = 0.2$ is narrower.*
+*Figure 3: 20,000 batches of 16, model sampling itself. Both center on the true value; $b = 0.2$ is narrower.*
+
+The zero bias relied on $\mathbb{E}[e_y] = p$, which holds only when the model wrote the tokens. The next section
+drops that assumption.
 
 ## 6. When the model did not write the tokens
 
@@ -232,8 +227,8 @@ of two ways. Both show up as the same thing in the row: a ratio $\rho_y = p_y / 
 | old vs new parameters | the trainer at $\theta_{\text{old}}$, the parameters when the batch was sampled | several optimizer steps are taken on one batch; after the first, $\theta$ has moved [[14]](#ref-14) | PPO, CISPO, GSPO |
 
 The toy needs only $p$ and the distribution that wrote the tokens, so one symbol serves both: $p_{\text{engine}}$
-below is the engine for the first group and $p_{\theta_{\text{old}}}$ for the second. The arithmetic is identical.
-The two mismatches differ in what happens next, which is section 7. Two samplers, $b = 0$:
+below is the engine for the first group and $p_{\theta_{\text{old}}}$ for the second. The arithmetic is identical;
+the two differ in what happens after the step, and section 7 returns to that. Two samplers, $b = 0$:
 
 ```python
 p     = [0.5,  0.3,  0.2 ]    # model
@@ -274,7 +269,7 @@ TV sees the difference, bounded by the mass that exists. $\chi^2$ sees the ratio
 $p_{\text{engine},2} \to 0$; in the far column, token 2's term is nearly all of $\chi^2$.
 
 TV sets the bias of ignoring the mismatch; $\chi^2$ sets the variance of correcting it. From the close sampler to
-the far one, TV doubles and $\chi^2$ grows thirtyfold. 6.2 shows both costs on batches; 6.4 puts a cap between them.
+the far one, TV doubles and $\chi^2$ grows thirtyfold. The next two subsections put numbers on both costs.
 
 ### 6.2 Three weights
 
@@ -294,15 +289,15 @@ them, under three choices of $w_2$:
 | 7 | 0 | 0 | 0 | 0 |
 | average over many batches | 0.16 of 16 | $0.01\,v = 0.05\,g$ | $0.2\,v = g$ | $0.02\,v = 0.10\,g$ |
 
-- **REINFORCE** counts the row once. Even the batch that has it delivers a third of the truth; the rest deliver
-  nothing. The average settles at a twentieth of the truth. Bias.
-- **IS** counts the row 20 times, which is exactly how under-represented it is. The average settles on the truth.
-  But no batch is near it: six say zero, one says six times too much. Variance.
-- **TIS** [[13]](#ref-13)[[1]](#ref-1) counts it twice. A tenth of the truth on average, delivered by one batch
-  in seven: most of REINFORCE's bias with a little of IS's variance.
+- **REINFORCE** counts the row once. The one batch that has it delivers a third of the truth, the rest deliver
+  nothing, and the average settles at a twentieth of the truth.
+- **IS** counts the row 20 times, which is exactly how under-represented it is, so the average settles on the
+  truth. No single batch is near it: six say zero and one says six times too much.
+- **TIS** [[13]](#ref-13)[[1]](#ref-1) counts it twice: a tenth of the truth on average, most of REINFORCE's
+  shortfall with a little of IS's scatter.
 
-The mismatch does not go away; $w_2$ only chooses whether it shows up as consistently short or as widely scattered.
-In the formulas of section 4, with $q = p_{\text{engine},2} = 0.01$:
+The mismatch does not go away; $w_2$ only chooses whether it shows up as a consistent shortfall, which is bias,
+or as scatter across batches, which is variance. In the formulas of section 4, with $q = p_{\text{engine},2} = 0.01$:
 
 $$\begin{gathered}
 \mathbb{E}[x] = q\,w_2\,v, \qquad \text{bias} = \mathbb{E}[x] - g = (q\,w_2 - p_2)\,v, \\
@@ -322,15 +317,15 @@ TV; IS's $\operatorname{Var}(x) = 0.98\,(p_2^2/q - p_2^2)$ is token 2's term of 
 
 *Figure 4: the exact distribution of one batch estimate under each weight. 85% of batches hold no token-2 row and
 estimate 0; 14% hold one. Dashed is $g$; the triangle is the mean of the estimate. REINFORCE and TIS center short
-of $g$. IS centers on it, but its one informative batch in seven lands six times past it.*
+of $g$. IS centers on it, with one batch in seven landing six times past it and the rest at zero.*
 
 ### 6.3 Every method, both samplers
 
 Three more choices of $w$, all built on the ratio $\rho_y = p_y / p_{\text{engine},y}$:
 
 - **CISPO** [[21]](#ref-21), ratio against $\theta_{\text{old}}$, clamps $\rho_y$ at a cap and stops the gradient
-  through the clamp, so a token above the cap gets $w = \text{cap}$ where PPO below gives $w = 0$. In this frame it
-  is TIS with a higher cap. The paper tunes the cap and does not publish it; 4 here.
+  through the clamp, so a token above the cap gets $w = \text{cap}$ where PPO gives $w = 0$. On the toy it is TIS
+  with a higher cap. The paper tunes the cap without publishing it, so this post uses 4.
 
 - **PPO** [[14]](#ref-14), ratio against $\theta_{\text{old}}$, sets $w = 0$ when $\rho_y$ leaves
   $[1 - \epsilon, 1 + \epsilon]$ in the direction $A$ favors, and $w = \rho_y$ otherwise. $\epsilon = 0.2$
@@ -391,11 +386,12 @@ Section 6 asked how far one estimate lands from $g$. This section asks what the 
 parameters move. A step is one optimizer update; after it the model's probabilities have changed, and the question
 is whether the batch predicted the change in reward correctly.
 
-It cannot, fully. Importance weighting corrects which token is written at each prefix. It does not correct how
-often each prefix is reached, because every prefix in the batch was reached at the old rate. The batch is blind to
-the step's effect on its own prefixes.
+Part of that change is out of reach of any per-token weight. Importance weighting corrects which token is written
+at each prefix. It does not correct how often each prefix is reached, because every prefix in the batch was reached
+at the old rate. The batch is blind to the step's effect on its own prefixes.
 
-A two-token toy. The first token is $a$ or $b$; reward is 1 if the second token is $b$. The old policy writes the
+The three-token toy has one position, so nothing in it is reached more or less often after a step. This needs a
+prefix. A two-token toy: the first token is $a$ or $b$; reward is 1 if the second token is $b$. The old policy writes the
 first token 50/50, then $b$ with probability 0.1 after $a$ and 0.5 after $b$. Its average reward is
 $J = 0.5 \cdot 0.1 + 0.5 \cdot 0.5 = 0.3$. The advantage of each choice under the old policy, its value minus the
 value of the prefix:
@@ -453,9 +449,12 @@ PPO blocks the token that barely moved and passes the one that carries most of t
 masking only the negative-advantage tokens that moved far is enough to keep training stable (Figure 5 in
 [[2]](#ref-2)).
 
+Sections 5 to 7 took one factor of the row at a time. The last section puts every method's choice of both factors
+in one table, back on the three-token toy.
+
 ## 8. What each algorithm trades
 
-Every method fixes the two factors of the row $x = w\,A\,(p - e_y)$, and each choice moves one term of
+Every method chooses the two factors of the row $x = w\,A\,(p - e_y)$, and each choice moves one term of
 $\|\text{bias}\|^2 + \operatorname{Var}(x)/B$ against the other.
 
 ### 8.1 The advantage
@@ -467,10 +466,11 @@ keeps its direction; the learning rate absorbs it. RLOO [[20]](#ref-20) averages
 removes it.
 
 **Std and length division** (GRPO [[7]](#ref-7)): $A = (r_y - b)/\operatorname{std}$, and the token sum divided by
-response length. These factors differ from prompt to prompt and response to response, so they do not scale $g$;
-they reweight it. Dr. GRPO [[8]](#ref-8) names both effects: the std division weights up prompts whose rewards are
-nearly all right or all wrong, and the length division penalizes a long wrong response less per token than a short
-one. It drops both. The toy has one prompt and one position, so neither factor varies and neither effect appears.
+response length. These factors differ from prompt to prompt and response to response, so they reweight $g$ rather
+than scale it. Dr. GRPO [[8]](#ref-8) names both effects, the std division weighting up prompts whose rewards are
+nearly all right or all wrong and the length division penalizing a long wrong response less per token than a short
+one, and removes both factors. The toy has one prompt and one position, so neither factor varies and neither
+effect appears.
 
 ### 8.2 The weight
 
