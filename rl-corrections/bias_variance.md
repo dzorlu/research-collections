@@ -1,5 +1,25 @@
 # Bias and variance of the policy gradient
 
+## Summary
+
+The policy gradient is estimated from a sampled batch, and the batch is usually written by an inference engine whose
+distribution $p_{\text{engine}}$ differs from the trained model's $p$. The estimate's mean squared error splits into
+$\|\text{bias}\|^2 + \operatorname{Var}(x)/B$, and every algorithm is a choice of advantage $A$ and per-token weight
+$w$ that moves one term against the other.
+
+- A baseline lowers variance and adds no bias: the piece it subtracts, $b\,(p - e_y)$, averages to zero under the
+  model's own samples (section 5).
+- Ignoring the engine mismatch, $w = 1$, costs bias proportional to the mass that moved, TV. Correcting it with
+  $w = p / p_{\text{engine}}$ costs variance proportional to the squared weight, $\chi^2$. TV is bounded; $\chi^2$ is
+  not (section 6).
+- A cap on $w$ (TIS, CISPO) turns the unbounded cost back into a bounded one; the right cap grows with $B$ (6.4).
+- Trust regions (PPO, DPPO) zero out tokens that moved too far, accepting bias on them to bound a second,
+  across-step bias that no per-token weight removes (section 7).
+- Unbiased is not better. At small $B$ the biased estimator often wins (sections 4 and 6.3).
+
+Everything is worked on a toy with one position and three tokens, where the true gradient is exact and every
+number can be checked by hand.
+
 ## 1. The question
 
 RL for language models estimates the policy gradient from a sampled batch. The tokens are usually written by an
@@ -425,21 +445,6 @@ Table 5: each choice, the term it lowers and the term it raises.
 | PPO | | $\rho$; $0$ outside the band in the favored direction | variance on zeroed tokens; next-step bias (section 7) | bias $-g$ on zeroed tokens |
 | GSPO | | sequence ratio; $0$ outside a tight band, per response | variance from per-token ratios | bias: whole responses zeroed |
 | DPPO | | $\rho$; $0$ when moved mass $> \delta$ in the favored direction | next-step bias; fewer zeros on rare tokens than PPO | bias $-g$ on zeroed tokens; IS's variance on rare tokens that pass |
-
-## 9. Summary
-
-Table 6: what each choice of $w$ does.
-
-| method | $w$ | bias | variance |
-|---|---|---|---|
-| REINFORCE | 1 | grows with TV | low |
-| IS | $p / p_{\text{engine}}$ | none | grows with $\chi^2$ |
-| TIS | IS, capped | in between; best cap grows with $B$ | in between |
-| PPO, DPPO | 0 on tokens that moved too far | added on those tokens | low |
-
-Ignoring the mismatch costs bias that scales with TV. Correcting it with $p / p_{\text{engine}}$ costs variance that
-scales with $\chi^2$. A cap sits between the two, and the right cap depends on $B$. A trust region accepts some
-bias in the current step to bound the next step's blind-spot bias.
 
 Next: the same measurement on a real training run, per method.
 
