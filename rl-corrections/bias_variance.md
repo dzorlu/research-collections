@@ -85,7 +85,8 @@ $p_{\text{engine},2} = 0.1$. Draw many batches of 16 from each:
 
 *Figure 1: where batches of 16 land, 20,000 from each sampler. Token 2's coordinate of $\hat g_B$; dashed is $g$.*
 
-The spread averages out. The engine's offset does not.
+Both spread around a center. The model's center is $g$; the engine's sits short of it. More batches tighten the
+spread but never move a center. The spread is variance; the offset of the center is bias:
 
 **Error.** The error of the estimator is the mean squared miss over batches, $\mathbb{E}\,\|\hat g_B - g\|^2$. It
 decomposes into bias and variance [[5]](#ref-5):
@@ -117,10 +118,10 @@ $\operatorname{Var}(\hat g_B) = \operatorname{Var}(x)/B$:
 
 $$\mathbb{E}\,\|\hat g_B - g\|^2 = \|\mathbb{E}[x] - g\|^2 + \frac{\operatorname{Var}(x)}{B}.$$
 
-Only $\operatorname{Var}(x)/B$ shrinks with $B$. Our row is $x = v\,Z$ with $Z \sim \text{Bernoulli}(q)$ and $v$
-the $y = 2$ row from above:
+Only $\operatorname{Var}(x)/B$ shrinks with $B$. In the toy only two rows occur, $v$ with probability $q$ and $0$
+otherwise, so
 
-$$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = \|v\|^2\, q(1-q).$$
+$$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = {{\|v\|^2\, q(1-q) @@ the variance of a coin that lands v with probability q and 0 otherwise: q(1−q), scaled by ‖v‖² = 0.98}}.$$
 
 | | model, $q = 0.2$ | engine, $q = 0.1$ |
 |---|---|---|
