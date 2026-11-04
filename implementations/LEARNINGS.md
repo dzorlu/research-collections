@@ -28,6 +28,10 @@
    denominator: one number per position `(B, T, 1)` that shifts the scores so the probabilities sum to 1. It is
    computed as `m + log(sum(exp(z - m)))` with `m` the max, so nothing overflows (the max trick). Never
    `log(softmax(z))`: tiny probabilities underflow to 0 and `log 0 = -inf`.
+   **To remember:** a log-prob is your score minus the soft max. `logsumexp` is a little above the largest score,
+   so a log-prob is how far below the leader you are: the top token is near 0, a token 3 points behind is near -3
+   (`[10, 0, 0]` gives about `[0, -10, -10]`). Max trick: subtract the leader first, so the leader sits at 0 and
+   `exp` cannot blow up.
 
 ### 3. Gradients
 
