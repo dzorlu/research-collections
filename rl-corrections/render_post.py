@@ -6,6 +6,7 @@ Citations in the markdown are links to `#ref-N`; the reference list has `<a id="
 """
 import html
 import os
+import re
 import sys
 
 PAGE = r'''<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
@@ -50,6 +51,17 @@ details.note[open] summary::before {{ content:'×'; }}
 .tip {{ border-bottom:1px dotted var(--accent); cursor:help; position:relative; }}
 .tip:hover::after {{ content:attr(data-tip); position:absolute; left:0; top:1.5em; z-index:10; background:var(--ink); color:#fff;
          padding:6px 10px; border-radius:4px; font:12px/1.4 -apple-system,system-ui,sans-serif; width:max-content; max-width:320px; white-space:normal; }}
+.widget {{ margin:16px 0 20px; padding:14px 16px; border:1px solid var(--line); border-radius:8px; background:#fff; font-size:13px; }}
+.w-controls {{ display:flex; flex-wrap:wrap; gap:10px 24px; align-items:flex-end; }}
+.w-controls label {{ display:flex; flex-direction:column; gap:2px; color:var(--muted); min-width:180px; }}
+.w-controls label b {{ color:var(--ink); }} .w-controls input {{ width:180px; }}
+.w-presets {{ display:flex; gap:6px; flex-wrap:wrap; }}
+.w-presets button {{ font:12px -apple-system,system-ui,sans-serif; padding:3px 8px; border:1px solid var(--line); border-radius:4px; background:var(--code); cursor:pointer; }}
+.w-presets button:hover {{ border-color:var(--accent); }}
+.w-readout {{ margin:10px 0 6px; color:var(--muted); line-height:1.6; }} .w-readout b {{ color:var(--ink); }}
+.w-panels {{ display:flex; flex-wrap:wrap; gap:8px; }}
+.w-panels figure {{ flex:1 1 240px; margin:0; }} .w-panels svg {{ width:100%; height:auto; font-family:-apple-system,system-ui,sans-serif; }}
+.w-panels figcaption {{ font-size:11px; color:var(--muted); text-align:center; }}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 </head><body>
@@ -58,6 +70,7 @@ details.note[open] summary::before {{ content:'×'; }}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script>{widgets}</script>
 <script>
 const raw = document.createElement('textarea'); raw.innerHTML = document.getElementById('md').textContent;
 // Math: swap each $$...$$ / $...$ span (outside code) for a placeholder so marked leaves `_`, `*`, `|` alone,
@@ -76,7 +89,9 @@ const withNotes = protectedMd.replace(/^:::note[ \t]+(.+)\n([\s\S]*?)^:::[ \t]*$
 }});
 // Tooltips: {{text @@ note}} -> hover note saying where a symbol or number comes from.
 const withTips = withNotes.replace(/\{{\{{([\s\S]+?) @@ ([\s\S]+?)\}}\}}/g,
-  (_, t, tip) => `<span class="tip" data-tip="${{esc(tip).replace(/"/g, '&quot;')}}">${{t}}</span>`);
+  (_, t, tip) => `<span class="tip" data-tip="${{esc(tip).replace(/"/g, '&quot;')}}">${{t}}</span>`)
+// Widgets: a line  :::widget name  becomes a box that widgets/name.js fills in.
+  .replace(/^:::widget[ \t]+(\S+)[ \t]*$/gm, '<div class="widget" data-widget="$1"></div>');
 const main = document.getElementById('c');
 main.innerHTML = marked.parse(withTips)
   .replace(/<p>NOTEBLOCK(\d+)END<\/p>/g, (_, i) => notes[+i])
@@ -125,6 +140,7 @@ renderMathInElement(document.body, {{
   delimiters: [{{left: '$$', right: '$$', display: true}}, {{left: '$', right: '$', display: false}}],
   throwOnError: false,
 }});
+main.querySelectorAll('.widget').forEach(el => (window.widgets || {{}})[el.dataset.widget]?.(el));
 const links = [...toc.querySelectorAll('a')];
 addEventListener('scroll', () => {{
   let cur = 0; heads.forEach((h, i) => {{ if (h.getBoundingClientRect().top < 120) cur = i; }});
@@ -138,7 +154,9 @@ def main():
   folder = os.path.dirname(os.path.abspath(src))
   md = open(src).read().replace('](figs/', f'](file://{folder}/figs/')
   title = md.splitlines()[0].lstrip('# ').strip()
-  open(out, 'w').write(PAGE.format(title=html.escape(title), md=html.escape(md)))
+  names = re.findall(r'^:::widget[ \t]+(\S+)', md, flags=re.M)
+  widgets = '\n'.join(open(os.path.join(folder, 'widgets', f'{n}.js')).read() for n in names)
+  open(out, 'w').write(PAGE.format(title=html.escape(title), md=html.escape(md), widgets=widgets))
   print(f'wrote {out}')
 
 

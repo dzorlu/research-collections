@@ -355,11 +355,7 @@ coefficient gives it.
 
 ### 6.4 Where to put the cap
 
-A cap trades variance for bias, and the best trade depends on $B$:
-
-![cap](figs/bv_cap.png)
-
-*Figure 5: far sampler, error against the cap on $w$, at two batch sizes.*
+A cap trades variance for bias, and the best trade depends on $B$. Far sampler:
 
 | $B$ | best cap | error at best cap | cap 2 | cap 4 | no cap |
 |---|---|---|---|---|---|
@@ -370,6 +366,13 @@ At $B = 256$ the variance term is 16 times smaller, so the cap can rise fivefold
 costs more than the bias it removes. Common TIS implementations cap at 2 [[1]](#ref-1), which is near the best at
 $B = 16$ and three times too low at $B = 256$. The same trade appears in classic off-policy RL as V-trace
 [[15]](#ref-15) and Retrace [[16]](#ref-16).
+
+The whole of section 6 in one box. $q$ is the sampler's rate for token 2 (0.01 is the far sampler, 0.1 the close
+one, 0.2 the model itself), $w_2$ the weight on the row, $B$ the batch. Nothing is sampled; the three panels are the
+formulas of 6.2 drawn. Drag $w_2$ from 1 toward $\rho$ and watch the bias drain into variance; then raise $B$ and
+watch the best cap move right.
+
+:::widget weight
 
 ## 7. Across steps: the blind spot and the trust region
 
