@@ -1,0 +1,81 @@
+# Implementations: practice plan for ML infra code
+
+Goal: write training-infrastructure code from scratch, quickly and correctly, and reason about how it fails at
+scale. Three areas: (1) a component in a training pipeline, (2) tensor manipulation, (3) distributed computing and
+efficiency.
+
+Hands-on drills for the RL side (policy losses, GRPO loop, attention, graders) are in
+[../interview-drills/](../interview-drills/).
+
+## 1. A component in a training pipeline
+
+Expect a training loop with one piece missing or broken. Write each from scratch:
+
+- **Data:** a collate function with padding and loss masks. Sequence packing: several documents per row, position
+  ids that restart per document, a block-diagonal attention mask so documents do not see each other.
+- **Loop:** gradient accumulation with the loss scaled by the number of micro-batches; mixed precision (bf16
+  autocast, or fp16 with a GradScaler); gradient clipping by global norm; warmup then cosine learning-rate schedule.
+- **Checkpoint and resume:** model, optimizer, scheduler, RNG states and dataloader position. Test: a run
+  interrupted and resumed gives the same loss curve as an uninterrupted one.
+- **Optimizer:** AdamW by hand, checked against `torch.optim.AdamW`.
+
+## 2. Tensor manipulation
+
+Vectorized, no Python loops.
+
+- `view` vs `reshape` and when `contiguous()` matters; `einsum` for attention and batched matmuls; broadcasting.
+- `gather`, `scatter_add`, `index_select`: per-token log-probs, a batched top-k mask, `bincount`.
+- Masks: causal, block-diagonal for packed documents, padding; position ids with `cumsum`.
+- **MoE dispatch:** top-k experts per token, sort tokens by expert, apply a capacity limit, run the experts, combine
+  the outputs back in the original order with the routing weights. The classic hard tensor question.
+- RoPE; splitting and merging heads.
+
+## 3. Distributed computing and efficiency
+
+### 3.1 Cost arithmetic (whiteboard)
+
+**Table 1. Numbers to derive on the spot.**
+
+| Quantity | Rule |
+|---|---|
+| Memory for mixed-precision Adam | about 16 bytes per parameter: bf16 weights and grads, fp32 master weights, two fp32 Adam states |
+| ZeRO-1 / 2 / 3, FSDP | shard optimizer states / plus gradients / plus weights across the data-parallel ranks |
+| Activation memory | grows with batch x sequence x hidden x layers; activation checkpointing trades it for one extra forward |
+| Training FLOPs | about 6 x parameters x tokens |
+| MFU | achieved model FLOPs per second / peak GPU FLOPs per second |
+| Ring all-reduce traffic | about 2 (N - 1) / N x data size per GPU; all-reduce = reduce-scatter + all-gather |
+| Pipeline bubble | about (p - 1) / (m + p - 1) idle, p stages, m micro-batches |
+
+Story to rehearse: [../parallelism/](../parallelism/), GLM-5.3 on 48 GPUs: the memory arithmetic behind a real
+out-of-memory failure and why more pipeline stages fixed it.
+
+### 3.2 Code that runs on a laptop
+
+`torch.distributed` with the CPU `gloo` backend, 2 to 4 processes via `torch.multiprocessing`:
+
+1. Ring all-reduce from point-to-point `send` and `recv`, checked against `dist.all_reduce`.
+2. Data parallel by hand: all-reduce the gradients after `backward`; weights must match single-process training.
+3. Tensor-parallel MLP (Megatron): first layer split by columns, second by rows, one all-reduce; must match the
+   unsharded MLP.
+4. ZeRO-1: each rank owns a shard of the optimizer state, then all-gathers the updated weights.
+5. Bonus: bucket gradients and start the all-reduce while backward is still running.
+
+### 3.3 Failure reasoning, out loud
+
+- Loss spikes: what to check, when to roll back to a checkpoint.
+- NaNs: finding the layer and step that produced them.
+- A slow GPU (straggler): every step waits for the slowest rank.
+- Hangs: ranks calling collectives in different orders.
+- Checkpoint and restart at scale: frequency, cost, resuming the data loader.
+- Deterministic reruns: what breaks determinism across restarts.
+
+## 4. One-day schedule
+
+**Table 2. If there is only one day.**
+
+| Block | Work |
+|---|---|
+| Morning | tensor drills, including MoE dispatch and packing masks |
+| Midday | a training-loop component: accumulation, clipping, LR schedule, exact resume |
+| Afternoon | distributed code: ring all-reduce, DDP by hand, tensor-parallel MLP |
+| Evening | memory and communication arithmetic; rehearse the parallelism story |
