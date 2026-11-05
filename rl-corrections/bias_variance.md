@@ -232,8 +232,12 @@ far   = [0.69, 0.30, 0.01]    # almost never writes token 2
 
 ### 6.1 Two distances between engine and model
 
-Two numbers measure the mismatch. Total variation is the bias of ignoring it, which is what REINFORCE does.
-Chi-squared is the variance of correcting it, which is what IS does. The other methods land between the two.
+Two numbers measure the mismatch:
+
+- **Total variation** is the bias of ignoring it, which is what REINFORCE does.
+- **Chi-squared** is the variance of correcting it, which is what IS does.
+
+The other methods land between the two.
 
 The mismatch on each token can be read as a difference or as a ratio. The far engine:
 
