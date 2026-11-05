@@ -108,3 +108,85 @@ does all the work for a block there, and keeps a running max and running sum per
 `T × T` matrix never goes to HBM. Memory `O(T²)` → `O(T)`; compute stays `O(T²)`. The backward pass recomputes the
 scores blockwise instead of storing them: more FLOPs, still faster.
 
+
+## Backprop practice
+
+### 8. Chain rule
+
+Gradient of an input = incoming gradient × local derivative. Walk the forward lines in reverse. A variable used
+twice gets the **sum** of its gradients (product rule: hold one factor fixed per path, then add).
+
+Example, GateNet (`h2 = h1_scaled * S`, `S = h1_scaled.sum(1)`):
+
+```
+loss
+ ↓  dlogits = (p − onehot) / B                  [B, C]
+logits = h2 @ W2
+ ↓  dW2 = h2ᵀ @ dlogits                         [H, C]
+ ↓  dh2 = dlogits @ W2ᵀ                         [B, H]
+h2 = h1_scaled * S
+ ↓  dS = (dh2 * h1_scaled).sum(1, keepdim)      [B, 1]   S path: h1_scaled held fixed
+ ↓  dh1_scaled = dh2 * S  +  dS                 [B, H]   direct path (S held fixed) + S path
+h1_scaled = h1 * gamma
+ ↓  dgamma = (dh1_scaled * h1).sum(0)           [H]
+ ↓  dh1 = dh1_scaled * gamma                    [B, H]
+h1 = relu(z1)
+ ↓  dz1 = dh1 * (z1 > 0)                        [B, H]
+z1 = X @ W1
+ ↓  dW1 = Xᵀ @ dz1                              [D, H]
+```
+
+Three patterns cover everything: matmul `Y = A @ B` → `dA = dY @ Bᵀ`, `dB = Aᵀ @ dY`; elementwise `y = a * b` →
+`da = dy * b` (the other factor is the multiplier); reuse → add.
+
+### 9. Broadcast ↔ sum
+
+A broadcast forward is a sum backward; a sum forward is a broadcast backward. Track the shapes and the operation:
+**a gradient always has its variable's shape**, so reduce or expand until it does.
+
+| Forward | Shapes | Backward |
+|---|---|---|
+| `y = x.sum(1, keepdim=True)` | `[4, 3] → [4, 1]` | `dx = dy * ones(4, 3)`: copy `[4, 1] → [4, 3]` |
+| `y = x.mean(1, keepdim=True)` | `[4, 3] → [4, 1]` | same copy, divided by 3 |
+| `y = a * s`, `s` is `[4, 1]` | `s` silently copied to `[4, 3]` | `ds = (dy * a).sum(1, keepdim=True)`: `[4, 3] → [4, 1]` |
+| `y = a * g`, `g` is `[3]` | `g` copied over the batch to `[4, 3]` | `dg = (dy * a).sum(0)`: `[4, 3] → [3]` |
+| `y = x + b`, `b` is `[3]` (bias) | `b` copied to `[4, 3]` | `db = dy.sum(0)` |
+
+Whenever a `[B, 1]` or `[H]` meets a `[B, H]` in the forward pass, there is a hidden broadcast; its gradient needs a
+sum.
+
+### 10. Loss calculation shapes
+
+Example: `B = 4` examples, `C = 3` classes.
+
+```
+logits               [4, 3]
+logp = logits − logsumexp(logits, 1, keepdim)    [4, 3]   stable log-softmax
+logp[arange(4), y]   [4]       one entry per row: the label's log-prob   (y = [0, 2, 1, 1])
+loss = −mean(...)    scalar
+p = logp.exp()       [4, 3]    keep it for backward
+
+dlogits = p.clone()                     [4, 3]
+dlogits[arange(4), y] −= 1              [4, 3]   p − onehot, without building the one-hot
+dlogits /= 4                            [4, 3]   the loss is a mean over B
+```
+
+Tokens `(B, T, V)` with labels `(B, T)`: flatten to `(B*T, V)` and `(B*T,)`, and it is the same 2-D case.
+
+### 11. Credit assignment
+
+Each backward op hands every input its share of the output's gradient.
+
+| Forward | Who contributed | Backward |
+|---|---|---|
+| sum over n | each input, weight 1 | copy the gradient to all n |
+| mean over n | each input, weight 1/n | copy, divided by n |
+| broadcast to n places | one value, n uses | sum the n gradients |
+| max over n | the winner only | all to the argmax, 0 to the rest |
+
+### 12. gather
+
+`x.gather(dim, index)`: in each row, pick the entry `index` points to, along dimension `dim`. Gather along the
+dimension the index counts: labels and token ids count classes, so `dim=-1`:
+`logp.gather(-1, y.unsqueeze(-1)).squeeze(-1)` = `logp[arange(B), y]`. Picking each sequence's last token from
+`(B, T, D)` counts time, so `dim=1`. The index has as many dims as `x`, and the output has the index's shape.
