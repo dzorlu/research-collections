@@ -275,8 +275,8 @@ $\chi^2$ is IS's variance, up to the row. The IS row is $\rho_y\, r_y\,(p - e_y)
 the row is $20\, v$ with probability 0.01 and $0$ otherwise:
 
 ```python
-mean_sq_length = 0.01 * 20**2 * 0.98 = 4.0 * 0.98 = 3.92    # E ||x||^2, with ||v||^2 = 0.98
-sq_length_mean = 0.039                                       # ||g||^2, since the mean of the IS row is g
+mean_sq_length = 0.01 * 20**2 * 0.98 = 4.0 * 0.98 = 3.92   # E ||x||^2, with ||v||^2 = 0.98
+sq_length_mean = 0.039                                      # ||g||^2: the IS row averages to g
 Var(x) = 3.92 - 0.039 = 3.88
 ```
 
