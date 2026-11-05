@@ -32,6 +32,7 @@ sup.cite + sup.cite::before {{ content:','; font-size:11px; color:var(--accent);
 .sidenote {{ float:right; clear:right; margin-right:-300px; width:270px; font-size:12px; line-height:1.45;
              color:var(--muted); margin-top:4px; margin-bottom:10px; }}
 .sidenote b {{ color:var(--accent); }}
+.sidenote.inline {{ float:none; display:block; margin:-6px 0 12px; width:auto; max-width:820px; border-left:2px solid var(--line); padding-left:8px; }}
 #refs li {{ font-size:13px; color:var(--muted); }}
 @media (max-width: 1400px) {{
   #toc {{ display:none; }} main {{ margin:0 auto; padding:24px 16px 60px; }}
@@ -118,8 +119,13 @@ for (const el of main.children) {{
       seen.add(id);
       const note = document.createElement('span'); note.className = 'sidenote';
       note.innerHTML = `<b>${{n}}</b> ${{refs[id]}}`;
-      const block = sup.closest('p, li, td') || sup;
-      block.parentNode.insertBefore(note, block);
+      const table = sup.closest('table');
+      if (table) {{                                                     // tables reach into the margin: note goes under the table
+        note.classList.add('inline'); let after = table;
+        while (after.nextSibling && after.nextSibling.classList && after.nextSibling.classList.contains('inline')) after = after.nextSibling;
+        after.parentNode.insertBefore(note, after.nextSibling);
+      }}
+      else {{ const block = sup.closest('p, li') || sup; block.parentNode.insertBefore(note, block); }}
     }}
   }});
 }}
