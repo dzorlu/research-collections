@@ -292,12 +292,13 @@ close = [0.6,  0.3,  0.1 ]    # 10 out of 100
 far   = [0.69, 0.30, 0.01]    # 1 out of 100
 ```
 
-This subsection takes the far engine, where the weights matter most, through seven batches; 6.3 then scores every
+This subsection takes the far engine, where the weights matter most, through eight batches; 6.3 then scores every
 method on both. $b = 0$ throughout.
 
 Only token 2's row is nonzero, and it is $w_2\,${{$v$ @@ v = p − e_2 = (0.5, 0.3, −0.8), the y = 2 row of section 3's table; defined in section 4}}, so a batch's estimate is
-$v$ times its token-2 count, times $w_2$, over 16. The truth is {{$g = 0.2\,v$ @@ section 3's table: only the y = 2 row is nonzero, weighted by p_2 = 0.2}}. Seven batches of 16, with one token-2 row among
-them, under three choices of $w_2$:
+$v$ times its token-2 count, times $w_2$, over 16. The truth is {{$g = 0.2\,v$ @@ section 3's table: only the y = 2 row is nonzero, weighted by p_2 = 0.2}}. IS uses the full ratio, $w_2 = \rho_2 = 20$; TIS [[13]](#ref-13)[[1]](#ref-1) truncates
+it at a cap, here $w_2 = \min(\rho_2, 2) = 2$. Eight batches of 16, with one token-2 row among them, under the
+three weights:
 
 | batch | token-2 rows | REINFORCE, $w_2 = 1$ | IS, $w_2 = 20$ | TIS, $w_2 = 2$ |
 |---|---|---|---|---|
@@ -308,17 +309,18 @@ them, under three choices of $w_2$:
 | 5 | 0 | 0 | 0 | 0 |
 | 6 | 0 | 0 | 0 | 0 |
 | 7 | 0 | 0 | 0 | 0 |
+| 8 | 0 | 0 | 0 | 0 |
 | average over many batches | 0.16 of 16 | $0.01\,v = 0.05\,g$ | $0.2\,v = g$ | $0.02\,v = 0.10\,g$ |
 
 - **REINFORCE** counts the row once. The one batch that has it delivers a third of the truth, the rest deliver
   nothing, and the average settles at a twentieth of the truth.
 - **IS** counts the row 20 times, which is exactly how under-represented it is, so the average settles on the
-  truth. No single batch is near it: six say zero and one says six times too much.
-- **TIS** [[13]](#ref-13)[[1]](#ref-1) counts it twice: a tenth of the truth on average, most of REINFORCE's
+  truth. No single batch is near it: seven say zero and one says six times too much.
+- **TIS** counts it twice: a tenth of the truth on average, most of REINFORCE's
   shortfall with a little of IS's scatter.
 
 The mismatch does not go away; $w_2$ only chooses whether it shows up as a consistent shortfall, which is bias,
-or as scatter across batches, which is variance. In the formulas of section 4, with $q = p_{\text{engine},2} = 0.01$:
+or as scatter across batches, which is variance. Section 4's formulas with the weight in, $q = p_{\text{engine},2} = 0.01$:
 
 $$\begin{gathered}
 \mathbb{E}[x] = q\,w_2\,v, \qquad \text{bias} = \mathbb{E}[x] - g = (q\,w_2 - p_2)\,v, \\
@@ -331,14 +333,11 @@ $$\begin{gathered}
 | IS | 20 | 0.20 | 0 | 3.88 | $0 + 3.88/16 = 0.243$ |
 | TIS | 2 | 0.02 | 0.032 | 0.039 | $0.032 + 0.039/16 = 0.034$ |
 
-These are the two distances of 6.1: REINFORCE's $\|\text{bias}\|^2 = 0.98\,(p_2 - q)^2$ is the moved mass squared,
-TV; IS's $\operatorname{Var}(x) = 0.98\,(p_2^2/q - p_2^2)$ is token 2's term of $\chi^2$.
+The chart below draws where a batch of 16 lands under any cap, as a multiple of $g$. The dashed line is the truth
+and the triangle is the average over batches. REINFORCE's triangle sits far short of the line and its bars near it.
+IS's triangle sits on the line and its bars nowhere near it.
 
-![weights](figs/bv_weights_far.png)
-
-*Figure 2: the exact distribution of one batch estimate under each weight. 85% of batches hold no token-2 row and
-estimate 0; 14% hold one. Dashed is $g$; the triangle is the mean of the estimate. REINFORCE and TIS center short
-of $g$. IS centers on it, with one batch in seven landing six times past it and the rest at zero.*
+:::widget batches
 
 ### 6.3 Every method, both samplers
 

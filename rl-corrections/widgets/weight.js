@@ -123,11 +123,7 @@ window.widgets.weight = function (el) {
   const render = () => {
     const { q, w, B } = state, s = stats(q, w, B), rho = P2 / q;
     $('.w-q').textContent = q.toFixed(3); $('.w-w').textContent = w.toFixed(1); $('.w-B').textContent = B;
-    $('.w-readout').innerHTML =
-      `ρ = p<sub>2</sub> / q = ${rho.toFixed(1)}. E[x] = q w<sub>2</sub> v = ${(q * w).toFixed(3)} v against g = 0.2 v. ` +
-      `||bias||² = 0.98 (${(q * w).toFixed(3)} − 0.2)² = <b>${fmt(s.bias2)}</b>. ` +
-      `Var(x) = ${w.toFixed(1)}² · 0.98 · ${q.toFixed(3)} · ${(1 - q).toFixed(3)} = ${fmt(s.variance)}, over B: <b>${fmt(s.variance / B)}</b>. ` +
-      `error = <b>${fmt(s.error)}</b>.`;
+    $('.w-readout').innerHTML = `ρ = ${rho.toFixed(1)}, w₂ = ${w.toFixed(1)}. error <b>${fmt(s.error)}</b> = bias² ${fmt(s.bias2)} + Var/B ${fmt(s.variance / B)}.`;
     drawHist(); drawBars(); drawCap();
   };
   $('.w-qs').oninput = e => { state.q = 0.005 * 100 ** (e.target.value / 100); render(); };
