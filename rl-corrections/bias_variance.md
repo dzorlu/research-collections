@@ -282,7 +282,7 @@ ceiling: token 2's term is $p_2^2 / p_{\text{engine},2}$ and grows without limit
 From the close engine to the far one the shortfall doubles and the weight goes from 2 to 20. The next subsection
 is about weights between 1 and 20.
 
-### 6.2 Three weights
+### 6.2 The weight picks shortfall or scatter, not neither
 
 Two engines, differing only in how often they write the rewarded token:
 
