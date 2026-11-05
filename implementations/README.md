@@ -21,6 +21,12 @@ Backprop practice (hand-written forward and backward passes in NumPy, written be
 - `backprop_practice_1.ipynb`: a four-layer network (softplus, ReLU, softmax with the max trick, cross-entropy).
 - `backprop_practice_2.ipynb`: a set of small networks with unusual losses and layers (mean of L2 norms, cubed
   error, batch-sum broadcasting, product rule, SiLU with a residual), plus debugging a broken two-layer network.
+- `backprop_practice_3.ipynb`: more of the same: max-normalization, batch sums, learnable gates, residuals,
+  softmax cross-entropy, and fixing broken backward passes.
+- `backprop_practice_4.ipynb`: **exercises with tests**: a product with its own row sum, batch norm, max
+  normalization with SiLU and a residual, and a backward pass with three planted bugs. Each test checks the forward
+  loss against a fixed value and every gradient against finite differences. Reference:
+  `reference/backprop_practice_4.py`.
 
 Conventions:
 
