@@ -142,7 +142,7 @@ sum(c) / 10                                # mean 0.2
 sum(ci**2 for ci in c) / 10 - 0.2**2       # 0.2 - 0.04 = 0.16 = q(1-q), since ci**2 == ci
 ```
 
-The row is the coin times the fixed vector $v$, and scaling by a fixed vector scales the variance by its squared
+The row is the indicator times the fixed vector $v$, and scaling by a fixed vector scales the variance by its squared
 length, $\|v\|^2 = 0.98$.
 
 | | model, $q = 0.2$ | engine, $q = 0.1$ |
