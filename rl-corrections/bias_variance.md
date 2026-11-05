@@ -159,7 +159,8 @@ Moving $p_2$ changes $v$ too: the other two tokens keep their 5 : 3 ratio.
 
 :::widget samplers
 
-Most engine rows are $0$, so they vary less, but around $0.1\,v$ instead of $g$. The variance shrinks with $B$;
+The engine draws token 2 one time in ten, so nine of ten of its rows are the zero vector. Rows that mostly agree have
+little spread, hence the lower variance, but their average is $0.1\,v$, not $g$. The variance shrinks with $B$;
 the bias does not. So the engine wins below $B = 7$ and loses above it. Section 5 cuts variance at no bias;
 every weight in section 6 buys one term with the other.
 
