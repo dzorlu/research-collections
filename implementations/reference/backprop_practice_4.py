@@ -46,13 +46,18 @@ class GateNet:
         self.H1_scaled = self.H1 * self.gamma                                # [B, H]
         self.S = self.H1_scaled.sum(dim=1, keepdim=True)                     # [B, 1]
         self.H2 = self.H1_scaled * self.S                                    # [B, H]
-        self.out = self.H2 @ self.W2                                         # [B, O]
-        return ((self.out - Y_target) ** 2).mean()
+        logits = self.H2 @ self.W2                                           # [B, C]
+        logp = logits - torch.logsumexp(logits, dim=1, keepdim=True)
+        self.p = logp.exp()
+        return -logp[torch.arange(X.shape[0]), Y_target].mean()
 
     def backward(self):
-        dout = 2 * (self.out - self.Y) / self.out.numel()                    # [B, O]
-        dW2 = self.H2.T @ dout                                               # [H, O]
-        dH2 = dout @ self.W2.T                                               # [B, H]
+        B = self.X.shape[0]
+        dlogits = self.p.clone()
+        dlogits[torch.arange(B), self.Y] -= 1
+        dlogits /= B                                                         # [B, C]
+        dW2 = self.H2.T @ dlogits                                            # [H, C]
+        dH2 = dlogits @ self.W2.T                                            # [B, H]
         dS = (dH2 * self.H1_scaled).sum(dim=1, keepdim=True)                 # [B, 1]
         dH1_scaled = dH2 * self.S + dS                                       # two paths into H1_scaled
         dgamma = (dH1_scaled * self.H1).sum(dim=0)                           # [H]
@@ -161,13 +166,18 @@ class DebugNet:
         self.H1 = torch.sigmoid(self.Z1)
         self.Hs = self.H1 + self.beta
         self.H2 = self.Hs - self.Hs.mean(dim=1, keepdim=True)
-        self.out = self.H2 @ self.W2
-        return ((self.out - Y_target) ** 2).mean()
+        logits = self.H2 @ self.W2
+        logp = logits - torch.logsumexp(logits, dim=1, keepdim=True)
+        self.p = logp.exp()
+        return -logp[torch.arange(X.shape[0]), Y_target].mean()
 
     def backward(self):
-        dout = 2 * (self.out - self.Y) / self.out.numel()                    # fix 1: mean over all elements
-        dW2 = self.H2.T @ dout
-        dH2 = dout @ self.W2.T
+        B = self.X.shape[0]
+        dlogits = self.p.clone()
+        dlogits[torch.arange(B), self.Y] -= 1
+        dlogits /= B                                                         # fix 1: the loss is a mean over B
+        dW2 = self.H2.T @ dlogits
+        dH2 = dlogits @ self.W2.T
         dHs = dH2 - dH2.mean(dim=1, keepdim=True)                            # fix 2: through the row centering
         dbeta = dHs.sum(dim=0)
         dZ1 = dHs * self.H1 * (1 - self.H1)                                  # fix 3: sigmoid' = s (1 - s)
@@ -175,10 +185,10 @@ class DebugNet:
         return {"W1": dW1, "W2": dW2, "beta": dbeta}
 
 
-PROBLEMS = [(GateNet, False, ["W1", "W2", "gamma"]),
+PROBLEMS = [(GateNet, True, ["W1", "W2", "gamma"]),
             (BatchNormNet, True, ["W1", "W2", "gamma", "beta"]),
             (MaxResNet, True, ["W1", "W2", "W3", "alpha"]),
-            (DebugNet, False, ["W1", "W2", "beta"])]
+            (DebugNet, True, ["W1", "W2", "beta"])]
 
 if __name__ == "__main__":
     for cls, classes, params in PROBLEMS:
