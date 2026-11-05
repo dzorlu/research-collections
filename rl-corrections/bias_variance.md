@@ -210,15 +210,9 @@ The toy, $r = (0, 0, 1)$, without a baseline and with $b = 0.2$:
 | | | | | **avg (0.10, 0.06, −0.16) $= g$** | | **avg (0.10, 0.06, −0.16) $= g$** | | **sum (0, 0, 0): bias the baseline adds** |
 | | | | | **$\operatorname{Var}(x)$ 0.157** | | **$\operatorname{Var}(x)$ 0.103** | | |
 
-The average row is $g$ in both columns. The bias the baseline adds is the weighted sum of what it subtracts (last
-column), and that is zero because $e_y$ lands on each token as often as $p$ says: $\mathbb{E}[e_y] = p$
-[[3]](#ref-3)[[6]](#ref-6). The rows sit closer to the unchanged average, so lower variance. With three nonzero
-rows the variance is $\sum_y p_y \|\text{row}_y\|^2 - \|g\|^2$: $0.196 - 0.039 = 0.157$ without the baseline and
-$0.142 - 0.039 = 0.103$ with it.
-
-![baseline](figs/bv_baseline.png)
-
-*Figure 2: 20,000 batches of 16, model sampling itself. Both center on the true value; $b = 0.2$ is narrower.*
+The last column sums to zero because $\mathbb{E}[e_y] = p$ [[3]](#ref-3)[[6]](#ref-6), so the average row
+stays at $g$. The rows sit closer to it, so the variance, $\sum_y p_y \|\text{row}_y\|^2 - \|g\|^2$, falls from
+$0.157$ to $0.103$.
 
 The zero bias relied on $\mathbb{E}[e_y] = p$, which holds only when the model wrote the tokens. The next section
 drops that assumption.
@@ -322,7 +316,7 @@ TV; IS's $\operatorname{Var}(x) = 0.98\,(p_2^2/q - p_2^2)$ is token 2's term of 
 
 ![weights](figs/bv_weights_far.png)
 
-*Figure 3: the exact distribution of one batch estimate under each weight. 85% of batches hold no token-2 row and
+*Figure 2: the exact distribution of one batch estimate under each weight. 85% of batches hold no token-2 row and
 estimate 0; 14% hold one. Dashed is $g$; the triangle is the mean of the estimate. REINFORCE and TIS center short
 of $g$. IS centers on it, with one batch in seven landing six times past it and the rest at zero.*
 
