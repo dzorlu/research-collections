@@ -16,6 +16,12 @@ Each notebook has instructions, stub cells marked `# TODO`, and test cells that 
 | `03_attention.ipynb` | 25 min + bonus | causal multi-head attention with a KV cache (incl. chunked prefill); attention backward by hand; online softmax |
 | `04_grader.ipynb` | 45 min | a grader for "write attention by hand" that survives the 12 files in `04_grader_inputs/`, some of which cheat |
 
+Backprop practice (hand-written forward and backward passes in NumPy, written before these drills):
+
+- `backprop_practice_1.ipynb`: a four-layer network (softplus, ReLU, softmax with the max trick, cross-entropy).
+- `backprop_practice_2.ipynb`: a set of small networks with unusual losses and layers (mean of L2 norms, cubed
+  error, batch-sum broadcasting, product rule, SiLU with a residual), plus debugging a broken two-layer network.
+
 Conventions:
 
 - `XX_name.ipynb` is the unsolved drill; `XX_name_solved.ipynb` is a worked version.
