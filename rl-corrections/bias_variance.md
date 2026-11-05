@@ -80,12 +80,13 @@ v = p - e_2 = (0.5,\ 0.3,\ -0.8), \qquad g = 0.2\,v = (0.10,\ 0.06,\ -0.16), \\
 \|v\|^2 = 0.25 + 0.09 + 0.64 = 0.98.
 \end{gathered}$$
 
-With $q$ the probability that a sampled token is 2, one row is $v$ with probability $q$ and $0$ otherwise:
+With $q$ the probability that a sampled token is 2, one row is $v$ with probability $q$ and $0$ otherwise. Write
+$c$ for the indicator of that draw, $c = 1$ if $y = 2$ and $c = 0$ if not:
 
 $$x = c\,v, \qquad c \sim \text{Bernoulli}(q), \qquad
 \hat g_B = \frac{k}{B}\,v, \qquad k = \textstyle\sum_{i=1}^{B} c_i \sim \text{Binomial}(B, q).$$
 
-A batch average is $v$ times the fraction of 2s it drew. A vector of three numbers is hard to draw, so the figures
+The row is either a copy of $v$ or zero, and a batch average is $v$ times the fraction of 2s it drew, $k/B$. A vector of three numbers is hard to draw, so the figures
 plot token 2's coordinate of the estimate, $-0.8\,k/B$ against $-0.16$ for $g$; the tables keep all three.
 
 The model writes token 2 at $q = p_2 = 0.2$. Suppose instead a sampler that writes it half as often, $q = 0.1$;
@@ -132,7 +133,8 @@ In the toy only two rows occur, $v$ with probability $q$ and $0$ otherwise, so
 
 $$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = \|v\|^2\, q(1-q).$$
 
-The variance comes from the coin $c$. Its square is itself, so its variance is $\mathbb{E}[c^2] - (\mathbb{E}c)^2 = q - q^2$:
+The variance comes from the indicator $c$, which is $1$ on a token-2 row and $0$ on any other. Since $1^2 = 1$ and
+$0^2 = 0$, $c^2 = c$ and $\mathbb{E}[c^2] = \mathbb{E}[c] = q$, so $\operatorname{Var}(c) = q - q^2$:
 
 ```python
 c = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0]         # ten draws at q = 0.2
