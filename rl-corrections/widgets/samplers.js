@@ -105,15 +105,11 @@ window.widgets.samplers = function (el) {
   };
 
   const render = () => {
-    const { p2, q, B } = state, sm = stats(p2, p2, B), se = stats(q, p2, B), n = vn2(p2);
+    const { p2, q, B } = state, sm = stats(p2, p2, B), se = stats(q, p2, B);
     const cross = (sm.variance - se.variance) / se.bias2;
     $('.w-p').textContent = p2.toFixed(2); $('.w-q').textContent = q.toFixed(3); $('.w-B').textContent = B;
-    const verdict = se.bias2 === 0 ? 'The engine is the model.'
-      : cross <= 1 ? 'The engine loses at every B.'
-      : `The engine wins below B = ${cross.toFixed(1)} and loses above it.`;
-    $('.w-readout').innerHTML =
-      `||v||² = ${n.toFixed(3)}. Model: bias 0, Var(x) = ${fmt(sm.variance)}, error Var(x)/B = <b>${fmt(sm.error)}</b>. ` +
-      `Engine: ||bias||² = ${n.toFixed(3)} (${q.toFixed(3)} − ${p2.toFixed(2)})² = ${fmt(se.bias2)}, Var(x)/B = ${fmt(se.variance / B)}, error <b>${fmt(se.error)}</b>. ${verdict}`;
+    const verdict = se.bias2 === 0 ? 'same sampler' : cross <= 1 ? 'engine never wins' : `engine wins below B = ${cross.toFixed(0)}`;
+    $('.w-readout').innerHTML = `model error <b>${fmt(sm.error)}</b> &nbsp;·&nbsp; engine error <b>${fmt(se.error)}</b> &nbsp;·&nbsp; ${verdict}`;
     drawQ(); drawB();
   };
   $('.w-ps').oninput = e => { state.p2 = +e.target.value; render(); };
