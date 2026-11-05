@@ -232,14 +232,9 @@ far   = [0.69, 0.30, 0.01]    # almost never writes token 2
 
 ### 6.1 Two distances between engine and model
 
-Two numbers measure the mismatch:
-
-- **Total variation** is the bias of ignoring it, which is what REINFORCE does.
-- **Chi-squared** is the variance of correcting it, which is what IS does.
-
-The other methods land between the two.
-
-The mismatch on each token can be read as a difference or as a ratio. The far engine:
+The far engine's mismatch sits on one token: the model writes token 2 twenty times in a hundred, the engine once.
+Token 2 is the only one with a reward, so its row $v$ is the only nonzero row, and everything below is about how
+often $v$ shows up.
 
 | token $k$ | $p_k$ | $p_{\text{engine},k}$ | difference $p_k - p_{\text{engine},k}$ | ratio $\rho_k = p_k / p_{\text{engine},k}$ |
 |---|---|---|---|---|
@@ -247,65 +242,51 @@ The mismatch on each token can be read as a difference or as a ratio. The far en
 | 1 | 0.30 | 0.30 | 0 | 1.0 |
 | 2 | 0.20 | 0.01 | +0.19 | 20 |
 
-**Total variation** adds up the differences [[9]](#ref-9):
-
-$$\mathrm{TV} = \tfrac{1}{2}\textstyle\sum_k |p_k - p_{\text{engine},k}| = \tfrac12 (0.19 + 0 + 0.19) = 0.19,$$
-
-half because each move is counted where it leaves and where it lands. It is the mass that moved, so it never
-exceeds 1.
-
-REINFORCE, $w = 1$, uses the engine's rows as they come, so each rewarded token is counted at the engine's rate
-instead of the model's. The bias is the moved mass times the row. Only token 2 has a reward:
+**Ignore the mismatch and the estimate is short.** REINFORCE, $w = 1$, averages the engine's rows as they come. It
+sees $v$ once in a hundred rows instead of twenty times, so its average row is $0.01\, v$ instead of $0.2\, v = g$. The
+shortfall is the bias:
 
 $$\text{bias} = (p_{\text{engine},2} - p_2)\, v = -0.19\, v.$$
 
-**Chi-squared.** IS multiplies each row by $\rho = p / p_{\text{engine}}$ [[10]](#ref-10)[[12]](#ref-12), so token
-2's row is scaled by 20. That removes the bias: the engine's rate times the weight is the model's rate,
-$p_{\text{engine},k}\, \rho_k = p_k$, so every token is counted at the model's rate again and the weight averages
-to 1:
+The 0.19 is the mass that moved off token 2. Total variation is the name for moved mass [[9]](#ref-9), half the
+sum of the difference column because each move is counted where it leaves and where it lands:
 
-```python
-rho    = [0.72, 1.0, 20]        # p / p_engine
-engine = [0.69, 0.30, 0.01]     # how often the engine draws each token
-mean(rho) = 0.69*0.72 + 0.30*1.0 + 0.01*20 = 0.5 + 0.3 + 0.2 = 1.0
-```
+$$\mathrm{TV} = \tfrac{1}{2}\textstyle\sum_k |p_k - p_{\text{engine},k}| = \tfrac12 (0.19 + 0 + 0.19) = 0.19.$$
 
-But the weight now varies from row to row, and its variance is chi-squared [[11]](#ref-11): mean of the squares
-minus the squared mean,
+It never exceeds 1. In general the bias is the difference column weighted by each token's reward and row; TV is
+the column's size, and bounds it.
 
-```python
-mean(rho**2) = 0.69*0.52 + 0.30*1.0 + 0.01*400 = 0.36 + 0.30 + 4.0 = 4.66
-chi2 = mean(rho**2) - mean(rho)**2 = 4.66 - 1 = 3.66
-```
+**Correct the mismatch and the estimate is jumpy.** IS multiplies each row by $\rho = p / p_{\text{engine}}$
+[[10]](#ref-10)[[12]](#ref-12), so token 2's row becomes $20\, v$. Once in a hundred rows, times 20, is twenty in a
+hundred: the average row is $0.01 \cdot 20 \cdot v = 0.2\, v = g$, and the bias is gone. But a single row is now
+$20\, v$ once in a hundred and $0$ the rest of the time. The average is right and almost no row is near it:
 
-$$\chi^2(p \,\|\, p_{\text{engine}}) = \operatorname{Var}_{p_{\text{engine}}}(\rho) = \sum_k p_{\text{engine},k}\, \rho_k^2 - 1.$$
+$$\operatorname{Var}(x) = \mathbb{E}\|x\|^2 - \|g\|^2 = 0.01 \cdot 20^2 \cdot 0.98 - 0.039 = 4.0 \cdot 0.98 - 0.039 = 3.88.$$
 
-Token 2 contributes 4.0 of the 3.66. TV is bounded by the mass that exists; $\chi^2$ is not, since token 2's term
-is $0.01 \cdot 20^2$ and grows without limit as $p_{\text{engine},2} \to 0$.
+The 4.0 is how rarely the weight fires times how big it is, squared. Chi-squared is the name for that quantity
+summed over tokens [[11]](#ref-11), the variance of the weight $\rho$ when the engine draws:
 
-Put the row back and $\chi^2$ becomes IS's variance. The IS row is $\rho_y\, r_y\,(p - e_y)$, and only token 2 has a reward, so
-the row is $20\, v$ with probability 0.01 and $0$ otherwise:
+$$\begin{aligned}
+\chi^2(p \,\|\, p_{\text{engine}}) &= \textstyle\sum_k p_{\text{engine},k}\, \rho_k^2 - 1 \\
+&= 0.69 \cdot 0.72^2 + 0.30 \cdot 1^2 + 0.01 \cdot 20^2 - 1 = 0.36 + 0.30 + 4.0 - 1 = 3.66.
+\end{aligned}$$
 
-```python
-mean_sq_length = 0.01 * 20**2 * 0.98 = 4.0 * 0.98 = 3.92   # E ||x||^2, with ||v||^2 = 0.98
-sq_length_mean = 0.039                                      # ||g||^2: the IS row averages to g
-Var(x) = 3.92 - 0.039 = 3.88
-```
+The minus 1 is the squared mean of $\rho$, which is 1 because the weights restore the model's rates. Token 2's 4.0
+is nearly all of the 3.66; the other weights are near 1 and add almost nothing. Unlike TV, $\chi^2$ has no
+ceiling: token 2's term is $p_2^2 / p_{\text{engine},2}$ and grows without limit as the engine's rate goes to zero.
 
-The 4.0 is token 2's term of $\chi^2$. Chi-squared is the IS variance with the reward and the row length left out.
-
-Both engines:
+**Both engines.**
 
 | | close engine, (0.6, 0.3, 0.1) | far engine, (0.69, 0.30, 0.01) |
 |---|---|---|
 | TV | 0.10 | 0.19 |
 | REINFORCE bias $= (p_{\text{engine},2} - p_2)\, v$ | $-0.10\, v$ | $-0.19\, v$ |
-| ratios $\rho$ | (0.83, 1.0, 2.0) | (0.72, 1.0, 20) |
-| $p_{\text{engine},k}\, \rho_k^2$ | (0.42, 0.30, 0.40) | (0.36, 0.30, 4.0) |
-| $\chi^2$ | $0.42 + 0.30 + 0.40 - 1 = 0.12$ | $0.36 + 0.30 + 4.0 - 1 = 3.66$ |
-| IS $\operatorname{Var}(x)$ = token 2's term $\cdot\, 0.98 - 0.039$ | 0.35 | 3.88 |
+| weight on token 2, $\rho_2$ | 2 | 20 |
+| $\chi^2$ | 0.12 | 3.66 |
+| IS $\operatorname{Var}(x) = 0.98\, p_{\text{engine},2}\, \rho_2^2 - 0.039$ | 0.35 | 3.88 |
 
-The next subsection puts every weight between $w = 1$ and $w = \rho$ through the same arithmetic.
+From the close engine to the far one the shortfall doubles and the weight goes from 2 to 20. The next subsection
+is about weights between 1 and 20.
 
 ### 6.2 Three weights
 
