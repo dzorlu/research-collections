@@ -247,23 +247,28 @@ $$\mathrm{TV} = \tfrac{1}{2}\textstyle\sum_k |p_k - p_{\text{engine},k}| = \tfra
 half because each move is counted where it leaves and where it lands. It is the mass that moved, so it never
 exceeds 1.
 
-TV is REINFORCE's bias, up to the row. With $w = 1$ each token's row is weighted by how often the engine writes it instead of how
-often the model does, so the average row misses $g$ by the moved mass times the row, summed over tokens. Only
-token 2 has a reward, so the sum has one term:
+REINFORCE, $w = 1$, uses the engine's rows as they come, so each rewarded token is counted at the engine's rate
+instead of the model's. The bias is the moved mass times the row. Only token 2 has a reward:
 
 $$\text{bias} = (p_{\text{engine},2} - p_2)\, v = -0.19\, v.$$
 
-**Chi-squared.** IS multiplies each row by $\rho = p / p_{\text{engine}}$ [[10]](#ref-10)[[12]](#ref-12), so a token
-the engine under-writes gets a big weight: token 2's is 20. Chi-squared is the variance of that weight when the
-engine draws the token [[11]](#ref-11):
+**Chi-squared.** IS multiplies each row by $\rho = p / p_{\text{engine}}$ [[10]](#ref-10)[[12]](#ref-12), so token
+2's row is scaled by 20. That removes the bias: the engine's rate times the weight is the model's rate,
+$p_{\text{engine},k}\, \rho_k = p_k$, so every token is counted at the model's rate again and the weight averages
+to 1:
 
 ```python
 rho    = [0.72, 1.0, 20]        # p / p_engine
 engine = [0.69, 0.30, 0.01]     # how often the engine draws each token
+mean(rho) = 0.69*0.72 + 0.30*1.0 + 0.01*20 = 0.5 + 0.3 + 0.2 = 1.0
+```
 
-mean(rho)    = 0.69*0.72 + 0.30*1.0 + 0.01*20  = 1.0    # always 1, so IS has no bias
-mean(rho**2) = 0.69*0.52 + 0.30*1.0 + 0.01*400 = 4.66   # 0.36 + 0.30 + 4.0
-chi2 = mean(rho**2) - mean(rho)**2 = 4.66 - 1  = 3.66
+But the weight now varies from row to row, and its variance is chi-squared [[11]](#ref-11): mean of the squares
+minus the squared mean,
+
+```python
+mean(rho**2) = 0.69*0.52 + 0.30*1.0 + 0.01*400 = 0.36 + 0.30 + 4.0 = 4.66
+chi2 = mean(rho**2) - mean(rho)**2 = 4.66 - 1 = 3.66
 ```
 
 $$\chi^2(p \,\|\, p_{\text{engine}}) = \operatorname{Var}_{p_{\text{engine}}}(\rho) = \sum_k p_{\text{engine},k}\, \rho_k^2 - 1.$$
@@ -271,7 +276,7 @@ $$\chi^2(p \,\|\, p_{\text{engine}}) = \operatorname{Var}_{p_{\text{engine}}}(\r
 Token 2 contributes 4.0 of the 3.66. TV is bounded by the mass that exists; $\chi^2$ is not, since token 2's term
 is $0.01 \cdot 20^2$ and grows without limit as $p_{\text{engine},2} \to 0$.
 
-$\chi^2$ is IS's variance, up to the row. The IS row is $\rho_y\, r_y\,(p - e_y)$, and only token 2 has a reward, so
+Put the row back and $\chi^2$ becomes IS's variance. The IS row is $\rho_y\, r_y\,(p - e_y)$, and only token 2 has a reward, so
 the row is $20\, v$ with probability 0.01 and $0$ otherwise:
 
 ```python
