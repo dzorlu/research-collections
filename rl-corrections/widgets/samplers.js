@@ -4,7 +4,7 @@
 //   ||bias||^2 = ||v||^2 (q - p_2)^2;  Var(x) = ||v||^2 q (1 - q);  error = ||bias||^2 + Var(x) / B.
 window.widgets = window.widgets || {};
 window.widgets.samplers = function (el) {
-  const BLUE = '#2a78d6', ORANGE = '#eb6834', AQUA = '#1baf7a', INK = '#1d1d1b', MUTED = '#5f5e5a', GRID = '#e4e3df';
+  const BLUE = '#2a78d6', ORANGE = '#eb6834', AQUA = '#1baf7a', RED = '#d1495b', INK = '#1d1d1b', MUTED = '#5f5e5a', GRID = '#e4e3df';
   const state = { p2: 0.2, q: 0.1, B: 16 };
   const QMAX = 0.5, BMAX = 1024;
 
@@ -89,7 +89,7 @@ window.widgets.samplers = function (el) {
     const m = Bs.map(b => [b, stats(p2, p2, b).error]), e = Bs.map(b => [b, stats(q, p2, b).error]);
     const ymax = Math.max(m[0][1], e[0][1]) * 1.1 || 1;
     const f = frame(svg, 1, BMAX, 0, ymax, true);
-    curve(svg, f, m, INK); curve(svg, f, e, MUTED);
+    curve(svg, f, m, BLUE); curve(svg, f, e, RED);
     const sm = stats(p2, p2, B), se = stats(q, p2, B);
     const cross = (sm.variance - se.variance) / se.bias2;             // where Var_m / B = bias_e^2 + Var_e / B
     if (cross > 1 && cross < BMAX) {
@@ -97,11 +97,11 @@ window.widgets.samplers = function (el) {
       svg.appendChild(svgEl('text', { x: f.sx(cross) + 5, y: f.sy(stats(p2, p2, cross).error) - 5, 'font-size': 8, fill: INK }, `cross at B = ${cross.toFixed(1)}`));
     }
     vline(svg, f, B, `B = ${B}`, 0, true);
-    svg.appendChild(svgEl('circle', { cx: f.sx(B), cy: f.sy(sm.error), r: 3, fill: INK }));
-    svg.appendChild(svgEl('circle', { cx: f.sx(B), cy: f.sy(se.error), r: 3, fill: MUTED }));
+    svg.appendChild(svgEl('circle', { cx: f.sx(B), cy: f.sy(sm.error), r: 3, fill: BLUE }));
+    svg.appendChild(svgEl('circle', { cx: f.sx(B), cy: f.sy(se.error), r: 3, fill: RED }));
     for (const b of [1, 4, 16, 64, 256, 1024]) tick(svg, f, b, String(b));
-    svg.appendChild(svgEl('text', { x: f.W - f.R - 4, y: f.T + 2, 'text-anchor': 'end', 'font-size': 8, fill: INK }, '— model: Var(x) / B'));
-    svg.appendChild(svgEl('text', { x: f.W - f.R - 4, y: f.T + 12, 'text-anchor': 'end', 'font-size': 8, fill: MUTED }, '— engine: ||bias||² + Var(x) / B'));
+    svg.appendChild(svgEl('text', { x: f.W - f.R - 4, y: f.T + 2, 'text-anchor': 'end', 'font-size': 8, fill: BLUE }, '— model'));
+    svg.appendChild(svgEl('text', { x: f.W - f.R - 4, y: f.T + 12, 'text-anchor': 'end', 'font-size': 8, fill: RED }, '— engine'));
   };
 
   const render = () => {

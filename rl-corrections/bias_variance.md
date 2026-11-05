@@ -159,10 +159,9 @@ Moving $p_2$ changes $v$ too: the other two tokens keep their 5 : 3 ratio.
 
 :::widget samplers
 
-At $q = 0.1$ most rows are $0$, so the engine's rows agree with each other more than the model's do, but on
-$0.1\,v$ rather than on $g$. Growing $B$ shrinks the variance term and leaves the bias term where it is, so the
-engine wins below $B = 7$ and loses above it. Section 5 lowers $\operatorname{Var}(x)$ without adding bias; every
-weight in section 6 trades one term for the other, and which side of the trade wins depends on $B$.
+Most engine rows are $0$, so they vary less, but around $0.1\,v$ instead of $g$. The variance shrinks with $B$;
+the bias does not. So the engine wins below $B = 7$ and loses above it. Section 5 cuts variance at no bias;
+every weight in section 6 buys one term with the other.
 
 ## 5. Baseline: less variance, no bias
 
