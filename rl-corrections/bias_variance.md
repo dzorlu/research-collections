@@ -133,17 +133,8 @@ In the toy only two rows occur, $v$ with probability $q$ and $0$ otherwise, so
 
 $$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = \|v\|^2\, q(1-q).$$
 
-The variance comes from the indicator $c$, which is $1$ on a token-2 row and $0$ on any other. Since $1^2 = 1$ and
-$0^2 = 0$, $c^2 = c$ and $\mathbb{E}[c^2] = \mathbb{E}[c] = q$, so $\operatorname{Var}(c) = q - q^2$:
-
-```python
-c = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0]         # ten draws at q = 0.2
-sum(c) / 10                                # mean 0.2
-sum(ci**2 for ci in c) / 10 - 0.2**2       # 0.2 - 0.04 = 0.16 = q(1-q), since ci**2 == ci
-```
-
-The row is the indicator times the fixed vector $v$, and scaling by a fixed vector scales the variance by its squared
-length, $\|v\|^2 = 0.98$.
+A Bernoulli($q$) has variance $q(1-q)$, and scaling it by the fixed vector $v$ scales the variance by
+$\|v\|^2 = 0.98$.
 
 | | model, $q = 0.2$ | engine, $q = 0.1$ |
 |---|---|---|
