@@ -290,8 +290,12 @@ is about weights between 1 and 20.
 
 ### 6.2 Three weights
 
-Far engine, $b = 0$. The engine produces the rewarded token, token 2, in 1 row out of 100; the model would produce
-it in 20. Only token 2's row is nonzero, and it is $w_2\,${{$v$ @@ v = p − e_2 = (0.5, 0.3, −0.8), the y = 2 row of section 3's table; defined in section 4}}, so a batch's estimate is
+The two engines of this section differ only in how often they write the rewarded token. The model writes token 2
+in 20 rows out of 100. The close engine, $(0.6, 0.3, 0.1)$, writes it in 10; the far engine, $(0.69, 0.30, 0.01)$,
+in 1. This subsection takes the far engine, where the weights matter most, through seven batches; 6.3 then scores
+every method on both. $b = 0$ throughout.
+
+Only token 2's row is nonzero, and it is $w_2\,${{$v$ @@ v = p − e_2 = (0.5, 0.3, −0.8), the y = 2 row of section 3's table; defined in section 4}}, so a batch's estimate is
 $v$ times its token-2 count, times $w_2$, over 16. The truth is {{$g = 0.2\,v$ @@ section 3's table: only the y = 2 row is nonzero, weighted by p_2 = 0.2}}. Seven batches of 16, with one token-2 row among
 them, under three choices of $w_2$:
 
