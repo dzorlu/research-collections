@@ -232,7 +232,11 @@ far   = [0.69, 0.30, 0.01]    # almost never writes token 2
 
 ### 6.1 Two distances between engine and model
 
-The engine's mismatch on each token can be read as a difference or as a ratio. The far engine:
+Two numbers measure the mismatch, and they are the two prices. Total variation is the bias of doing nothing about
+it, which is REINFORCE. Chi-squared is the variance of fully correcting it, which is IS. Every method in between
+pays some of each.
+
+The mismatch on each token can be read as a difference or as a ratio. The far engine:
 
 | token $k$ | $p_k$ | $p_{\text{engine},k}$ | difference $p_k - p_{\text{engine},k}$ | ratio $\rho_k = p_k / p_{\text{engine},k}$ |
 |---|---|---|---|---|
