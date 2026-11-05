@@ -40,9 +40,8 @@ one-hot $e_y$, advantage $A$ and per-token weight $w$, the policy-gradient updat
 
 $$\text{dlogits} = w\,A\,(p - e_y).$$
 
-This is a loss gradient ($p - e_y = \nabla_z[-\log p_y]$), so training subtracts it. The reward enters only through
-$A$. Plain REINFORCE has $w = 1$; every correction method below is a choice of $w$. A batch of $B$ responses of $S$
-tokens averages this over all $BS$ tokens.
+$p - e_y$ is the gradient of the cross-entropy loss on the written token, $\nabla_z[-\log p_y] = p - e_y$, so
+training subtracts the update.
 
 ## 3. The true gradient
 
@@ -52,7 +51,7 @@ $J = \sum_y p_y\, r_y$ in loss sign [[3]](#ref-3)[[4]](#ref-4):
 
 $$g = \sum_y p_y \cdot r_y\,(p - e_y) \qquad (w = 1,\ A = r_y).$$
 
-Every method below is an estimate of $g$. The toy has one position, three tokens, and only token 2 is rewarded:
+The toy has one position, three tokens, and only token 2 is rewarded:
 
 ```python
 p = [0.5, 0.3, 0.2]    # model
@@ -66,8 +65,10 @@ r = [0, 0, 1]          # reward if token k is written
 | 2 | 0.2 | 1 | (0.5, 0.3, −0.8) | (0.10, 0.06, −0.16) |
 | | | | **sum** | **$g$ = (0.10, 0.06, −0.16)** |
 
-The weight $p_y$ is how often the model itself writes each token. That is what breaks when another model writes the
-tokens (section 6). A real model can't sum over all $V^S$ responses, so it averages $B$ samples instead.
+For a real model the sum runs over all $V^S$ responses, so every method below estimates $g$ from $B$ sampled
+responses instead. The weight $p_y$ is how often the model itself writes each token; that is what breaks when
+another model writes the tokens (section 6). And $g$ is the gradient at the current parameters: each optimizer step
+changes $p$, and with it $g$. Sections 3 to 6 stay inside one step; section 7 takes it.
 
 ## 4. Bias and variance
 
@@ -79,12 +80,13 @@ v = p - e_2 = (0.5,\ 0.3,\ -0.8), \qquad g = 0.2\,v = (0.10,\ 0.06,\ -0.16), \\
 \|v\|^2 = 0.25 + 0.09 + 0.64 = 0.98.
 \end{gathered}$$
 
-With $q$ the probability that a sampled token is 2, one row is $x = v$ with probability $q$ and $0$ otherwise:
-a Bernoulli($q$) scaled by $v$. A batch average is $v$ times the fraction of 2s it drew.
+With $q$ the probability that a sampled token is 2, one row is $v$ with probability $q$ and $0$ otherwise:
 
-Two conventions from here on. A distribution of vectors is hard to draw, so every figure draws token 2's
-coordinate of the estimate, while every number in the tables is for the full vector. A symbol with a dotted
-underline shows where it comes from on hover.
+$$x = c\,v, \qquad c \sim \text{Bernoulli}(q), \qquad
+\hat g_B = \frac{k}{B}\,v, \qquad k = \textstyle\sum_{i=1}^{B} c_i \sim \text{Binomial}(B, q).$$
+
+A batch average is $v$ times the fraction of 2s it drew. A vector of three numbers is hard to draw, so the figures
+plot token 2's coordinate of the estimate, $-0.8\,k/B$ against $-0.16$ for $g$; the tables keep all three.
 
 The model writes token 2 at $q = p_2 = 0.2$. Suppose instead a sampler that writes it half as often, $q = 0.1$;
 section 6 calls it the close engine. Draw many batches of 16 from each:
@@ -93,14 +95,15 @@ section 6 calls it the close engine. Draw many batches of 16 from each:
 
 *Figure 1: where batches of 16 land, 20,000 from each sampler. Dashed is $g$.*
 
-Each sampler's batches spread around a center. The model's center is $g$, the engine's is short of it, and more
-batches tighten the spread without moving either center. The spread is the variance and the offset of the center
-is the bias:
-
-**Error.** The error of the estimator is the mean squared miss over batches, $\mathbb{E}\,\|\hat g_B - g\|^2$. It
-decomposes into bias and variance [[5]](#ref-5):
+The error of an estimator is its mean squared miss over batches, $\mathbb{E}\,\|\hat g_B - g\|^2$. It decomposes
+into bias and variance [[5]](#ref-5):
 
 $$\mathbb{E}\,\|\hat g_B - g\|^2 = \underbrace{\|\mathbb{E}[\hat g_B] - g\|^2}_{\text{bias}^2} + \underbrace{\mathbb{E}\,\|\hat g_B - \mathbb{E}[\hat g_B]\|^2}_{\text{variance}}.$$
+
+The bias is a vector, the offset of the batches' center from $g$; the variance is their mean squared spread around
+that center. The error is a squared distance, so the bias enters as its squared length and the two terms add.
+Nothing here uses the toy's size: $x$ can be the full parameter gradient of a real model and the decomposition
+reads the same.
 
 :::note bias–variance decomposition
 For any estimator $\hat\theta$ of a target $\theta$, with $m = \mathbb{E}[\hat\theta]$:
@@ -127,7 +130,18 @@ $$\mathbb{E}\,\|\hat g_B - g\|^2 = \|\mathbb{E}[x] - g\|^2 + \frac{\operatorname
 
 In the toy only two rows occur, $v$ with probability $q$ and $0$ otherwise, so
 
-$$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = {{\|v\|^2\, q(1-q) @@ the variance of a coin that lands v with probability q and 0 otherwise: q(1−q), scaled by ‖v‖² = 0.98}}.$$
+$$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = \|v\|^2\, q(1-q).$$
+
+The variance comes from the coin $c$. Its square is itself, so its variance is $\mathbb{E}[c^2] - (\mathbb{E}c)^2 = q - q^2$:
+
+```python
+c = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0]         # ten draws at q = 0.2
+sum(c) / 10                                # mean 0.2
+sum(ci**2 for ci in c) / 10 - 0.2**2       # 0.2 - 0.04 = 0.16 = q(1-q), since ci**2 == ci
+```
+
+The row is the coin times the fixed vector $v$, and scaling by a fixed vector scales the variance by its squared
+length, $\|v\|^2 = 0.98$.
 
 | | model, $q = 0.2$ | engine, $q = 0.1$ |
 |---|---|---|
@@ -136,14 +150,9 @@ $$\mathbb{E}[x] = q\,v, \qquad \operatorname{Var}(x) = {{\|v\|^2\, q(1-q) @@ the
 | $\|\text{bias}\|^2$ | 0 | $0.05^2 + 0.03^2 + 0.08^2 = 0.0098$ |
 | $\operatorname{Var}(x) = \|v\|^2\, q(1-q)$ | $0.98 \cdot 0.2 \cdot 0.8 = 0.157$ | $0.98 \cdot 0.1 \cdot 0.9 = 0.088$ |
 | error $= \|\text{bias}\|^2 + \operatorname{Var}(x)/B$ | $0.157 / B$ | $0.0098 + 0.088 / B$ |
-| at $B = 16$ | 0.0098 | $0.0098 + 0.0055 = 0.0153$ |
 
-The two 0.0098 are a coincidence of the toy: the model's $0.157/16$ and the engine's $0.98 \cdot 0.1^2$ happen to
-agree. The model's bias is 0 because it writes token 2 at exactly the rate $g$ weights the $y = 2$ row, $q = p_2$
-(section 3). Bias appears when that match breaks: $y$ drawn from a different distribution than $p$, as with the
-engine, or the row changed ($w \ne 1$, $A$ rescaled).
-
-At three batch sizes:
+The model's bias is 0 because $q = p_2$: it writes token 2 at exactly the rate $g$ weights that row. At three
+batch sizes:
 
 | $B$ | model, $0.157/B$ | engine, $0.0098 + 0.088/B$ |
 |---|---|---|
@@ -151,18 +160,16 @@ At three batch sizes:
 | 16 | 0.0098 | 0.0153 |
 | 256 | 0.0006 | 0.0101 |
 
-![error vs q](figs/bv_q.png)
+The box below draws $\|\text{bias}\|^2 = \|v\|^2 (q - p_2)^2$ and $\operatorname{Var}(x)/B = \|v\|^2 q(1-q)/B$
+against the sampler's $q$. The dashed lines are the model at $q = p_2$ and the engine; each has its own slider.
+Moving $p_2$ changes $v$ too: the other two tokens keep their 5 : 3 ratio.
 
-*Figure 2: $\|\text{bias}\|^2 = 0.98\,(q - 0.2)^2$ and $\operatorname{Var}(x)/B = 0.98\,q(1-q)/B$ as the sampler's
-probability of token 2 varies. The engine at $q = 0.1$ beats the model at $B = 4$ and loses at $B = 16$.*
+:::widget samplers
 
-The engine's variance is lower because at $q = 0.1$ most rows are $0$, so they agree with each other more than the
-model's do; $q(1-q)$ shrinks toward either end. But they agree on $0.1\,v$, not $g$.
-
-Bias is paid once, because no batch size moves the center. Variance is paid $1/B$. A biased estimator with less
-variance therefore wins below some batch size and loses above it; for this pair the two errors cross at $B = 7$.
-Section 5 lowers $\operatorname{Var}(x)$ without adding bias. Each method in section 6 lowers one term by raising
-the other, and which is best depends on $B$.
+At $q = 0.1$ most rows are $0$, so the engine's rows agree with each other more than the model's do, but on
+$0.1\,v$ rather than on $g$. Growing $B$ shrinks the variance term and leaves the bias term where it is, so the
+engine wins below $B = 7$ and loses above it. Section 5 lowers $\operatorname{Var}(x)$ without adding bias; every
+weight in section 6 trades one term for the other, and which side of the trade wins depends on $B$.
 
 ## 5. Baseline: less variance, no bias
 
@@ -211,7 +218,7 @@ $0.142 - 0.039 = 0.103$ with it.
 
 ![baseline](figs/bv_baseline.png)
 
-*Figure 3: 20,000 batches of 16, model sampling itself. Both center on the true value; $b = 0.2$ is narrower.*
+*Figure 2: 20,000 batches of 16, model sampling itself. Both center on the true value; $b = 0.2$ is narrower.*
 
 The zero bias relied on $\mathbb{E}[e_y] = p$, which holds only when the model wrote the tokens. The next section
 drops that assumption.
@@ -315,7 +322,7 @@ TV; IS's $\operatorname{Var}(x) = 0.98\,(p_2^2/q - p_2^2)$ is token 2's term of 
 
 ![weights](figs/bv_weights_far.png)
 
-*Figure 4: the exact distribution of one batch estimate under each weight. 85% of batches hold no token-2 row and
+*Figure 3: the exact distribution of one batch estimate under each weight. 85% of batches hold no token-2 row and
 estimate 0; 14% hold one. Dashed is $g$; the triangle is the mean of the estimate. REINFORCE and TIS center short
 of $g$. IS centers on it, with one batch in seven landing six times past it and the rest at zero.*
 
