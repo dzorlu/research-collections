@@ -3,6 +3,8 @@
 Goal: write ML training code from scratch, quickly and correctly, and reason about how it fails at scale. Blank
 page, no AI; docs are fine.
 
+Plan: [ROADMAP.md](ROADMAP.md).
+
 ## 1. Drills
 
 Each notebook has instructions, stub cells marked `# TODO`, and test cells that print `ok`.
