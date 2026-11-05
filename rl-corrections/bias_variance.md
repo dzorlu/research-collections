@@ -234,11 +234,11 @@ far   = [0.69, 0.30, 0.01]    # almost never writes token 2
 
 The engine's mismatch on each token can be read as a difference or as a ratio. The far engine:
 
-| token $k$ | $p_k$ | $p_{\text{engine},k}$ | difference $p_k - p_{\text{engine},k}$ | ratio $p_k / p_{\text{engine},k}$ |
-|---|---|---|---|---|
-| 0 | 0.50 | 0.69 | −0.19 | 0.72 |
-| 1 | 0.30 | 0.30 | 0 | 1.0 |
-| 2 | 0.20 | 0.01 | +0.19 | 20 |
+| token $k$ | $p_k$ | $p_{\text{engine},k}$ | difference $p_k - p_{\text{engine},k}$ | ratio $\rho_k = p_k / p_{\text{engine},k}$ | $p_k^2 / p_{\text{engine},k}$ |
+|---|---|---|---|---|---|
+| 0 | 0.50 | 0.69 | −0.19 | 0.72 | 0.36 |
+| 1 | 0.30 | 0.30 | 0 | 1.0 | 0.30 |
+| 2 | 0.20 | 0.01 | +0.19 | 20 | 4.0 |
 
 **Total variation** adds up the differences [[9]](#ref-9):
 
@@ -247,23 +247,40 @@ $$\mathrm{TV} = \tfrac{1}{2}\textstyle\sum_k |p_k - p_{\text{engine},k}|,$$
 half because each move is counted where it leaves and where it lands. It is the mass that moved, so it never
 exceeds 1.
 
-**Chi-squared** is the variance of the ratio $\rho_k = p_k / p_{\text{engine},k}$, which importance sampling uses
-as its weight [[10]](#ref-10)[[12]](#ref-12). Under the engine the ratio is random, averages to 1 (since
-$\sum_k p_{\text{engine},k} \cdot p_k / p_{\text{engine},k} = 1$), and its variance is [[11]](#ref-11)
+**Chi-squared** is the variance of the ratio $\rho_k$, which importance sampling uses as its weight
+[[10]](#ref-10)[[12]](#ref-12). Under the engine the ratio is random with mean 1, since
+$\sum_k p_{\text{engine},k}\, \rho_k = \sum_k p_k = 1$, and its mean square is the last column summed,
+$\sum_k p_{\text{engine},k}\, \rho_k^2 = \sum_k p_k^2 / p_{\text{engine},k}$. So [[11]](#ref-11)
 
-$$\operatorname{Var}_{p_{\text{engine}}}(\rho) = \mathbb{E}[\rho^2] - 1 = \sum_k \frac{p_k^2}{p_{\text{engine},k}} - 1 = \chi^2(p \,\|\, p_{\text{engine}}).$$
+$$\chi^2(p \,\|\, p_{\text{engine}}) = \operatorname{Var}_{p_{\text{engine}}}(\rho) = \sum_k \frac{p_k^2}{p_{\text{engine},k}} - 1.$$
 
 | | close engine, (0.6, 0.3, 0.1) | far engine, (0.69, 0.30, 0.01) |
 |---|---|---|
 | TV $= \tfrac12 \sum_k \lvert p_k - p_{\text{engine},k} \rvert$ | $\tfrac12 (0.1 + 0 + 0.1) = 0.10$ | $\tfrac12 (0.19 + 0 + 0.19) = 0.19$ |
 | ratios $\rho$ | (0.83, 1.0, 2.0) | (0.72, 1.0, 20) |
-| $\chi^2 = \sum_k p_{\text{engine},k}\, \rho_k^2 - 1$ | $0.6 \cdot 0.83^2 + 0.3 \cdot 1 + 0.1 \cdot 2^2 - 1 = 0.12$ | $0.69 \cdot 0.72^2 + 0.30 \cdot 1 + 0.01 \cdot 20^2 - 1 = 3.66$ |
+| $p_k^2 / p_{\text{engine},k}$ | (0.42, 0.30, 0.40) | (0.36, 0.30, 4.0) |
+| $\chi^2 = \sum_k p_k^2 / p_{\text{engine},k} - 1$ | $0.42 + 0.30 + 0.40 - 1 = 0.12$ | $0.36 + 0.30 + 4.0 - 1 = 3.66$ |
 
-TV sees the difference, bounded by the mass that exists. $\chi^2$ sees the ratio squared, unbounded as
-$p_{\text{engine},2} \to 0$; in the far column, token 2's term is nearly all of $\chi^2$.
+TV is bounded by the mass that exists; $\chi^2$ is not, since token 2's term grows as $p_{\text{engine},2} \to 0$ and is
+nearly all of the far engine's 3.66.
 
-TV sets the bias of ignoring the mismatch; $\chi^2$ sets the variance of correcting it. From the close sampler to
-the far one, TV doubles and $\chi^2$ grows thirtyfold. The next two subsections put numbers on both costs.
+**TV is the bias of ignoring the mismatch.** With $w = 1$ the average row weights each token by how often the engine
+writes it, so
+
+$$\text{bias} = \sum_y (p_{\text{engine},y} - p_y)\, r_y\,(p - e_y),$$
+
+each token's moved mass times its row, and TV is the sum of the moved masses. In the toy only token 2 has a reward,
+so the bias is $(p_{\text{engine},2} - p_2)\, v$: the token-2 entry of the difference column, $-0.10\, v$ for the
+close engine and $-0.19\, v$ for the far one.
+
+**$\chi^2$ is the variance of correcting it.** With $w = \rho$ token 2's row becomes $\rho_2\, v$, drawn with
+probability $p_{\text{engine},2}$. Its mean is $p_{\text{engine},2}\, \rho_2\, v = p_2\, v = g$, no bias, and
+
+$$\operatorname{Var}(x) = p_{\text{engine},2}\, \rho_2^2\, \|v\|^2 - \|g\|^2 = \frac{p_2^2}{p_{\text{engine},2}}\, \|v\|^2 - \|g\|^2,$$
+
+token 2's $\chi^2$ term times $\|v\|^2$: $0.40 \cdot 0.98 - 0.039 = 0.35$ for the close engine and
+$4.0 \cdot 0.98 - 0.039 = 3.88$ for the far one. The next subsection puts every weight between these two through
+the same arithmetic.
 
 ### 6.2 Three weights
 
