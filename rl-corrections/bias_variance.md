@@ -333,8 +333,8 @@ $$\begin{gathered}
 | IS | 20 | 0.20 | 0 | 3.88 | $0 + 3.88/16 = 0.243$ |
 | TIS | 2 | 0.02 | 0.032 | 0.039 | $0.032 + 0.039/16 = 0.034$ |
 
-The chart below draws where a batch of 16 lands under any cap, as a multiple of $g$. The dashed line is the truth
-and the triangle is the average over batches. REINFORCE's triangle sits far short of the line and its bars near it.
+The chart below draws where a batch of 16 lands under the three weights, and under any cap you set, as a multiple
+of $g$. The dashed line is the truth and each triangle is a weight's average over batches. REINFORCE's triangle sits far short of the line and its bars near it.
 IS's triangle sits on the line and its bars nowhere near it.
 
 :::widget batches
