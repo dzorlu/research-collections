@@ -229,20 +229,7 @@ Two engines stand in for both, differing from the model only in how often they w
 p     = [0.5,  0.3,  0.2 ]    # model: token 2 in 20 rows out of 100
 close = [0.6,  0.3,  0.1 ]    # engine: 10 out of 100
 far   = [0.69, 0.30, 0.01]    # engine: 1 out of 100
-
-v = [0.5, 0.3, -0.8]          # the only nonzero row, the one token 2 writes
-model_rows = 20 * [v] + 80 * [0]    # average 0.2 v, the true gradient g
-far_rows   =  1 * [v] + 99 * [0]    # average 0.01 v: 20 times short
 ```
-
-A row is one sampled token's update (section 4), and only token 2's is nonzero. The far engine's batch has one
-copy of $v$ where the model's would have twenty, so its average is twenty times short of $g$. That factor is the
-ratio $\rho$, 20 on the far engine and 2 on the close one, and every method is a choice of how much of it to put
-back as a weight on the row. $b = 0$ throughout, and every error below is measured against $g$.
-
-The weight does not remove the mismatch; it chooses how it is paid. Leave $w = 1$ and every batch comes up short by
-the same amount: bias. Multiply the row by $\rho$ to restore the count and the batches are right on average but
-swing from one to the next: variance. A cap pays some of each.
 
 ### 6.1 Raising the weight trades bias for variance
 
