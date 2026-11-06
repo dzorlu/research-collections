@@ -212,23 +212,73 @@ drops that assumption.
 
 ## 6. When the model did not write the tokens
 
-Sections 4 and 5 assumed $y \sim p$. In training the tokens come from a distribution that differs from $p$ in one
-of two ways. Both show up as the same thing in the row: a ratio $\rho_y = p_y / p_{\text{engine},y}$ that is not 1.
+Sections 4 and 5 assumed the model wrote the tokens, $y \sim p$. In training it rarely did. The inference engine
+that sampled the batch runs different kernels and precision from the trainer [[1]](#ref-1), and the trainer takes
+several optimizer steps on one batch, so from the second step on its parameters are no longer the ones that
+sampled it [[14]](#ref-14). Call whatever wrote the tokens $p_{\text{engine}}$; for the second case that is
+$p_{\theta_{\text{old}}}$, and the arithmetic is the same.
 
-| mismatch | what wrote the tokens | why it differs from $p$ | methods whose ratio is against it |
-|---|---|---|---|
-| engine vs trainer | the inference engine, same parameters | different kernels, precision and batching [[1]](#ref-1) | IS, TIS, DPPO; REINFORCE ignores it |
-| old vs new parameters | the trainer at $\theta_{\text{old}}$, the parameters when the batch was sampled | several optimizer steps are taken on one batch; after the first, $\theta$ has moved [[14]](#ref-14) | PPO, CISPO, GSPO |
+| mismatch | why $p_{\text{engine}} \neq p$ | methods whose ratio is against it |
+|---|---|---|
+| engine vs trainer | different kernels, precision and batching [[1]](#ref-1) | IS, TIS, DPPO; REINFORCE ignores it |
+| old vs new parameters | several optimizer steps on one batch; after the first, $\theta$ has moved [[14]](#ref-14) | PPO, CISPO, GSPO |
 
-The toy needs only $p$ and the distribution that wrote the tokens, so one symbol serves both: $p_{\text{engine}}$
-below is the engine for the first group and $p_{\theta_{\text{old}}}$ for the second. The arithmetic is identical;
-the two differ in what happens after the step, and section 7 returns to that.
+Two engines stand in for both, differing from the model only in how often they write the rewarded token:
 
-### 6.1 Two distances between engine and model
+```python
+p     = [0.5,  0.3,  0.2 ]    # model: token 2 in 20 rows out of 100
+close = [0.6,  0.3,  0.1 ]    # engine: 10 out of 100
+far   = [0.69, 0.30, 0.01]    # engine: 1 out of 100
+```
 
-The far engine's mismatch sits on one token: the model writes token 2 twenty times in a hundred, the engine once.
-Token 2 is the only one with a reward, so its row $v$ is the only nonzero row, and everything below is about how
-often $v$ shows up.
+A row is one sampled token's update, $w\,A\,(p - e_y)$ (section 4). Only token 2 is rewarded, so the only nonzero
+row is $v = p - e_2 = (0.5, 0.3, -0.8)$, and the true gradient is $g = 0.2\,v$: $v$ times how often the model
+writes token 2. An engine writes it at a different rate, so a batch holds the wrong number of copies of $v$. Every
+method answers that with a weight on the row, a function of the ratio $\rho_y = p_y / p_{\text{engine},y}$; on
+token 2 the ratio is 2 for the close engine and 20 for the far one. $b = 0$ throughout, and every error below is
+measured against $g$.
+
+The weight does not remove the mismatch; it chooses how it is paid. Leave $w = 1$ and every batch comes up short by
+the same amount: bias. Multiply the row by $\rho$ to restore the count and the batches are right on average but
+swing from one to the next: variance. A cap pays some of each.
+
+### 6.1 Raising the weight trades bias for variance
+
+Write $w_2$ for the weight on token 2's row; the other rows are zero whatever their weight. On the far engine
+REINFORCE keeps $w_2 = 1$, IS [[10]](#ref-10)[[12]](#ref-12) uses the full ratio, $w_2 = \rho_2 = 20$, and TIS
+[[13]](#ref-13)[[1]](#ref-1) stops it at a cap, $w_2 = \min(\rho_2, 2) = 2$. A batch of 16 estimates $w_2$ times its
+token-2 count over 16, times $v$, and the far engine puts a token-2 row in about one batch in seven. Eight batches,
+one of which drew the row:
+
+| batch | token-2 rows | REINFORCE, $w_2 = 1$ | TIS, $w_2 = 2$ | IS, $w_2 = 20$ |
+|---|---|---|---|---|
+| 1 | 0 | 0 | 0 | 0 |
+| 2 | 0 | 0 | 0 | 0 |
+| 3 | 1 | $\tfrac{1}{16}\,v = 0.31\,g$ | $\tfrac{2}{16}\,v = 0.63\,g$ | $\tfrac{20}{16}\,v = 6.25\,g$ |
+| 4 | 0 | 0 | 0 | 0 |
+| 5 | 0 | 0 | 0 | 0 |
+| 6 | 0 | 0 | 0 | 0 |
+| 7 | 0 | 0 | 0 | 0 |
+| 8 | 0 | 0 | 0 | 0 |
+| average over many batches | 0.16 of 16 | $0.01\,v = 0.05\,g$ | $0.02\,v = 0.10\,g$ | $0.2\,v = g$ |
+
+REINFORCE delivers a third of the truth in the one batch and nothing in the other seven, and its average settles
+at a twentieth of $g$. IS multiplies the row by 20, which is exactly how under-counted it is, so the average lands
+on $g$; but seven batches say zero and one says six times too much. TIS counts the row twice: a tenth of the truth
+on average, with a tenth of IS's swing.
+
+Section 4's formulas with the weight in, $q = p_{\text{engine},2}$:
+
+$$\begin{gathered}
+\mathbb{E}[x] = q\,w_2\,v, \qquad \text{bias} = \mathbb{E}[x] - g = (q\,w_2 - p_2)\,v, \\
+\operatorname{Var}(x) = w_2^2\,\|v\|^2\,q(1-q), \qquad \text{error} = \|\text{bias}\|^2 + \frac{\operatorname{Var}(x)}{B}.
+\end{gathered}$$
+
+Only the variance term shrinks with $B$.
+
+### 6.2 The bias is bounded by TV; the variance is not bounded at all
+
+The far engine's mismatch sits on one token:
 
 | token $k$ | $p_k$ | $p_{\text{engine},k}$ | difference $p_k - p_{\text{engine},k}$ | ratio $\rho_k = p_k / p_{\text{engine},k}$ |
 |---|---|---|---|---|
@@ -236,8 +286,8 @@ often $v$ shows up.
 | 1 | 0.30 | 0.30 | 0 | 1.0 |
 | 2 | 0.20 | 0.01 | +0.19 | 20 |
 
-**Ignore the mismatch and the estimate is short.** REINFORCE, $w = 1$, averages the engine's rows as they come. It
-sees $v$ once in a hundred rows instead of twenty times, so its average row is $0.01\, v$ instead of $0.2\, v = g$. The
+**Ignore the mismatch and the estimate is short.** REINFORCE averages the engine's rows as they come. It sees $v$
+once in a hundred rows instead of twenty times, so its average row is $0.01\, v$ instead of $0.2\, v = g$. The
 shortfall is the bias:
 
 $$\text{bias} = (p_{\text{engine},2} - p_2)\, v = -0.19\, v.$$
@@ -247,111 +297,50 @@ sum of the difference column because each move is counted where it leaves and wh
 
 $$\mathrm{TV} = \tfrac{1}{2}\textstyle\sum_k |p_k - p_{\text{engine},k}| = \tfrac12 (0.19 + 0 + 0.19) = 0.19.$$
 
-It never exceeds 1. In general the bias is the difference column weighted by each token's reward and row; TV is
-the column's size, and bounds it.
+It never exceeds 1, and it bounds the bias: the bias is the difference column weighted by each token's reward and
+row, and TV is the column's size.
 
-**Correct the mismatch and the estimate is jumpy.** IS multiplies each row by $\rho = p / p_{\text{engine}}$
-[[10]](#ref-10)[[12]](#ref-12), so token 2's row becomes $20\, v$. Once in a hundred rows, times 20, is twenty in a
-hundred: the average row is $0.01 \cdot 20 \cdot v = 0.2\, v = g$, and the bias is gone. But a single row is now
-$20\, v$ once in a hundred and $0$ the rest of the time. The average is right and almost no row is near it:
+**Correct the mismatch and the estimate is jumpy.** IS multiplies each row by $\rho$, so token 2's row becomes
+$20\, v$. Once in a hundred rows, times 20, is twenty in a hundred: the average row is $0.01 \cdot 20 \cdot v = g$,
+and the bias is gone. But a single row is now $20\, v$ once in a hundred and $0$ the rest of the time:
 
 $$\operatorname{Var}(x) = \mathbb{E}\|x\|^2 - \|g\|^2 = 0.01 \cdot 20^2 \cdot 0.98 - 0.039 = 4.0 \cdot 0.98 - 0.039 = 3.88.$$
 
 The 4.0 is how rarely the weight fires times how big it is, squared. Chi-squared is the name for that quantity
-summed over tokens [[11]](#ref-11), the variance of the weight $\rho$ when the engine draws:
+summed over tokens [[11]](#ref-11), the variance of $\rho$ when the engine draws:
 
 $$\begin{aligned}
 \chi^2(p \,\|\, p_{\text{engine}}) &= \textstyle\sum_k p_{\text{engine},k}\, \rho_k^2 - 1 \\
 &= 0.69 \cdot 0.72^2 + 0.30 \cdot 1^2 + 0.01 \cdot 20^2 - 1 = 0.36 + 0.30 + 4.0 - 1 = 3.66.
 \end{aligned}$$
 
-The minus 1 is the squared mean of $\rho$, which is 1 because the weights restore the model's rates. Token 2's 4.0
-is nearly all of the 3.66; the other weights are near 1 and add almost nothing. Unlike TV, $\chi^2$ has no
-ceiling: token 2's term is $p_2^2 / p_{\text{engine},2}$ and grows without limit as the engine's rate goes to zero.
+The minus 1 is the mean of $\rho$ squared, which is 1 because the weights restore the model's rates. Token 2's 4.0
+is nearly all of the 3.66. Unlike TV, $\chi^2$ has no ceiling: token 2's term is $p_2^2 / p_{\text{engine},2}$ and
+grows without limit as the engine's rate goes to zero.
 
-**Both engines.**
+On the close engine the moved mass is 0.10, the weight on token 2 is 2, and $\chi^2$ is 0.12: half the shortfall
+and a thirtieth of the swing.
 
-| | close engine, (0.6, 0.3, 0.1) | far engine, (0.69, 0.30, 0.01) |
-|---|---|---|
-| TV | 0.10 | 0.19 |
-| REINFORCE bias $= (p_{\text{engine},2} - p_2)\, v$ | $-0.10\, v$ | $-0.19\, v$ |
-| weight on token 2, $\rho_2$ | 2 | 20 |
-| $\chi^2$ | 0.12 | 3.66 |
-| IS $\operatorname{Var}(x) = 0.98\, p_{\text{engine},2}\, \rho_2^2 - 0.039$ | 0.35 | 3.88 |
+### 6.3 Unbiased loses at $B = 16$ and wins at $B = 256$
 
-From the close engine to the far one the shortfall doubles and the weight goes from 2 to 20. The next subsection
-is about weights between 1 and 20.
-
-### 6.2 Raising the weight trades bias for variance
-
-Two engines, differing only in how often they write the rewarded token:
-
-```python
-p     = [0.5,  0.3,  0.2 ]    # model: token 2 in 20 rows out of 100
-close = [0.6,  0.3,  0.1 ]    # 10 out of 100
-far   = [0.69, 0.30, 0.01]    # 1 out of 100
-```
-
-This subsection takes the far engine, where the weights matter most, through eight batches; 6.3 then scores every
-method on both. $b = 0$ throughout.
-
-Only token 2's row is nonzero, and it is $w_2\,${{$v$ @@ v = p − e_2 = (0.5, 0.3, −0.8), the y = 2 row of section 3's table; defined in section 4}}, so a batch's estimate is
-$v$ times its token-2 count, times $w_2$, over 16. The truth is {{$g = 0.2\,v$ @@ section 3's table: only the y = 2 row is nonzero, weighted by p_2 = 0.2}}. IS uses the full ratio, $w_2 = \rho_2 = 20$; TIS [[13]](#ref-13)[[1]](#ref-1) truncates
-it at a cap, here $w_2 = \min(\rho_2, 2) = 2$. Eight batches of 16, with one token-2 row among them, under the
-three weights:
-
-| batch | token-2 rows | <span class="c-blue">REINFORCE, $w_2 = 1$</span> | <span class="c-aqua">IS, $w_2 = 20$</span> | <span class="c-orange">TIS, $w_2 = 2$</span> |
-|---|---|---|---|---|
-| 1 | 0 | 0 | 0 | 0 |
-| 2 | 0 | 0 | 0 | 0 |
-| 3 | 1 | $\tfrac{1}{16}\,v = 0.31\,g$ | $\tfrac{20}{16}\,v = 6.25\,g$ | $\tfrac{2}{16}\,v = 0.63\,g$ |
-| 4 | 0 | 0 | 0 | 0 |
-| 5 | 0 | 0 | 0 | 0 |
-| 6 | 0 | 0 | 0 | 0 |
-| 7 | 0 | 0 | 0 | 0 |
-| 8 | 0 | 0 | 0 | 0 |
-| average over many batches | 0.16 of 16 | $0.01\,v = 0.05\,g$ | $0.2\,v = g$ | $0.02\,v = 0.10\,g$ |
-
-- **REINFORCE** counts the row once. The one batch that has it delivers a third of the truth, the rest deliver
-  nothing, and the average settles at a twentieth of the truth.
-- **IS** counts the row 20 times, which is exactly how under-represented it is, so the average settles on the
-  truth. No single batch is near it: seven say zero and one says six times too much.
-- **TIS** counts it twice: a tenth of the truth on average, most of REINFORCE's
-  shortfall with a little of IS's scatter.
-
-The mismatch does not go away; $w_2$ only chooses whether it shows up as a consistent shortfall, which is bias,
-or as scatter across batches, which is variance. Section 4's formulas with the weight in, $q = p_{\text{engine},2} = 0.01$:
-
-$$\begin{gathered}
-\mathbb{E}[x] = q\,w_2\,v, \qquad \text{bias} = \mathbb{E}[x] - g = (q\,w_2 - p_2)\,v, \\
-\operatorname{Var}(x) = w_2^2\,\|v\|^2\,q(1-q), \qquad \text{error} = \|\text{bias}\|^2 + \frac{\operatorname{Var}(x)}{B},
-\end{gathered}$$
-
-| | $w_2$ | $q\,w_2$ | $\|\text{bias}\|^2 = 0.98\,(q\,w_2 - 0.2)^2$ | $\operatorname{Var}(x) = w_2^2 \cdot 0.98 \cdot 0.01 \cdot 0.99$ | error, $B = 16$ |
-|---|---|---|---|---|---|
-| REINFORCE | 1 | 0.01 | 0.035 | 0.010 | $0.035 + 0.010/16 = 0.036$ |
-| IS | 20 | 0.20 | 0 | 3.88 | $0 + 3.88/16 = 0.243$ |
-| TIS | 2 | 0.02 | 0.032 | 0.039 | $0.032 + 0.039/16 = 0.034$ |
-
-### 6.3 Every method, both samplers
-
-Three more choices of $w$, all built on the ratio $\rho_y = p_y / p_{\text{engine},y}$:
+Three more weights, all functions of $\rho$, differ in what they do when $\rho$ leaves a band around 1. On the toy
+that is decided by two numbers per engine: $\rho_2$ is 2 on the close engine and 20 on the far one, and the mass
+moved off token 2 is 0.10 and 0.19.
 
 - **CISPO** [[21]](#ref-21), ratio against $\theta_{\text{old}}$, clamps $\rho_y$ at a cap and stops the gradient
   through the clamp, so a token above the cap gets $w = \text{cap}$ where PPO gives $w = 0$. On the toy it is TIS
-  with a higher cap. The paper tunes the cap without publishing it, so this post uses 4.
+  with a higher cap; the paper tunes the cap without publishing it, so this post uses 4.
+- **PPO** [[14]](#ref-14), ratio against $\theta_{\text{old}}$, keeps $w = \rho_y$ inside $[1 - \epsilon, 1 + \epsilon]$
+  and sets $w = 0$ outside it in the direction $A$ favors; $\epsilon = 0.2$, the paper's default. Token 2 has
+  $A > 0$ and $\rho_2$ is 2 and 20, both above 1.2, so PPO sets $w_2 = 0$ on both engines.
+- **DPPO** [[2]](#ref-2), ratio against the engine, keeps $w = \rho_y$ while the moved mass $|p_y - p_{\text{engine},y}|$
+  stays under $\delta = 0.15$ and sets $w = 0$ past it, in the direction $A$ favors. Token 2 moved 0.19 on the far
+  engine, so DPPO drops it there, and 0.10 on the close one, so it keeps $w_2 = \rho_2 = 2$.
 
-- **PPO** [[14]](#ref-14), ratio against $\theta_{\text{old}}$, sets $w = 0$ when $\rho_y$ leaves
-  $[1 - \epsilon, 1 + \epsilon]$ in the direction $A$ favors, and $w = \rho_y$ otherwise. $\epsilon = 0.2$
-  throughout, the paper's default.
-- **DPPO** [[2]](#ref-2), ratio against the engine, sets $w = 0$ when $|p_y - p_{\text{engine},y}| > \delta$ (here
-  $\delta = 0.15$) in the direction $A$ favors, and $w = \rho_y$ otherwise.
+Table 1: every method on both engines, $b = 0$, $\operatorname{Var}(x)$ of one row. Every bias is a multiple of
+$v$, so one coefficient gives it.
 
-Table 1: every method on both samplers, $b = 0$, $\operatorname{Var}(x)$ of one row. Every bias is a multiple of
-$v$, so one coefficient gives it. PPO's $w_2 = 0$ and DPPO's pass on the close sampler are explained in point 3
-below.
-
-| sampler | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | <span class="c-shade">error, $B = 16$</span> | <span class="c-shade">error, $B = 256$</span> |
+| engine | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | <span class="c-shade">error, $B = 16$</span> | <span class="c-shade">error, $B = 256$</span> |
 |---|---|---|---|---|---|---|---|
 | close | REINFORCE | 1 | $-0.10\,v$ | 0.0098 | 0.088 | 0.015 | 0.010 |
 | close | IS, TIS, CISPO, DPPO | 2 | 0 | 0 | 0.353 | 0.022 | 0.0014 |
@@ -362,37 +351,26 @@ below.
 | far | CISPO (cap 4) | 4 | $-0.16\,v$ | 0.0251 | 0.155 | 0.035 | 0.026 |
 | far | PPO, DPPO | 0 | $-g$ | 0.0392 | 0 | 0.039 | 0.039 |
 
-1. **Unbiased is not better at $B = 16$.** On the close sampler REINFORCE beats IS; on the far one TIS beats both.
+1. **Unbiased is not better at $B = 16$.** On the close engine REINFORCE beats IS; on the far one TIS beats both.
    At $B = 256$ IS wins on both.
-2. **The trust-region methods have the largest error, and that is their purpose.** PPO and DPPO set $w_2 = 0$,
-   so they estimate the zero vector and their bias is $-g$. They do not aim to estimate one gradient well; they
-   stop the step on tokens that already moved too far. That pays off only across steps (section 7).
-3. **PPO and DPPO disagree on the close sampler.** $\rho_2 = 2$, outside PPO's band, so PPO blocks token 2. Only
-   0.10 of probability moved, under $\delta = 0.15$, so DPPO keeps it.
+2. **The trust-region methods have the largest error, and that is deliberate.** A dropped row is the zero vector
+   every time: no scatter, so no variance, and a bias of $-g$, which is the whole of the error. PPO and DPPO are not
+   trying to estimate this step's gradient well; they stop the step on a token that already moved too far, and what
+   that buys shows only across steps (section 7).
 
-Between REINFORCE's $w = 1$ and IS's $w = \rho$ lies every cap, and Table 1 tried only 2 and 4.
+### 6.4 The best cap grows with the batch
 
-### 6.4 Where to put the cap
-
-A cap trades variance for bias, and the best trade depends on $B$. With $w_2 = c$ in the error of 6.2, setting
-the derivative in $c$ to zero gives the best cap, $c^* = p_2 / \big(q + (1 - q)/B\big)$. Far sampler:
+A cap between 1 and $\rho$ pays part of the mismatch as bias and the rest as variance, and only the variance is
+divided by $B$, so a bigger batch can afford a higher cap. With $w_2 = c$ in the error of 6.1, setting the
+derivative in $c$ to zero gives the best cap, $c^* = p_2 / \big(q + (1 - q)/B\big)$. Far engine:
 
 | $B$ | best cap $c^*$ | error at $c^*$ | cap 2 | cap 4 | no cap |
 |---|---|---|---|---|---|
 | 16 | 2.8 | 0.034 | 0.034 | 0.035 | 0.243 |
 | 256 | 14.4 | 0.011 | 0.032 | 0.026 | 0.015 |
 
-At the larger batch the variance term is smaller, so the cap can rise further before the variance it lets in costs
-more than the bias it removes. Common TIS implementations cap at 2 [[1]](#ref-1), close to the best at $B = 16$
-and well below it at $B = 256$. The same trade appears in classic off-policy RL as V-trace [[15]](#ref-15) and
-Retrace [[16]](#ref-16).
-
-The box below has the formulas of 6.2 under three sliders: $q$, the sampler's rate for token 2 (0.01 is the far
-sampler, 0.1 the close one, 0.2 the model itself); $w_2$, the weight on the row; and $B$. Nothing is sampled.
-Raising $w_2$ from 1 toward $\rho$ moves error from the bias term to the variance term; raising $B$ moves the best
-cap to the right.
-
-:::widget weight
+Common TIS implementations cap at 2 [[1]](#ref-1), close to the best at $B = 16$ and well below it at $B = 256$.
+The same trade appears in classic off-policy RL as V-trace [[15]](#ref-15) and Retrace [[16]](#ref-16).
 
 ## 7. Across steps: the blind spot and the trust region
 
@@ -491,7 +469,7 @@ effect appears.
 $w$ is a function of $\rho = p_y / p_{\text{engine},y}$, against the engine for IS, TIS and DPPO and against
 $\theta_{\text{old}}$ for CISPO, PPO and GSPO (section 6).
 
-IS, TIS and CISPO are the ratio uncapped, capped at 2 and capped at 4 (6.2, 6.4); REINFORCE ignores the ratio.
+IS, TIS and CISPO are the ratio uncapped, capped at 2 and capped at 4 (6.1, 6.4); REINFORCE ignores the ratio.
 The remaining methods differ in when they set $w = 0$:
 
 - **PPO** [[14]](#ref-14), $w = \rho$ in the band, $0$ outside it in the direction $A$ favors: a zeroed row has bias
