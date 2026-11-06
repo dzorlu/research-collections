@@ -344,8 +344,16 @@ $v$, so one coefficient gives it.
 ### 6.4 The best cap grows with the batch
 
 A cap between 1 and $\rho$ pays part of the mismatch as bias and the rest as variance, and only the variance is
-divided by $B$, so a bigger batch can afford a higher cap. With $w_2 = c$ in the error of 6.1, setting the
-derivative in $c$ to zero gives the best cap, $c^* = p_2 / \big(q + (1 - q)/B\big)$. Far engine:
+divided by $B$, so a bigger batch can afford a higher cap. Put $w_2 = c$ in the error of 6.1 and set the derivative in $c$ to zero:
+
+$$\begin{aligned}
+\text{error}(c) &= \|v\|^2 \Big[ (q\,c - p_2)^2 + \frac{c^2\, q(1-q)}{B} \Big], \\
+\frac{d}{dc}: \quad 0 &= 2q\,(q\,c - p_2) + \frac{2c\, q(1-q)}{B}, \\
+p_2 &= c\,\Big( q + \frac{1-q}{B} \Big), \\
+c^* &= \frac{p_2}{q + (1-q)/B}.
+\end{aligned}$$
+
+As $B$ grows, $c^*$ goes to $p_2 / q = \rho_2$, which is IS. Far engine:
 
 | $B$ | best cap $c^*$ | error at $c^*$ | cap 2 | cap 4 | no cap |
 |---|---|---|---|---|---|
