@@ -251,13 +251,6 @@ at a twentieth of $g$. IS multiplies the row by 20, which is exactly how under-c
 on $g$; but seven batches say zero and one says $6.25\,g$. TIS counts the row twice: a tenth of the truth on
 average, with a tenth of IS's swing.
 
-Section 3's formulas with the weight in, $q = p_{\text{engine},2}$:
-
-$$\begin{gathered}
-\mathbb{E}[x] = q\,w_2\,v, \qquad \text{bias} = \mathbb{E}[x] - g = (q\,w_2 - p_2)\,v, \\
-\operatorname{Var}(x) = w_2^2\,\|v\|^2\,q(1-q), \qquad \text{error} = \|\text{bias}\|^2 + \frac{\operatorname{Var}(x)}{B}.
-\end{gathered}$$
-
 The bias has a ceiling and the variance has none. The far engine's mismatch, token by token:
 
 | token $y$ | $p_y$ | $p_{\text{engine},y}$ | difference $p_y - p_{\text{engine},y}$ | ratio $\rho_y = p_y / p_{\text{engine},y}$ |
@@ -312,6 +305,10 @@ Three more weights are functions of $\rho$ and differ in what they do when $\rho
   $A < 0$. Token 2 moved 0.19 on the far
   engine, so DPPO drops it there, and 0.10 on the close one, so it keeps $w_2 = \rho_2 = 2$.
 
+With $q$ the engine's rate for token 2, a weight $w_2$ on the rewarded row gives
+
+$$\text{bias} = (q\,w_2 - p_2)\,v, \qquad \operatorname{Var}(x) = w_2^2\,\|v\|^2\,q(1-q).$$
+
 Table 1: every method on both engines, $b = 0$, $\operatorname{Var}(x)$ of one row. Every bias is a multiple of
 $v$, so one coefficient gives it.
 
@@ -335,7 +332,8 @@ $v$, so one coefficient gives it.
 ### 5.3 The best cap grows with the batch
 
 A cap between 1 and $\rho$ turns part of the variance into bias. Only the variance is divided by $B$, so the best
-cap rises with $B$. Put $w_2 = \text{cap}$ in the error of 5.1 and set the derivative in the cap to zero:
+cap rises with $B$. Put $w_2 = \text{cap}$ in Table 1's
+error, $\|\text{bias}\|^2 + \operatorname{Var}(x)/B$, and set the derivative in the cap to zero:
 
 $$\begin{aligned}
 \text{error} &= \|v\|^2 \Big[ (q\,\text{cap} - p_2)^2 + \frac{\text{cap}^2\, q(1-q)}{B} \Big], \\
