@@ -79,7 +79,11 @@ details.note[open] summary::before {{ content:'×'; }}
 </style>
 <script>
 // Same key the Quarto site writes, so the toggle here and the one in the site navbar stay in step.
-(function () {{ try {{ if (localStorage.getItem('quarto-color-scheme') === 'alternate') document.documentElement.classList.add('dark'); }} catch (e) {{}} }})();
+(function () {{ try {{
+  let v = localStorage.getItem('quarto-color-scheme');
+  if (v == null && window.matchMedia('(prefers-color-scheme: dark)').matches) {{ v = 'alternate'; localStorage.setItem('quarto-color-scheme', v); }}
+  if (v === 'alternate') document.documentElement.classList.add('dark');
+}} catch (e) {{}} }})();
 window.toggleMode = function () {{
   const dark = document.documentElement.classList.toggle('dark');
   try {{ localStorage.setItem('quarto-color-scheme', dark ? 'alternate' : 'default'); }} catch (e) {{}}
