@@ -9,20 +9,16 @@ parameters are no longer the ones that wrote the tokens [[14]](#ref-14). Importa
 (TIS), CISPO, PPO, GSPO and DPPO change the per-token weight to cope with that; GRPO and RLOO change the advantage.
 This post measures how far each estimate lands from the true gradient.
 
-The error has two parts. Bias is the offset of the estimate's average from the true gradient. Variance is its
-scatter around that average. Growing the batch shrinks only the variance: the bias stays, and the variance falls
-as one over the batch size. Every algorithm chooses an advantage and a per-token weight, and which choice is best
-depends on the batch size.
-
-- A baseline lowers variance and adds no bias, as long as the model wrote the tokens (section 4).
-- When something else wrote them, ignoring the mismatch adds bias in proportion to the probability mass that
-  moved, which is bounded. Correcting it with importance weights adds variance in proportion to the squared
-  weights, which is not (5.1).
-- At a batch of 16 the lowest error on both toy engines belongs to a biased estimator (5.2).
-- A cap on the weight (TIS, CISPO) bounds that variance and adds some bias. The best cap grows with the batch
-  size (5.3).
-- Trust regions (PPO, DPPO) drop tokens that moved too far. That is bias on those tokens, accepted because the
-  loss is only right near the model that wrote the batch (section 6).
+- **Bias and variance are measured against the true gradient.** Bias is the offset of the estimate's average from
+  it. Variance is the scatter around that average. A bigger batch shrinks only the variance (section 3).
+- **A method that lowers one raises the other.** Ignoring the mismatch adds bias, bounded by the probability mass
+  that moved. Correcting it with importance weights adds variance, which has no bound (5.1). The exception is a
+  baseline, which lowers variance and adds no bias as long as the model wrote the tokens (section 4).
+- **The best cap on the weight is set by the batch size.** On the toy it is 2.8 at a batch of 16 and 14.4 at 256,
+  and at 16 the lowest error belongs to a biased estimator (5.2, 5.3).
+- **A trust region is needed because a token depends on the tokens before it.** The per-token loss does not see
+  that dependence, so it is only right near the model that wrote the batch. PPO and DPPO drop tokens that moved too
+  far. PPO's ratio clip is a poor measure of the move, and DPPO measures the mass that moved (section 6).
 
 Sections 2 to 5 use a toy with one position and three tokens, where the true gradient is exact. Section 6 adds a
 second position. Every number can be checked by hand.
