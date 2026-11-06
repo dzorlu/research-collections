@@ -300,7 +300,7 @@ $v$ times its token-2 count, times $w_2$, over 16. The truth is {{$g = 0.2\,v$ @
 it at a cap, here $w_2 = \min(\rho_2, 2) = 2$. Eight batches of 16, with one token-2 row among them, under the
 three weights:
 
-| batch | token-2 rows | REINFORCE, $w_2 = 1$ | IS, $w_2 = 20$ | TIS, $w_2 = 2$ |
+| batch | token-2 rows | <span class="c-blue">REINFORCE, $w_2 = 1$</span> | <span class="c-aqua">IS, $w_2 = 20$</span> | <span class="c-orange">TIS, $w_2 = 2$</span> |
 |---|---|---|---|---|
 | 1 | 0 | 0 | 0 | 0 |
 | 2 | 0 | 0 | 0 | 0 |

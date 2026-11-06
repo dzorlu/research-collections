@@ -63,6 +63,7 @@ details.note[open] summary::before {{ content:'×'; }}
 .w-panels {{ display:flex; flex-wrap:wrap; gap:8px; }}
 .w-panels figure {{ flex:1 1 240px; margin:0; }} .w-panels svg {{ width:100%; height:auto; font-family:-apple-system,system-ui,sans-serif; }}
 .w-panels figcaption {{ font-size:11px; color:var(--muted); text-align:center; }}
+.c-blue {{ color:#2a78d6; }} .c-orange {{ color:#eb6834; }} .c-aqua {{ color:#1baf7a; }}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 </head><body>
@@ -132,6 +133,11 @@ for (const el of main.children) {{
 // Tables: cells stay on one line unless the table would overflow the page; then let them wrap.
 main.querySelectorAll('table').forEach(t => {{
   if (t.scrollWidth > t.clientWidth) t.querySelectorAll('th, td').forEach(c => c.style.whiteSpace = 'normal');
+}});
+// Colored columns: a header wrapped in <span class="c-..."> colors its whole column, matching the widgets' series.
+main.querySelectorAll('th > span[class^="c-"]').forEach(s => {{
+  const th = s.parentNode, i = [...th.parentNode.children].indexOf(th);
+  th.closest('table').querySelectorAll('tbody tr').forEach(tr => tr.children[i] && tr.children[i].classList.add(s.className));
 }});
 // Contents, with the current section highlighted.
 const toc = document.getElementById('toc');
