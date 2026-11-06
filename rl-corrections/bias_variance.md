@@ -307,18 +307,9 @@ $$\begin{aligned}
 &= 0.69 \cdot 0.72^2 + 0.30 \cdot 1^2 + 0.01 \cdot 20^2 - 1 = 0.36 + 0.30 + 4.0 - 1 = 3.66.
 \end{aligned}$$
 
-The minus 1 is the mean of $\rho$ squared, which is 1 because the weights restore the model's rates. Token 2's 4.0
-is nearly all of the 3.66. Unlike TV, $\chi^2$ has no ceiling: token 2's term is $p_2^2 / p_{\text{engine},2}$ and
-grows without limit as the engine's rate goes to zero.
-
-On the close engine the moved mass is 0.10, the weight on token 2 is 2, and $\chi^2$ is 0.12: half the shortfall
-and a thirtieth of the swing.
-
 ### 6.3 Unbiased loses at $B = 16$ and wins at $B = 256$
 
-Three more weights, all functions of $\rho$, differ in what they do when $\rho$ leaves a band around 1. On the toy
-that is decided by two numbers per engine: $\rho_2$ is 2 on the close engine and 20 on the far one, and the mass
-moved off token 2 is 0.10 and 0.19.
+Three more weights, all functions of $\rho$, differ in what they do when $\rho$ leaves a band around 1.
 
 - **CISPO** [[21]](#ref-21), ratio against $\theta_{\text{old}}$, clamps $\rho_y$ at a cap and stops the gradient
   through the clamp, so a token above the cap gets $w = \text{cap}$ where PPO gives $w = 0$. On the toy it is TIS
