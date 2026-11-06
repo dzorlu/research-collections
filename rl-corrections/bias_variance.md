@@ -405,22 +405,22 @@ method in section 5 uses one ratio per token.
 
 Repeat the example with a smaller or a bigger move: the first token's $a$ goes down by the same number of points
 that $b$ after $a$ goes up. 10 points is the example above. Count only "$a\,b$", the response the loss gets
-wrong. The old batch holds it 5 times, so the loss's gain is what the loss says minus 5.
+wrong. The old batch holds it 5 times, so the reported gain is what the loss says minus 5.
 
-On a real model the loss's gain is all there is to see. The real gain needs a fresh sample. TRPO
+On a real model the reported gain is all there is to see. The real gain needs a fresh sample. TRPO
 [[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19) proves a ceiling on how much the loss can overstate, and DPPO
 states it for a response of $T$ tokens (Theorem 3.2 in [[2]](#ref-2)):
 
-$$\text{loss's gain} - \text{real gain} \;\le\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
+$$\text{reported gain} - \text{real gain} \;\le\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
 
 where $\xi$ is the largest reward and $\mathrm{TV}_{\max}$ the most probability mass that moved at any token. On
 the toy $\xi = 1$, $T = 2$ and $\mathrm{TV}_{\max}$ is the move. At 10 points the ceiling is
 $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.10^2 = 0.04$ per response, 4 per 100.
 
-Table 2: the loss's gain, the ceiling on its overstatement, and the gain that is guaranteed. Counts of "$a\,b$"
+Table 2: the gain the loss reports, the ceiling on its overstatement, and the gain that is guaranteed. Counts of "$a\,b$"
 per 100 responses.
 
-| move | loss says | loss's gain | ceiling | guaranteed gain, gain − ceiling | real gain, toy only |
+| move | loss says | reported gain | ceiling | guaranteed gain, gain − ceiling | real gain, toy only |
 |---|---|---|---|---|---|
 | 1 point | 5.40 | 0.40 | 0.04 | at least 0.36 | 0.39 |
 | 10 points | 9 | 4 | 4 | at least 0 | 3 |
@@ -449,21 +449,6 @@ w     = ratio if ratio <= 1.2 else 0     # for a token with A > 0; epsilon = 0.2
 row   = w * A * (p_now - one_hot(y))     # subtracted from the logits, times the learning rate
 ```
 
-On the three-token toy, with token 2 sampled, $A = 1$, $p_{\text{old}} = (0.5, 0.3, 0.2)$ and a learning rate of
-0.1:
-
-| step | $p_{\text{now}}$ of token 2 | ratio | ratio ≤ 1.2? | $w$ | row $= w\,A\,(p_{\text{now}} - e_2)$ |
-|---|---|---|---|---|---|
-| 1 | 0.200 | 0.200 / 0.200 = 1.00 | yes | 1.00 | (0.50, 0.30, −0.80) |
-| 2 | 0.220 | 0.220 / 0.200 = 1.10 | yes | 1.10 | (0.53, 0.33, −0.86) |
-| 3 | 0.244 | 0.244 / 0.200 = 1.22 | no | 0 | (0, 0, 0) |
-| 4 | 0.244 | 0.244 / 0.200 = 1.22 | no | 0 | (0, 0, 0) |
-
-Steps 1 and 2 subtract their rows from the logits, which raises token 2 from 0.200 to 0.244. At step 3 the token
-is 22% more likely than when the batch was written. That is outside the band of 20%, and $A > 0$ would push it
-further, so PPO sets $w = 0$. The row is zero and the token stays at 0.244. Without the clip the same token keeps
-going: 0.271, 0.301 and 0.336 at steps 4, 5 and 6.
-
 **The band of 0.2 is set by experiment.** On the three-token toy, the biggest change the band allows:
 
 | token | old | ratio | new | change |
@@ -472,10 +457,7 @@ going: 0.271, 0.301 and 0.336 at steps 4, 5 and 6.
 | 1 | 0.30 | 1.2 | 0.36 | +0.06 |
 | 2 | 0.20 | 1.2 | 0.24 | +0.04 |
 
-The 0.10 that left token 0 is the 0.10 that arrived at tokens 1 and 2. In general each change is at most 0.2 of
-the token's old probability, so the changes sum to at most 0.2, and that sum counts the moved mass twice, once
-leaving and once arriving. A band of 0.2 therefore lets at most 0.1 of the mass move, the 10-point row of
-Table 2. The ceiling there, per response:
+Total variation is the mass that moved, 0.1: the 10-point row of Table 2. The ceiling there, per response:
 
 | response length | ceiling at $\mathrm{TV}_{\max} = 0.1$ | largest reward |
 |---|---|---|
