@@ -404,45 +404,41 @@ method in section 5 uses one ratio per token.
 ### 6.2 The error grows with the square of the move
 
 Repeat the example with a smaller or a bigger move: the first token's $a$ goes down by the same number of points
-that $b$ after $a$ goes up. 10 points is the example above. The table counts both rewarded responses, per 100.
-"$b\,b$" changed in its first token only, so the loss counts it exactly: at 10 points it goes from 25 to 30, which
-with "$a\,b$" makes +9 in the loss and +8 in truth.
+that $b$ after $a$ goes up. 10 points is the example above, where the old batch's 5 became 9 in the loss and 8 in
+truth.
 
-Table 2: the gain the loss reports and the gain the move delivers.
+On a real model the truth is unknown without sampling again, and so is the gap. TRPO
+[[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19) proves a ceiling on the gap that needs no new samples, and DPPO
+states it for a response of $T$ tokens (Theorem 3.2 in [[2]](#ref-2)):
 
-| move | loss says | actual | gap |
-|---|---|---|---|
-| 1 point | +0.90 | +0.89 | 0.01 |
-| 10 points | +9 | +8 | 1 |
-| 20 points | +18 | +14 | 4 |
-| 30 points | +27 | +18 | 9 |
+$$\text{gap} = \text{loss says} - \text{truth} \;\le\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
 
-Double the move and the gap quadruples: 1 at 10 points, 4 at 20, 9 at 30. The gain the loss reports only doubles,
-so the further the model moves, the more of that gain is not real, and the loss itself never shows it. Here the
-loss overstates. In general the gap can have either sign.
+where $\xi$ is the largest reward and $\mathrm{TV}_{\max}$ the most probability mass that moved at any token. On
+the toy $\xi = 1$, $T = 2$ and $\mathrm{TV}_{\max}$ is the move. The table counts per 100 responses, so the
+ceiling is multiplied by 100.
 
-TRPO turns this into a guarantee [[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19): the actual gain is at least the
-loss's gain minus a penalty that grows with the square of the distance between the two models. DPPO states it for
-a response of $T$ tokens (Theorem 3.2 in [[2]](#ref-2)):
+Table 2: the count of "$a\,b$" in the loss and in truth, the gap, and the theorem's ceiling on it. The old batch
+holds 5.
 
-$$\text{actual gain} \;\ge\; \text{loss's gain} \;-\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
+| move | loss says | truth | gap | ceiling on the gap, $2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2 \times 100$ |
+|---|---|---|---|---|
+| 1 point | 5.40 | 5.39 | 0.01 | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.01^2 \times 100 = 0.04$ |
+| 10 points | 9 | 8 | 1 | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.10^2 \times 100 = 4$ |
+| 20 points | 13 | 9 | 4 | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.20^2 \times 100 = 16$ |
+| 30 points | 17 | 8 | 9 | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.30^2 \times 100 = 36$ |
 
-where $\xi$ is the largest reward and $\mathrm{TV}_{\max}$ the most probability mass that moved at any token.
-On the toy $\xi = 1$, $T = 2$ and $\mathrm{TV}_{\max}$ is the move:
+1. **The gap grows with the square of the move.** Double the move and the gap quadruples: 1, 4, 9.
+2. **The loss keeps climbing while the truth turns back.** From 20 to 30 points the loss goes from 13 to 17 and
+   the real count falls from 9 to 8.
+3. **The ceiling is always above the gap, and it also grows with the square.** A small move keeps it small, so
+   what the loss says can be trusted. The range of moves where it can is the trust region. If the loss's gain on
+   the whole batch is larger than the ceiling, the real reward went up for certain, which is TRPO's monotonic
+   improvement.
 
-| move | gap | penalty | guaranteed gain, loss says − penalty |
-|---|---|---|---|
-| 1 point | 0.01 | 0.04 | +0.86 |
-| 10 points | 1 | 4 | +5 |
-| 20 points | 4 | 16 | +2 |
-| 30 points | 9 | 36 | −9 |
+The ceiling is loose, four times the gap here, and $T(T-1)$ loosens it further for long responses. In practice
+the size of the region is a tuned number.
 
-While the guaranteed gain is positive the reward must rise. The moves small enough for that are the trust region,
-and staying inside it on every update is TRPO's monotonic improvement. The bound is loose: the penalty is four
-times the gap, and at 30 points it promises nothing while the move still gained 18. $T(T-1)$ loosens it further for long
-responses. In practice the size of the region is a tuned number.
-
-TRPO's penalty is a bias term: it is computed from exact quantities and does not shrink with the batch. There is
+TRPO's ceiling is on a bias: it is computed from exact quantities and does not shrink with the batch. There is
 also a trust region for the variance term. Metelli et al. [[24]](#ref-24) bound how far an importance-weighted
 estimate can fall below the real value by a term in $\sqrt{(1 + \chi^2)/B}$, the divergence of 5.1 over the
 batch size, and optimize that lower bound on each batch. TRPO's region limits the bias term of section 3's error,
