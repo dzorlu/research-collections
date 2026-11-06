@@ -17,9 +17,9 @@ This post measures how far each estimate lands from the true gradient.
 - **The best cap on the weight is set by the batch size.** On the toy it is 2.8 at a batch of 16 and 14.4 at 256,
   and at 16 the lowest error belongs to a biased estimator (5.2, 5.3).
 - **The per-token loss ignores how a token depends on the tokens before it.** So it is only right near the model
-  that wrote the batch, and a trust region keeps the model there. The theorem caps how much the loss can
-  overstate, and that cap is useful only for short responses. PPO and DPPO drop tokens that moved too far, with
-  thresholds set by experiment: 0.2 on PPO's ratio, 0.15 on DPPO's moved mass. PPO's ratio is a poor measure of
+  that wrote the batch, and a trust region keeps the model there. TRPO's bound on how much the loss can overstate
+  is useful only for short responses. PPO and DPPO drop tokens that moved too far, with thresholds set by
+  experiment: 0.2 on PPO's ratio, 0.15 on DPPO's moved mass. PPO's ratio is a poor measure of
   the move, and DPPO measures the mass that moved (section 6).
 
 Sections 2 to 5 use a toy with one position and three tokens, where the true gradient is exact. Section 6 adds a
@@ -115,8 +115,6 @@ So
 
 $$\mathbb{E}\,\|\hat\theta - \theta\|^2 = \underbrace{\mathbb{E}\,\|\hat\theta - m\|^2}_{\text{variance}} + \underbrace{\|m - \theta\|^2}_{\text{bias}^2}.$$
 
-For a mean of $B$ independent samples the variance term is $\operatorname{Var}(\text{one sample})/B$. Here
-$\hat\theta = \hat g_B$ and $\theta = g$ [[5]](#ref-5).
 :::
 
 Write $\operatorname{Var}(x) = \mathbb{E}\,\|x - \mathbb{E}[x]\|^2$, one number, for the spread of a single row. A
@@ -150,8 +148,7 @@ batch sizes:
 | 256 | 0.0006 | 0.0101 |
 
 The engine draws token 2 one time in ten, so nine in ten of its rows are the zero vector. Rows that mostly agree
-have little spread, hence the lower variance, but their average is $0.1\,v$, not $g$. The variance shrinks with
-$B$; the bias does not. The errors are equal where $0.157/B = 0.0098 + 0.088/B$, at
+have little spread, hence the lower variance, but their average is $0.1\,v$, not $g$. The errors are equal where $0.157/B = 0.0098 + 0.088/B$, at
 $B = (0.157 - 0.088)/0.0098 = 7$: the engine wins below that and loses above it.
 
 In the box below, the left panel draws $\|\text{bias}\|^2$, $\operatorname{Var}(x)/B$ and their sum against the
@@ -216,7 +213,8 @@ model's probability to it. There are two mismatches, and the arithmetic is the s
 | engine vs trainer | different kernels, precision and batching [[1]](#ref-1) | IS, TIS, DPPO; REINFORCE ignores it |
 | old vs new parameters, $p_{\text{engine}} = p_{\theta_{\text{old}}}$ | several optimizer steps on one batch; after the first, $\theta$ has moved [[14]](#ref-14) | PPO, CISPO, GSPO |
 
-Two engines stand in for both, differing from the model only in how often they write the rewarded token:
+Two engines stand in for both, differing from the model in how often they write the rewarded token, with the
+difference moved onto token 0:
 
 ```python
 p     = [0.5,  0.3,  0.2 ]    # model: token 2 in 20 rows out of 100
@@ -253,7 +251,7 @@ at a twentieth of $g$. IS multiplies the row by 20, which is exactly how under-c
 on $g$; but seven batches say zero and one says $6.25\,g$. TIS counts the row twice: a tenth of the truth on
 average, with a tenth of IS's swing.
 
-The bias has a ceiling and the variance has none. The far engine's mismatch, token by token:
+The bias is bounded and the variance is not. The far engine's mismatch, token by token:
 
 | token $y$ | $p_y$ | $p_{\text{engine},y}$ | difference $p_y - p_{\text{engine},y}$ | ratio $\rho_y = p_y / p_{\text{engine},y}$ |
 |---|---|---|---|---|
@@ -288,7 +286,7 @@ $$\begin{aligned}
 &= 0.69 \cdot 0.72^2 + 0.30 \cdot 1^2 + 0.01 \cdot 20^2 - 1 = 0.36 + 0.30 + 4.0 - 1 = 3.66.
 \end{aligned}$$
 
-It has no ceiling. At $p_{\text{engine},2} = 0.001$ the weight is 200 and the term is $0.001 \cdot 200^2 = 40$,
+It has no bound. At $p_{\text{engine},2} = 0.001$ the weight is 200 and the term is $0.001 \cdot 200^2 = 40$,
 while TV has only moved to 0.199.
 
 ### 5.2 Unbiased loses at $B = 16$ and wins at $B = 256$
@@ -328,7 +326,7 @@ $v$, so one coefficient gives it.
 1. **Unbiased is not better at $B = 16$.** On the close engine REINFORCE beats IS; on the far one TIS beats both.
    At $B = 256$ IS wins on both.
 2. **PPO and DPPO are not trying to estimate this step's gradient well.** They stop the step on a token that already
-   moved too far, and section 6 shows why. A dropped row is the zero vector every time: no scatter, so no
+   moved too far (section 6). A dropped row is the zero vector every time: no scatter, so no
    variance, and a bias of $-0.20\,v = -g$, which is why they have the largest error in the table.
 
 ### 5.3 The best cap grows with the batch
@@ -356,13 +354,11 @@ V-trace [[15]](#ref-15) and Retrace [[16]](#ref-16) cap the same ratio at 1 in c
 
 ## 6. The loss is only right near the model that wrote the batch
 
-The surrogate is the current model's reward, estimated from responses the old model wrote. The real reward would
-need fresh responses from the current model. The estimate re-counts the old ones instead: each token's ratio says
-how much more or less often the current model writes it. Training climbs this estimate, so it is the loss
-[[14]](#ref-14), and the row with $w = \rho$ is its gradient. Before the first step every ratio is 1 and the
+The loss is a surrogate [[14]](#ref-14): the current model's reward, estimated from the responses the old model
+wrote. It re-counts each old response with one ratio per token, how much more or less often the current model
+writes that token, and the row with $w = \rho$ is its gradient. Before the first step every ratio is 1 and the
 estimate is exact. It drifts as the model moves away. A trust region is a limit on how far the model may move
-from the one that wrote the batch. Two papers carry the section: TRPO [[18]](#ref-18) for why to stay close, and DPPO [[2]](#ref-2)
-for how to measure close.
+from the one that wrote the batch.
 
 ### 6.1 A token's ratio does not see the tokens before it
 
@@ -389,16 +385,18 @@ The loss is a sum over tokens, so it adds the two changes. The true count multip
 
 $$\text{loss: } 5 - 1 + 5 = 9, \qquad \text{current model: } 5 \times 0.8 \times 2.0 = 8.$$
 
-This is dependence along the path. The second token's five extra responses were counted on all five in the batch,
+The second token's five extra responses were counted on all five in the batch,
 as if a response starting with $a$ were as common now as when the batch was written. The batch starts with $a$
 50% of the time and the current model 40%, so only 40/50 = 80% of the five are real: 5 − 1 + 4 = 8.
 
-Each further token multiplies in one more ratio, so the miss grows with the length of the response:
+Each further token multiplies in one more ratio. In the toy the one earlier token had ratio 0.8, so 80% of the
+second token's extra count was real; with $k$ earlier tokens at ratio 0.99 each, $0.99^k$ is real:
 
-![share of a token's credited gain that is real, by position](figs/bv_path.png)
+![share of a token's extra count that is real, by position](figs/bv_path.png)
 
-*Figure 2: the share of a token's credited gain that is real, by its position in the response, when a step makes
-every earlier token 0.5%, 1% or 2% less likely. At 1% it is 37% at token 100 and under 1% at token 500.*
+*Figure 2: the share of a token's extra count that is real, by its position in the response, when a step makes
+every earlier token 0.5%, 1% or 2% less likely. At 1% it is $0.99^{99} = 37\%$ at token 100 and under 1% at
+token 500.*
 
 Multiplying the ratios is exact, but over 500 tokens the product has a variance too large for any batch, so every
 method in section 5 uses one ratio per token.
@@ -407,10 +405,12 @@ method in section 5 uses one ratio per token.
 
 Repeat the example with a smaller or a bigger move: the first token's $a$ goes down by the same number of points
 that $b$ after $a$ goes up. 10 points is the example above. Count only "$a\,b$", the response the loss gets
-wrong. The old batch holds it 5 times, so the reported gain is what the loss says minus 5.
+wrong. The other rewarded response, "$b\,b$", has a second ratio of 1, so the loss counts it right. The old
+batch holds "$a\,b$" 5 times, so the reported gain is what the loss says minus 5.
 
-On a real model the reported gain is all there is to see. The real gain needs a fresh sample. TRPO
-[[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19) proves a ceiling on how much the loss can overstate, and DPPO
+In the example the loss overstated by 1: it said 9 where the current model writes 8. On a real model the reported
+gain is all there is to see. The real gain needs a fresh sample. TRPO
+[[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19) proves a ceiling on that overstatement, and DPPO
 states it for a response of $T$ tokens (Theorem 3.2 in [[2]](#ref-2)):
 
 $$\text{reported gain} - \text{real gain} \;\le\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
@@ -432,8 +432,8 @@ per 100 responses.
 Read the first row. The loss says the count rose by 0.40. It can overstate by at most 0.04, so the count rose by
 at least 0.36. It rose by 0.39.
 
-1. **The gain doubles when the move doubles, and the ceiling quadruples.** So the ceiling overtakes the gain,
-   here at 10 points.
+1. **The gain doubles when the move doubles, and the ceiling quadruples.** So the ceiling catches the gain,
+   here at 10 points, and passes it beyond.
 2. **The trust region is the moves where the gain still beats the ceiling.** Inside it, a gain in the loss is a
    gain in the reward. TRPO only takes such updates, so the reward never falls.
 3. **The ceiling is a worst case.** At 20 and 30 points the count really rose, by 4 and 3, and the theorem could
@@ -451,7 +451,11 @@ w     = ratio if ratio <= 1.2 else 0     # for a token with A > 0; epsilon = 0.2
 row   = w * A * (p_now - one_hot(y))     # subtracted from the logits, times the learning rate
 ```
 
-**The band of 0.2 is set by experiment.** On the three-token toy, the biggest change the band allows:
+The zeros in Table 1 come from this rule: a bias of $-g$ on the dropped token, taken so that the loss is not
+followed past where it can be trusted. On a fresh batch every PPO ratio is 1 and nothing is dropped, so its zeros
+appear from the second step on a batch. DPPO, whose ratio is against the engine, can also drop a token on the first step.
+
+**The ceiling cannot set the band.** The most mass PPO's band lets move, on the three-token toy:
 
 | token | old | ratio | new | change |
 |---|---|---|---|---|
@@ -459,16 +463,17 @@ row   = w * A * (p_now - one_hot(y))     # subtracted from the logits, times the
 | 1 | 0.30 | 1.2 | 0.36 | +0.06 |
 | 2 | 0.20 | 1.2 | 0.24 | +0.04 |
 
-Total variation is the mass that moved, 0.1: the 10-point row of Table 2. The ceiling there, per response:
+Every ratio sits in $[0.8, 1.2]$, so at most half the mass can fall, by at most a fifth of itself: 0.1 moves.
+Total variation is the mass that moved, 0.1: the 10-point row of Table 2, where the guarantee runs out. The
+ceiling there, per response:
 
-| response length | ceiling at $\mathrm{TV}_{\max} = 0.1$ | largest reward |
-|---|---|---|
-| 2 tokens | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.1^2 = 0.04$ | 1 |
-| 500 tokens | $2 \cdot 1 \cdot 500 \cdot 499 \cdot 0.1^2 = 4{,}990$ | 1 |
+| response length | ceiling at $\mathrm{TV}_{\max} = 0.1$ |
+|---|---|
+| 2 tokens | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.1^2 = 0.04$ |
+| 500 tokens | $2 \cdot 1 \cdot 500 \cdot 499 \cdot 0.1^2 = 4{,}990$ |
 
 At two tokens the loss overstates by at most 0.04, on a reward that runs from 0 to 1. At 500 tokens the ceiling
-is 4,990, which says nothing. So the thresholds in use are not derived from the ceiling. They are the values
-that trained best:
+is 4,990, which says nothing. So the thresholds in use are set by experiment:
 
 - **PPO's 0.2** [[14]](#ref-14). Seven MuJoCo control tasks, three seeds each, one million timesteps, scored from
   0 for a random policy to 1 for the best run. The loss with no clip scored −0.39, worse than random. With the
@@ -478,25 +483,22 @@ that trained best:
 
 ### 6.4 PPO measures the move by one token's ratio, DPPO by the mass that moved
 
-The zeros in Table 1 come from this rule: a bias of $-g$ on the dropped token, taken so that the loss is not
-followed past where it can be trusted. On a fresh batch every PPO ratio is 1 and nothing is dropped, so its zeros
-appear from the second step on a batch. DPPO, whose ratio is against the engine, can also drop a token on the first step.
-
 The ceiling is in moved probability mass, and PPO does not measure that. It checks the ratio of the one token that
 was sampled. DPPO's argument is that one token's ratio is a poor reading of how far the distribution moved
 (section 4.2 in [[2]](#ref-2)), and it measures the moved mass, $|p - p_{\text{engine}}|$, directly:
 
 Table 3: PPO and DPPO on a rare token with $A > 0$ and a confident token with $A < 0$.
 
-| token | $p_{\text{engine}} \to p$ | $\rho$ | moved | PPO ($\epsilon = 0.2$) | DPPO ($\delta = 0.15$) |
+| token | before → now | $\rho$ | moved | PPO ($\epsilon = 0.2$) | DPPO ($\delta = 0.15$) |
 |---|---|---|---|---|---|
 | rare | 0.0001 → 0.01 | 100 | 0.0099 | $w = 0$ | $w = 100$ |
 | confident | 0.99 → 0.80 | 0.81 | 0.19 | $w = 0.81$ | $w = 0$ |
 
 PPO blocks the token that barely moved and passes the one that carries most of the move. In the paper's
 experiments the methods with no trust region, IS and CISPO, collapse even at the small learning rates of LLM
-fine-tuning, and masking only the negative-advantage tokens whose probability fell by more than 0.5, at most 0.5%
-of updates, is enough to keep training stable (section 5 and Figure 5 in [[2]](#ref-2)).
+fine-tuning. Masking only the negative-advantage tokens whose probability fell by more than 0.5 in absolute terms,
+which touches at most 0.5% of updates, is enough to keep training stable (section 5 and Figure 5 in
+[[2]](#ref-2)).
 
 ## 7. Each algorithm is one advantage and one weight
 
