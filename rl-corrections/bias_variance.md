@@ -358,7 +358,7 @@ The surrogate is the current model's reward, estimated from responses the old mo
 need fresh responses from the current model. The estimate re-counts the old ones instead: each token's ratio says
 how much more or less often the current model writes it. Training climbs this estimate, so it is the loss
 [[14]](#ref-14), and the row with $w = \rho$ is its gradient. Before the first step every ratio is 1 and the
-estimate is exact. It drifts as the model moves away. A trust region is the set of steps small enough that it
+estimate is exact. It drifts as the model moves away. A trust region is the range of moves small enough that it
 stays accurate. Two papers carry the section: TRPO [[18]](#ref-18) for why to stay close, and DPPO [[2]](#ref-2)
 for how to measure close.
 
@@ -401,26 +401,25 @@ every earlier token 0.5%, 1% or 2% less likely. At 1% it is 37% at token 100 and
 Multiplying the ratios is exact, but over 500 tokens the product has a variance too large for any batch, so every
 method in section 5 uses one ratio per token.
 
-### 6.2 The error grows with the square of the step
+### 6.2 The error grows with the square of the move
 
-Repeat the example with a smaller or a bigger step: the first token's $a$ goes down by the same number of points
+Repeat the example with a smaller or a bigger move: the first token's $a$ goes down by the same number of points
 that $b$ after $a$ goes up. 10 points is the example above. The table counts both rewarded responses, per 100.
 "$b\,b$" changed in its first token only, so the loss counts it exactly: at 10 points it goes from 25 to 30, which
 with "$a\,b$" makes +9 in the loss and +8 in truth.
 
-Table 2: the gain the loss reports and the gain the step delivers.
+Table 2: the gain the loss reports and the gain the move delivers.
 
-| step | loss says | actual | gap |
+| move | loss says | actual | gap |
 |---|---|---|---|
 | 1 point | +0.90 | +0.89 | 0.01 |
 | 10 points | +9 | +8 | 1 |
 | 20 points | +18 | +14 | 4 |
 | 30 points | +27 | +18 | 9 |
 
-The gap is the starts with $a$ that were lost times the improvement after $a$: 10 × 10%, 20 × 20%, 30 × 30%.
-Both factors come from the step, so the gap grows as its square. It is 1% of the reported gain at 1 point and a
-third at 30. The loss itself rises in a straight line, so following it alone never says stop. Here the loss
-overstates; in general the gap can have either sign.
+Double the move and the gap quadruples: 1 at 10 points, 4 at 20, 9 at 30. The gain the loss reports only doubles,
+so the further the model moves, the more of that gain is not real, and the loss itself never shows it. Here the
+loss overstates. In general the gap can have either sign.
 
 TRPO turns this into a guarantee [[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19): the actual gain is at least the
 loss's gain minus a penalty that grows with the square of the distance between the two models. DPPO states it for
@@ -429,19 +428,18 @@ a response of $T$ tokens (Theorem 3.2 in [[2]](#ref-2)):
 $$\text{actual gain} \;\ge\; \text{loss's gain} \;-\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
 
 where $\xi$ is the largest reward and $\mathrm{TV}_{\max}$ the most probability mass that moved at any token.
-On the toy $\xi = 1$, $T = 2$ and the mass that moved is the step. At 10 points the penalty is
-$2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.10^2 = 0.04$ per response, 4 per 100:
+On the toy $\xi = 1$, $T = 2$ and $\mathrm{TV}_{\max}$ is the move:
 
-| step | gap | penalty | guaranteed gain, loss says − penalty |
+| move | gap | penalty | guaranteed gain, loss says − penalty |
 |---|---|---|---|
 | 1 point | 0.01 | 0.04 | +0.86 |
 | 10 points | 1 | 4 | +5 |
 | 20 points | 4 | 16 | +2 |
 | 30 points | 9 | 36 | −9 |
 
-While the guaranteed gain is positive the reward must rise. The steps small enough for that are the trust region,
-and a step inside it every time is TRPO's monotonic improvement. The bound is loose: the penalty is four times
-the gap, and at 30 points it promises nothing while the step still gained 18. $T(T-1)$ loosens it further for long
+While the guaranteed gain is positive the reward must rise. The moves small enough for that are the trust region,
+and staying inside it on every update is TRPO's monotonic improvement. The bound is loose: the penalty is four
+times the gap, and at 30 points it promises nothing while the move still gained 18. $T(T-1)$ loosens it further for long
 responses. In practice the size of the region is a tuned number.
 
 TRPO's penalty is a bias term: it is computed from exact quantities and does not shrink with the batch. There is
