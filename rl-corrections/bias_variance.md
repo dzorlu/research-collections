@@ -17,8 +17,10 @@ This post measures how far each estimate lands from the true gradient.
 - **The best cap on the weight is set by the batch size.** On the toy it is 2.8 at a batch of 16 and 14.4 at 256,
   and at 16 the lowest error belongs to a biased estimator (5.2, 5.3).
 - **The per-token loss ignores how a token depends on the tokens before it.** So it is only right near the model
-  that wrote the batch, and a trust region keeps the model there. PPO and DPPO drop tokens that moved too far.
-  PPO's ratio clip is a poor measure of the move, and DPPO measures the mass that moved (section 6).
+  that wrote the batch, and a trust region keeps the model there. The theorem caps how much the loss can
+  overstate, and that cap is useful only for short responses. PPO and DPPO drop tokens that moved too far, with
+  thresholds set by experiment: 0.2 on PPO's ratio, 0.15 on DPPO's moved mass. PPO's ratio is a poor measure of
+  the move, and DPPO measures the mass that moved (section 6).
 
 Sections 2 to 5 use a toy with one position and three tokens, where the true gradient is exact. Section 6 adds a
 second position. Every number can be checked by hand.
