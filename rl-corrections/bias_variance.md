@@ -357,7 +357,7 @@ Table 1: every method on both samplers, $b = 0$, $\operatorname{Var}(x)$ of one 
 $v$, so one coefficient gives it. PPO's $w_2 = 0$ and DPPO's pass on the close sampler are explained in point 3
 below.
 
-| sampler | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | error, $B = 16$ | error, $B = 256$ |
+| sampler | method | $w_2$ | bias | $\|\text{bias}\|^2$ | $\operatorname{Var}(x)$ | <span class="c-shade">error, $B = 16$</span> | <span class="c-shade">error, $B = 256$</span> |
 |---|---|---|---|---|---|---|---|
 | close | REINFORCE | 1 | $-0.10\,v$ | 0.0098 | 0.088 | 0.015 | 0.010 |
 | close | IS, TIS, CISPO, DPPO | 2 | 0 | 0 | 0.353 | 0.022 | 0.0014 |

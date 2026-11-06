@@ -139,6 +139,18 @@ main.querySelectorAll('th > span[class^="c-"]').forEach(s => {{
   const th = s.parentNode, i = [...th.parentNode.children].indexOf(th);
   th.closest('table').querySelectorAll('tbody tr').forEach(tr => tr.children[i] && tr.children[i].classList.add(s.className));
 }});
+// Shaded columns: a header wrapped in <span class="c-shade"> shades its cells by value, lighter is lower, on one
+// log scale across every shaded column of the table.
+main.querySelectorAll('table').forEach(t => {{
+  const cols = [...t.querySelectorAll('th > span.c-shade')].map(s => [...s.parentNode.parentNode.children].indexOf(s.parentNode));
+  if (!cols.length) return;
+  const cells = [];
+  t.querySelectorAll('tbody tr').forEach(tr => cols.forEach(i => {{
+    const td = tr.children[i], v = parseFloat(td && td.textContent); if (!isNaN(v) && v > 0) cells.push([td, Math.log(v)]);
+  }}));
+  const lo = Math.min(...cells.map(c => c[1])), hi = Math.max(...cells.map(c => c[1]));
+  cells.forEach(([td, v]) => td.style.background = `rgba(235,104,52,${{(0.06 + 0.5 * (v - lo) / (hi - lo || 1)).toFixed(2)}})`);
+}});
 // Contents, with the current section highlighted.
 const toc = document.getElementById('toc');
 const h1 = main.querySelector('h1'); toc.innerHTML = `<div class="title">${{h1 ? h1.textContent : ''}}</div>`;
