@@ -12,8 +12,18 @@ import sys
 
 PAGE = r'''<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
 <style>
-:root {{ --ink:#1d1d1b; --muted:#5f5e5a; --line:#e4e3df; --bg:#fcfcfb; --code:#f2f1ee; --accent:#2a78d6; }}
+:root {{ --ink:#1d1d1b; --muted:#5f5e5a; --line:#e4e3df; --bg:#fcfcfb; --code:#f2f1ee; --accent:#2a78d6; --th:#f0efec; --widget:#fff; }}
+html.dark {{ --ink:#e8e6e1; --muted:#9c9a92; --line:#2c2c2a; --bg:#151514; --code:#1f1f1d; --accent:#7fb2f0; --th:#242422; --widget:#1a1a19; }}
+html.dark img {{ opacity:0.9; }}
+/* widget charts hard-code the light palette in SVG attributes; remap them in dark mode */
+html.dark .w-panels svg [fill="#1d1d1b"] {{ fill:var(--ink); }}  html.dark .w-panels svg [stroke="#1d1d1b"] {{ stroke:var(--ink); }}
+html.dark .w-panels svg [fill="#5f5e5a"] {{ fill:var(--muted); }} html.dark .w-panels svg [stroke="#5f5e5a"] {{ stroke:var(--muted); }}
+html.dark .w-panels svg [stroke="#e4e3df"] {{ stroke:var(--line); }}
+html.dark .w-panels svg [fill="#fff"] {{ fill:var(--widget); }}   html.dark .w-panels svg [stroke="#fff"] {{ stroke:var(--widget); }}
+.mode {{ float:right; font-size:13px; color:var(--muted); background:none; border:0; cursor:pointer; padding:0; }} .mode:hover {{ color:var(--accent); }}
+.mode::before {{ content:'\2600\FE0E dark'; }} html.dark .mode::before {{ content:'\263E\FE0E light'; }}
 body {{ margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 -apple-system,system-ui,sans-serif; }}
+a {{ color:var(--accent); }}
 #toc {{ position:fixed; top:0; left:0; width:230px; height:100vh; overflow-y:auto; padding:40px 16px 40px 24px;
         box-sizing:border-box; border-right:1px solid var(--line); font-size:13px; }}
 #toc a {{ display:block; color:var(--muted); text-decoration:none; padding:3px 0; }}
@@ -27,7 +37,7 @@ code {{ font:13px Menlo,monospace; }}
 p code, li code, td code {{ background:var(--code); padding:1px 4px; border-radius:3px; }}
 table {{ border-collapse:collapse; margin:12px 0; display:block; overflow-x:auto; font-size:14px;
          width:max-content; max-width:calc(100% + 300px); }}
-th, td {{ border:1px solid var(--line); padding:6px 10px; white-space:nowrap; }} th {{ background:#f0efec; }}
+th, td {{ border:1px solid var(--line); padding:6px 10px; white-space:nowrap; }} th {{ background:var(--th); }}
 img {{ max-width:100%; }} em {{ color:var(--muted); }}
 sup.cite a {{ color:var(--accent); text-decoration:none; font-size:11px; }}
 sup.cite + sup.cite::before {{ content:','; font-size:11px; color:var(--accent); }}
@@ -52,9 +62,9 @@ details.note[open] summary::before {{ content:'×'; }}
          font-size:14px; }}
 .note-body p:first-child {{ margin-top:0; }} .note-body p:last-child {{ margin-bottom:0; }}
 .tip {{ border-bottom:1px dotted var(--accent); cursor:help; position:relative; }}
-.tip:hover::after {{ content:attr(data-tip); position:absolute; left:0; top:1.5em; z-index:10; background:var(--ink); color:#fff;
+.tip:hover::after {{ content:attr(data-tip); position:absolute; left:0; top:1.5em; z-index:10; background:var(--ink); color:var(--bg);
          padding:6px 10px; border-radius:4px; font:12px/1.4 -apple-system,system-ui,sans-serif; width:max-content; max-width:320px; white-space:normal; }}
-.widget {{ margin:16px 0 20px; padding:14px 16px; border:1px solid var(--line); border-radius:8px; background:#fff; font-size:13px; }}
+.widget {{ margin:16px 0 20px; padding:14px 16px; border:1px solid var(--line); border-radius:8px; background:var(--widget); font-size:13px; }}
 .w-controls {{ display:flex; flex-wrap:wrap; gap:10px 24px; align-items:flex-end; }}
 .w-controls label {{ display:flex; flex-direction:column; gap:2px; color:var(--muted); min-width:180px; }}
 .w-controls label b {{ color:var(--ink); }} .w-controls input {{ width:180px; }}
@@ -67,6 +77,14 @@ details.note[open] summary::before {{ content:'×'; }}
 .w-panels figcaption {{ font-size:11px; color:var(--muted); text-align:center; }}
 .c-blue {{ color:#2a78d6; }} .c-orange {{ color:#eb6834; }} .c-aqua {{ color:#1baf7a; }}
 </style>
+<script>
+// Same key the Quarto site writes, so the toggle here and the one in the site navbar stay in step.
+(function () {{ try {{ if (localStorage.getItem('quarto-color-scheme') === 'alternate') document.documentElement.classList.add('dark'); }} catch (e) {{}} }})();
+window.toggleMode = function () {{
+  const dark = document.documentElement.classList.toggle('dark');
+  try {{ localStorage.setItem('quarto-color-scheme', dark ? 'alternate' : 'default'); }} catch (e) {{}}
+}};
+</script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 </head><body>
 <nav id="toc"></nav><main id="c">{home}</main>
@@ -186,7 +204,7 @@ def main():
   title = md.splitlines()[0].lstrip('# ').strip()
   names = re.findall(r'^:::widget[ \t]+(\S+)', md, flags=re.M)
   widgets = '\n'.join(open(os.path.join(folder, 'widgets', f'{n}.js')).read() for n in names)
-  home = '<a class="home" href="../../">Tinkerings</a>' if web else ''
+  home = '<a class="home" href="../../">Tinkerings</a><button class="mode" onclick="toggleMode()" aria-label="toggle dark mode"></button>' if web else ''
   open(out, 'w').write(PAGE.format(title=html.escape(title), md=html.escape(md), widgets=widgets, home=home))
   print(f'wrote {out}')
 
