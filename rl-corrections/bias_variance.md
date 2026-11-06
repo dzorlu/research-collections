@@ -428,15 +428,10 @@ holds 5.
 | 30 points | 17 | 8 | 9 | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.30^2 \times 100 = 36$ |
 
 1. **The gap grows with the square of the move.** Double the move and the gap quadruples: 1, 4, 9.
-2. **The loss keeps climbing while the truth turns back.** From 20 to 30 points the loss goes from 13 to 17 and
-   the real count falls from 9 to 8.
-3. **The ceiling is always above the gap, and it also grows with the square.** A small move keeps it small, so
-   what the loss says can be trusted. The range of moves where it can is the trust region. If the loss's gain on
-   the whole batch is larger than the ceiling, the real reward went up for certain, which is TRPO's monotonic
-   improvement.
-
-The ceiling is loose, four times the gap here, and $T(T-1)$ loosens it further for long responses. In practice
-the size of the region is a tuned number.
+2. **The ceiling is the most the loss can be wrong, and it also grows with the square.** If the loss reports a
+   gain larger than the ceiling, the reward really went up, with no need to sample again. The moves small enough
+   for that are the trust region: the range where the loss can be believed. TRPO only takes such updates, so the
+   reward never falls.
 
 TRPO's ceiling is on a bias: it is computed from exact quantities and does not shrink with the batch. There is
 also a trust region for the variance term. Metelli et al. [[24]](#ref-24) bound how far an importance-weighted
@@ -444,7 +439,28 @@ estimate can fall below the real value by a term in $\sqrt{(1 + \chi^2)/B}$, the
 batch size, and optimize that lower bound on each batch. TRPO's region limits the bias term of section 3's error,
 and this one limits the variance term.
 
-### 6.3 PPO measures the move by one token's ratio, DPPO by the mass that moved
+### 6.3 The theorem gives the square law; the threshold comes from experiment
+
+PPO keeps each ratio within 0.2 of 1. A token's moved mass is its old probability times how far its ratio is from
+1, so with every ratio in that band at most 0.2 of the mass leaves and arrives: a total variation of 0.1, the
+10-point row of Table 2. The ceiling there, per response:
+
+| response length | ceiling at $\mathrm{TV}_{\max} = 0.1$ | largest reward |
+|---|---|---|
+| 2 tokens | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.1^2 = 0.04$ | 1 |
+| 500 tokens | $2 \cdot 1 \cdot 500 \cdot 499 \cdot 0.1^2 = 4{,}990$ | 1 |
+
+At two tokens the loss is off by at most 0.04, on a reward that runs from 0 to 1. At 500 tokens it is off by at
+most 4,990, which says nothing. So the thresholds in use are not derived from the ceiling. They are the values
+that trained best:
+
+- **PPO's 0.2** [[14]](#ref-14). Seven MuJoCo control tasks, three seeds each, one million timesteps, scored from
+  0 for a random policy to 1 for the best run. The loss with no clip scored −0.39, worse than random. With the
+  clip it scored 0.76 at 0.1, 0.82 at 0.2 and 0.70 at 0.3.
+- **DPPO's 0.15** [[2]](#ref-2). Qwen3-30B fine-tuned on the DAPO math problems with an 8k context. Thresholds of
+  0.10, 0.15 and 0.20 on the moved mass performed about the same, and all of them beat the ratio clip.
+
+### 6.4 PPO measures the move by one token's ratio, DPPO by the mass that moved
 
 The zeros in Table 1 enforce the trust region. Once a token has moved too far from the model that wrote the
 batch, its row gets $w = 0$: a bias of $-g$ on that token, taken so that the loss is not followed past where it is
@@ -489,7 +505,7 @@ effect appears.
 ### 7.2 The weights differ in where they cap or zero the ratio
 
 REINFORCE ignores the ratio, IS uses it whole, TIS and CISPO cap it, and PPO and DPPO zero it past a threshold
-(section 5, 6.3). Two more methods move where the zero falls:
+(section 5, 6.4). Two more methods move where the zero falls:
 
 - **DAPO's clip-higher** [[23]](#ref-23) widens the upper edge of PPO's band, so fewer rare tokens with positive
   $A$ are zeroed: less bias, more variance.
