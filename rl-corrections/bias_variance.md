@@ -358,8 +358,8 @@ The surrogate is the current model's reward, estimated from responses the old mo
 need fresh responses from the current model. The estimate re-counts the old ones instead: each token's ratio says
 how much more or less often the current model writes it. Training climbs this estimate, so it is the loss
 [[14]](#ref-14), and the row with $w = \rho$ is its gradient. Before the first step every ratio is 1 and the
-estimate is exact. It drifts as the model moves away. A trust region is the range of moves small enough that it
-stays accurate. Two papers carry the section: TRPO [[18]](#ref-18) for why to stay close, and DPPO [[2]](#ref-2)
+estimate is exact. It drifts as the model moves away. A trust region is a limit on how far the model may move
+from the one that wrote the batch. Two papers carry the section: TRPO [[18]](#ref-18) for why to stay close, and DPPO [[2]](#ref-2)
 for how to measure close.
 
 ### 6.1 A token's ratio does not see the tokens before it
@@ -401,47 +401,70 @@ every earlier token 0.5%, 1% or 2% less likely. At 1% it is 37% at token 100 and
 Multiplying the ratios is exact, but over 500 tokens the product has a variance too large for any batch, so every
 method in section 5 uses one ratio per token.
 
-### 6.2 The error grows with the square of the move
+### 6.2 Only a small move guarantees the reward rose
 
 Repeat the example with a smaller or a bigger move: the first token's $a$ goes down by the same number of points
-that $b$ after $a$ goes up. 10 points is the example above, where the old batch's 5 became 9 in the loss and 8 in
-truth.
+that $b$ after $a$ goes up. 10 points is the example above. Count only "$a\,b$", the response the loss gets
+wrong. The old batch holds it 5 times, so the loss's gain is what the loss says minus 5.
 
-On a real model the truth is unknown without sampling again, and so is the gap. TRPO
-[[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19) proves a ceiling on the gap that needs no new samples, and DPPO
+On a real model the loss's gain is all there is to see. The real gain needs a fresh sample. TRPO
+[[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19) proves a ceiling on how much the loss can overstate, and DPPO
 states it for a response of $T$ tokens (Theorem 3.2 in [[2]](#ref-2)):
 
-$$\text{gap} = \text{loss says} - \text{truth} \;\le\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
+$$\text{loss's gain} - \text{real gain} \;\le\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
 
 where $\xi$ is the largest reward and $\mathrm{TV}_{\max}$ the most probability mass that moved at any token. On
-the toy $\xi = 1$, $T = 2$ and $\mathrm{TV}_{\max}$ is the move. The table counts per 100 responses, so the
-ceiling is multiplied by 100.
+the toy $\xi = 1$, $T = 2$ and $\mathrm{TV}_{\max}$ is the move. At 10 points the ceiling is
+$2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.10^2 = 0.04$ per response, 4 per 100.
 
-Table 2: the count of "$a\,b$" in the loss and in truth, the gap, and the theorem's ceiling on it. The old batch
-holds 5.
+Table 2: the loss's gain, the ceiling on its overstatement, and the gain that is guaranteed. Counts of "$a\,b$"
+per 100 responses.
 
-| move | loss says | truth | gap | ceiling on the gap, $2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2 \times 100$ |
-|---|---|---|---|---|
-| 1 point | 5.40 | 5.39 | 0.01 | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.01^2 \times 100 = 0.04$ |
-| 10 points | 9 | 8 | 1 | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.10^2 \times 100 = 4$ |
-| 20 points | 13 | 9 | 4 | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.20^2 \times 100 = 16$ |
-| 30 points | 17 | 8 | 9 | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.30^2 \times 100 = 36$ |
+| move | loss says | loss's gain | ceiling | guaranteed gain, gain − ceiling | real gain, toy only |
+|---|---|---|---|---|---|
+| 1 point | 5.40 | 0.40 | 0.04 | at least 0.36 | 0.39 |
+| 10 points | 9 | 4 | 4 | at least 0 | 3 |
+| 20 points | 13 | 8 | 16 | none | 4 |
+| 30 points | 17 | 12 | 36 | none | 3 |
 
-1. **The gap grows with the square of the move.** Double the move and the gap quadruples: 1, 4, 9.
-2. **The ceiling is the most the loss can be wrong, and it also grows with the square.** If the loss reports a
-   gain larger than the ceiling, the reward really went up, with no need to sample again. The moves small enough
-   for that are the trust region: the range where the loss can be believed. TRPO only takes such updates, so the
-   reward never falls.
+Read the first row. The loss says the count rose by 0.40. It can overstate by at most 0.04, so the count rose by
+at least 0.36. It rose by 0.39.
 
-TRPO's ceiling is on a bias: it is computed from exact quantities and does not shrink with the batch. There is
-also a trust region for the variance term. Metelli et al. [[24]](#ref-24) bound how far an importance-weighted
-estimate can fall below the real value by a term in $\sqrt{(1 + \chi^2)/B}$, the divergence of 5.1 over the
-batch size, and optimize that lower bound on each batch. TRPO's region limits the bias term of section 3's error,
-and this one limits the variance term.
+1. **The gain doubles when the move doubles, and the ceiling quadruples.** So the ceiling overtakes the gain,
+   here at 10 points.
+2. **The trust region is the moves where the gain still beats the ceiling.** Inside it, a gain in the loss is a
+   gain in the reward. TRPO only takes such updates, so the reward never falls.
+3. **The ceiling is a worst case.** At 20 and 30 points the count really rose, by 4 and 3, and the theorem could
+   not promise it.
 
-### 6.3 The theorem gives the square law; the threshold comes from experiment
+### 6.3 PPO enforces the region through the weight $w$
 
-PPO keeps each ratio within 0.2 of 1. On the three-token toy, the biggest change that allows:
+Nobody computes the ceiling during training. PPO keeps the model close one token at a time. The batch is written
+once and the optimizer takes several steps on it. At each step PPO compares every token's probability now with
+its probability when the batch was written, and stops pushing a token that has moved too far:
+
+```python
+ratio = p_now[y] / p_old[y]              # p_old is scored once, before the first step, and frozen
+w     = ratio if ratio <= 1.2 else 0     # for a token with A > 0; epsilon = 0.2
+row   = w * A * (p_now - one_hot(y))     # subtracted from the logits, times the learning rate
+```
+
+On the three-token toy, with token 2 sampled, $A = 1$, $p_{\text{old}} = (0.5, 0.3, 0.2)$ and a learning rate of
+0.1:
+
+| step | $p_{\text{now}}$ of token 2 | ratio | ratio ≤ 1.2? | $w$ | row $= w\,A\,(p_{\text{now}} - e_2)$ |
+|---|---|---|---|---|---|
+| 1 | 0.200 | 0.200 / 0.200 = 1.00 | yes | 1.00 | (0.50, 0.30, −0.80) |
+| 2 | 0.220 | 0.220 / 0.200 = 1.10 | yes | 1.10 | (0.53, 0.33, −0.86) |
+| 3 | 0.244 | 0.244 / 0.200 = 1.22 | no | 0 | (0, 0, 0) |
+| 4 | 0.244 | 0.244 / 0.200 = 1.22 | no | 0 | (0, 0, 0) |
+
+Steps 1 and 2 subtract their rows from the logits, which raises token 2 from 0.200 to 0.244. At step 3 the token
+is 22% more likely than when the batch was written. That is outside the band of 20%, and $A > 0$ would push it
+further, so PPO sets $w = 0$. The row is zero and the token stays at 0.244. Without the clip the same token keeps
+going: 0.271, 0.301 and 0.336 at steps 4, 5 and 6.
+
+**The band of 0.2 is set by experiment.** On the three-token toy, the biggest change the band allows:
 
 | token | old | ratio | new | change |
 |---|---|---|---|---|
@@ -451,16 +474,16 @@ PPO keeps each ratio within 0.2 of 1. On the three-token toy, the biggest change
 
 The 0.10 that left token 0 is the 0.10 that arrived at tokens 1 and 2. In general each change is at most 0.2 of
 the token's old probability, so the changes sum to at most 0.2, and that sum counts the moved mass twice, once
-leaving and once arriving. A ratio band of 0.2 therefore lets at most 0.1 of the mass move: a total variation of
-0.1, the 10-point row of Table 2. The ceiling there, per response:
+leaving and once arriving. A band of 0.2 therefore lets at most 0.1 of the mass move, the 10-point row of
+Table 2. The ceiling there, per response:
 
 | response length | ceiling at $\mathrm{TV}_{\max} = 0.1$ | largest reward |
 |---|---|---|
 | 2 tokens | $2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.1^2 = 0.04$ | 1 |
 | 500 tokens | $2 \cdot 1 \cdot 500 \cdot 499 \cdot 0.1^2 = 4{,}990$ | 1 |
 
-At two tokens the loss is off by at most 0.04, on a reward that runs from 0 to 1. At 500 tokens it is off by at
-most 4,990, which says nothing. So the thresholds in use are not derived from the ceiling. They are the values
+At two tokens the loss overstates by at most 0.04, on a reward that runs from 0 to 1. At 500 tokens the ceiling
+is 4,990, which says nothing. So the thresholds in use are not derived from the ceiling. They are the values
 that trained best:
 
 - **PPO's 0.2** [[14]](#ref-14). Seven MuJoCo control tasks, three seeds each, one million timesteps, scored from
@@ -471,12 +494,11 @@ that trained best:
 
 ### 6.4 PPO measures the move by one token's ratio, DPPO by the mass that moved
 
-The zeros in Table 1 enforce the trust region. Once a token has moved too far from the model that wrote the
-batch, its row gets $w = 0$: a bias of $-g$ on that token, taken so that the loss is not followed past where it is
-right. On a fresh batch every PPO ratio is 1 and nothing is dropped, so its zeros appear from the second step on
-a batch. DPPO, whose ratio is against the engine, can also drop a token on the first step.
+The zeros in Table 1 come from this rule: a bias of $-g$ on the dropped token, taken so that the loss is not
+followed past where it can be trusted. On a fresh batch every PPO ratio is 1 and nothing is dropped, so its zeros
+appear from the second step on a batch. DPPO, whose ratio is against the engine, can also drop a token on the first step.
 
-The bound is in moved probability mass, and PPO does not measure that. It checks the ratio of the one token that
+The ceiling is in moved probability mass, and PPO does not measure that. It checks the ratio of the one token that
 was sampled. DPPO's argument is that one token's ratio is a poor reading of how far the distribution moved
 (section 4.2 in [[2]](#ref-2)), and it measures the moved mass, $|p - p_{\text{engine}}|$, directly:
 
@@ -535,9 +557,9 @@ Table 4: each choice, the term it lowers and the term it raises.
 | IS | | $\rho$ | bias, to zero | variance, with $\chi^2$ |
 | TIS | | $\min(\rho, 2)$ | variance above the cap | bias where the cap binds |
 | CISPO | | $\min(\rho, 4)$, stop-gradient on the ratio | bias, relative to TIS; no zeroed rows | variance, relative to TIS |
-| PPO | | $\rho$; $0$ past the band on the side $A$ pushes toward | variance on zeroed tokens; the loss's gap (6.2) | bias $-g$ on zeroed tokens |
+| PPO | | $\rho$; $0$ past the band on the side $A$ pushes toward | variance on zeroed tokens; the loss's overstatement (6.2) | bias $-g$ on zeroed tokens |
 | GSPO | | sequence ratio; $0$ outside a tight band, per response | variance from per-token ratios | bias: whole responses zeroed |
-| DPPO | | $\rho$; $0$ when moved mass $> \delta$ on the side $A$ pushes toward | the loss's gap (6.2); fewer zeros on rare tokens than PPO | bias $-g$ on zeroed tokens; IS's variance on rare tokens that pass |
+| DPPO | | $\rho$; $0$ when moved mass $> \delta$ on the side $A$ pushes toward | the loss's overstatement (6.2); fewer zeros on rare tokens than PPO | bias $-g$ on zeroed tokens; IS's variance on rare tokens that pass |
 
 ## References
 
@@ -564,4 +586,3 @@ Table 4: each choice, the term it lowers and the term it raises.
 21. <a id="ref-21"></a>MiniMax (A. Chen et al.). *MiniMax-M1: Scaling Test-Time Compute Efficiently with Lightning Attention* (CISPO). arXiv:2506.13585, 2025.
 22. <a id="ref-22"></a>C. Zheng, S. Liu, M. Li, X.-H. Chen, B. Yu, C. Gao, K. Dang, Y. Liu, R. Men, A. Yang, J. Zhou, J. Lin. *Group Sequence Policy Optimization* (GSPO). arXiv:2507.18071, 2025.
 23. <a id="ref-23"></a>Q. Yu et al. *DAPO: An Open-Source LLM Reinforcement Learning System at Scale.* arXiv:2503.14476, 2025.
-24. <a id="ref-24"></a>A. M. Metelli, M. Papini, F. Faccio, M. Restelli. *Policy Optimization via Importance Sampling.* NeurIPS, 2018; arXiv:1809.06098.
