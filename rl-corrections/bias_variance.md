@@ -354,14 +354,13 @@ V-trace [[15]](#ref-15) and Retrace [[16]](#ref-16) cap the same ratio at 1 in c
 
 ## 6. The loss is only right near the model that wrote the batch
 
-The row with $w = \rho$ is the gradient of a loss: each written token's advantage times its ratio, summed over the
-batch. The batch is sampled once, and each optimizer step after that moves the model away from it
-[[14]](#ref-14). So the loss predicts the current model's reward from responses an earlier model wrote: a token
-whose ratio is $\rho$ changes the count of its response by a factor $\rho$. Such a loss is called a surrogate, a
-stand-in for the reward the current model would really get, which cannot be measured without sampling again. The
-stand-in is accurate while the current model is close to the one that wrote the batch, and it drifts from the real
-reward once it is not. A trust region is the set of steps small enough that it stays accurate. Two papers carry
-the section: TRPO [[18]](#ref-18) for why to stay close, and DPPO [[2]](#ref-2) for how to measure close.
+The surrogate is the current model's reward, estimated from responses the old model wrote. The real reward would
+need fresh responses from the current model. The estimate re-counts the old ones instead: each token's ratio says
+how much more or less often the current model writes it. Training climbs this estimate, so it is the loss
+[[14]](#ref-14), and the row with $w = \rho$ is its gradient. Before the first step every ratio is 1 and the
+estimate is exact. It drifts as the model moves away. A trust region is the set of steps small enough that it
+stays accurate. Two papers carry the section: TRPO [[18]](#ref-18) for why to stay close, and DPPO [[2]](#ref-2)
+for how to measure close.
 
 ### 6.1 A token's ratio does not see the tokens before it
 
