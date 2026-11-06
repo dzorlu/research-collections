@@ -233,17 +233,15 @@ far   = [0.69, 0.30, 0.01]    # engine: 1 out of 100
 
 ### 6.1 Raising the weight trades bias for variance
 
-Write $w_2$ for the weight on token 2's row; the other rows are zero whatever their weight. Three choices, on the
-far engine:
+The far engine writes token 2 once in 100 rows where the model writes it 20 times. So the rewarded row, $v$, shows
+up twenty times too rarely. The methods differ in how much that row counts when it does show up, and that count is
+the weight, $w_2$:
 
-```python
-rho_2 = 0.2 / 0.01                                        # 20
-w_2 = {'REINFORCE': 1, 'TIS': min(rho_2, 2), 'IS': rho_2}  # 1, 2, 20
-```
+- REINFORCE counts it once and ignores the shortfall.
+- IS [[10]](#ref-10)[[12]](#ref-12) counts it 20 times, the full shortfall.
+- TIS [[13]](#ref-13)[[1]](#ref-1) would count it 20 times too, but stops at a cap, here 2.
 
-REINFORCE ignores the ratio, IS [[10]](#ref-10)[[12]](#ref-12) uses all of it, and TIS [[13]](#ref-13)[[1]](#ref-1)
-stops it at a cap. A batch of 16 estimates $v$ times its token-2 count, times $w_2$, over 16, and the far engine
-puts a token-2 row in about one batch in seven. Eight batches, one of which drew the row:
+Eight batches of 16 from the far engine, one of which drew the row:
 
 | batch | token-2 rows | REINFORCE, $w_2 = 1$ | TIS, $w_2 = 2$ | IS, $w_2 = 20$ |
 |---|---|---|---|---|
