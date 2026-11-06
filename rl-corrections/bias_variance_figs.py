@@ -183,6 +183,28 @@ axes[0].legend(frameon=False)
 fig.tight_layout()
 fig.savefig('figs/bv_cap.png', dpi=150)
 
+# Figure 2: dependence along the path (section 6.1). The loss counts token t's gain at the batch's rate. If a step
+# makes every earlier token less likely by a fraction eps, the current model reaches token t's context
+# (1 - eps)^(t - 1) as often as the batch did, and that is the share of the credited gain that is real.
+fig, ax = plt.subplots(figsize=(7, 3.2))
+t = torch.arange(1, 501)                                                 # [500]  token position
+for eps, name, color in zip([0.005, 0.01, 0.02], ['0.5%', '1%', '2%'], ['#8bbaf0', BLUE, '#0d366b']):
+  share = 100 * (1 - eps) ** (t - 1)                                     # [500]  percent
+  ax.plot(t.numpy(), share.numpy(), color=color, linewidth=2, label=f'each earlier token {name} less likely')
+ax.axhline(100, color=INK, linestyle='--', linewidth=1.2)
+ax.text(497, 102, 'what the loss assumes: 100%', ha='right', va='bottom', fontsize=9, color=INK)
+ax.set_xlim(1, 500)
+ax.set_ylim(0, 118)
+ax.set_xticks([1, 100, 200, 300, 400, 500])
+ax.set_yticks([0, 25, 50, 75, 100])
+ax.set_yticklabels(['0%', '25%', '50%', '75%', '100%'])
+ax.set_xlabel('position of the token in the response')
+ax.set_ylabel("share of the token's credited gain that is real", fontsize=8)
+ax.legend(frameon=False, loc='center right')
+fig.tight_layout()
+fig.savefig('figs/bv_path.png', dpi=150)
+print('path: share real at 1%/token, token 100 and 500:', 0.99 ** 99, 0.99 ** 499)
+
 # Numbers used in the text.
 torch.set_printoptions(precision=3, sci_mode=False)
 print('G', G)

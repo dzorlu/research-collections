@@ -387,13 +387,16 @@ The loss is a sum over tokens, so it adds the two changes. The true count multip
 
 $$\text{loss: } 5 - 1 + 5 = 9, \qquad \text{current model: } 5 \times 0.8 \times 2.0 = 8.$$
 
-The other rewarded response, "$b\,b$", changed in its first token only, so it goes from 25 to 30 either way. In
-total the loss counts 39 rewarded where the current model gets 38.
+This is dependence along the path. The second token's five extra responses were counted on all five in the batch,
+as if a response starting with $a$ were as common now as when the batch was written. The batch starts with $a$
+50% of the time and the current model 40%, so only 40/50 = 80% of the five are real: 5 − 1 + 4 = 8.
 
-This is dependence along the path. A token is written after all the tokens before it, and how often its context
-comes up depends on every one of them, so the miss grows with the length of the response. If a step makes each
-token of a 500-token response 1% less likely, the current model reaches the last token's context about 150 times
-less often than the batch did, and the loss still counts that token's row at the batch's rate.
+Each further token multiplies in one more ratio, so the miss grows with the length of the response:
+
+![share of a token's credited gain that is real, by position](figs/bv_path.png)
+
+*Figure 2: the share of a token's credited gain that is real, by its position in the response, when a step makes
+every earlier token 0.5%, 1% or 2% less likely. At 1% it is 37% at token 100 and under 1% at token 500.*
 
 Multiplying the ratios is exact, but over 500 tokens the product has a variance too large for any batch. So every
 method adds, and accepts a bias. The bias is small while the model is close to the batch, where adding and
@@ -401,7 +404,9 @@ multiplying agree: 1.01 × 1.02 is almost 1 + 0.01 + 0.02.
 
 ### 6.2 The error grows with the square of the step
 
-The same arithmetic for steps that move both probabilities by 1, 10, 20 and 30 points, per 100 responses:
+The same arithmetic for steps that move both probabilities by 1, 10, 20 and 30 points. The table counts both
+rewarded responses, per 100. "$b\,b$" changed in its first token only, so the loss counts it exactly: at 10
+points it goes from 25 to 30, which with "$a\,b$" makes +9 in the loss and +8 in truth.
 
 Table 2: the gain the loss reports, the gain the step delivers, and TRPO's guarantee.
 
