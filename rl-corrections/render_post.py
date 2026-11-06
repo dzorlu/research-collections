@@ -2,7 +2,8 @@
 Render a post (markdown) to a local HTML page: contents on the left, references as side notes on the right.
 Citations in the markdown are links to `#ref-N`; the reference list has `<a id="ref-N"></a>` anchors.
 
-  python render_post.py bias_variance.md out.html
+  python render_post.py bias_variance.md out.html            # local preview: images by absolute path
+  python render_post.py bias_variance.md out.html --web      # for the site: images relative, link home
 """
 import html
 import os
@@ -19,6 +20,7 @@ body {{ margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 -apple-
 #toc a.h3 {{ padding-left:14px; }}
 #toc a.active {{ color:var(--ink); font-weight:600; }}
 #toc .title {{ font-weight:600; color:var(--ink); margin-bottom:10px; }}
+.home {{ font-size:13px; color:var(--muted); text-decoration:none; }} .home:hover {{ color:var(--accent); }}
 main {{ margin-left:270px; max-width:820px; padding:40px 300px 80px 0; box-sizing:content-box; }}
 pre {{ background:var(--code); padding:12px; overflow-x:auto; border-radius:6px; font-size:13px; }}
 code {{ font:13px Menlo,monospace; }}
@@ -67,7 +69,7 @@ details.note[open] summary::before {{ content:'×'; }}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 </head><body>
-<nav id="toc"></nav><main id="c"></main>
+<nav id="toc"></nav><main id="c">{home}</main>
 <script id="md" type="text/plain">{md}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
@@ -95,7 +97,8 @@ const withTips = withNotes.replace(/\{{\{{([\s\S]+?) @@ ([\s\S]+?)\}}\}}/g,
 // Widgets: a line  :::widget name  becomes a box that widgets/name.js fills in.
   .replace(/^:::widget[ \t]+(\S+)[ \t]*$/gm, '<div class="widget" data-widget="$1"></div>');
 const main = document.getElementById('c');
-main.innerHTML = marked.parse(withTips)
+const home = main.innerHTML;
+main.innerHTML = home + marked.parse(withTips)
   .replace(/<p>NOTEBLOCK(\d+)END<\/p>/g, (_, i) => notes[+i])
   .replace(/KATEXMATH(\d+)END/g, (_, i) => esc(math[+i]));
 
@@ -175,12 +178,16 @@ addEventListener('scroll', () => {{
 
 def main():
   src, out = sys.argv[1], sys.argv[2]
+  web = '--web' in sys.argv[3:]
   folder = os.path.dirname(os.path.abspath(src))
-  md = open(src).read().replace('](figs/', f'](file://{folder}/figs/')
+  md = open(src).read()
+  if not web:
+    md = md.replace('](figs/', f'](file://{folder}/figs/')
   title = md.splitlines()[0].lstrip('# ').strip()
   names = re.findall(r'^:::widget[ \t]+(\S+)', md, flags=re.M)
   widgets = '\n'.join(open(os.path.join(folder, 'widgets', f'{n}.js')).read() for n in names)
-  open(out, 'w').write(PAGE.format(title=html.escape(title), md=html.escape(md), widgets=widgets))
+  home = '<a class="home" href="../../">Tinkerings</a>' if web else ''
+  open(out, 'w').write(PAGE.format(title=html.escape(title), md=html.escape(md), widgets=widgets, home=home))
   print(f'wrote {out}')
 
 
