@@ -371,7 +371,7 @@ Every loss in section 6 scores the current model on responses an earlier model w
 and each optimizer step after that moves the model away from it [[14]](#ref-14). Such a loss is called a
 surrogate: a stand-in for the reward the current model would really get, which cannot be measured without
 sampling again. The stand-in is accurate while the current model is close to the one that wrote the batch, and it
-overstates the gain once it is not. A trust region is the rule that keeps the model close. Two papers carry the
+drifts from the real reward once it is not. A trust region is the rule that keeps the model close. Two papers carry the
 section: TRPO [[18]](#ref-18) for why to stay close, and DPPO [[2]](#ref-2) for how to measure close.
 
 ### 7.1 A token's ratio does not see the tokens before it
@@ -401,10 +401,17 @@ doubling four adds four. The second token's ratio does not see that the first to
 second token did not move and the loss is exact, 25 × 1.2 = 30. So the loss counts 39 rewarded where the current
 model gets 38.
 
-In a long response every token depends on all the tokens before it, and its ratio sees none of them. The exact
-correction weights each response by all of its ratios multiplied, 0.8 × 2.0 = 1.6 here. Over hundreds of tokens
-that product has a variance no batch can afford, so every method keeps the per-token weight and accepts its bias.
-This is section 6's trade again, and the trust region is what keeps the bias side small.
+This is dependence along the path. A token is written after all the tokens before it, and how often its context
+comes up depends on every one of them. Its ratio sees none of that, and the longer the path, the more it misses.
+If a step makes each token of a 500-token response 1% less likely, the current model reaches the last token's
+context about 150 times less often than the batch did, and the loss still counts that token's row at the batch's rate.
+The box below sets the length and the change per token.
+
+:::widget path
+
+The exact correction weights each response by all of its ratios multiplied, 0.8 × 2.0 = 1.6 in the toy. Over
+hundreds of tokens that product has a variance no batch can afford, so every method keeps the per-token weight
+and accepts its bias. This is section 6's trade again, and the trust region is what keeps the bias side small.
 
 ### 7.2 The error grows with the square of the step
 
@@ -421,7 +428,8 @@ Table 2: the gain the loss reports, the gain the step delivers, and TRPO's guara
 
 The gap is the starts with $a$ that were lost times the improvement after $a$: 10 × 10%, 20 × 20%, 30 × 30%.
 Both factors come from the step, so the gap grows as its square. It is nothing at 1 point and a third of the
-reported gain at 30. The loss itself rises in a straight line, so following it alone never says stop.
+reported gain at 30. The loss itself rises in a straight line, so following it alone never says stop. Here the
+loss overstates; in general the gap can have either sign.
 
 TRPO turns this into a guarantee [[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19): the actual gain is at least the
 loss's gain minus a penalty that grows with the square of the distance between the two models. DPPO states it for
@@ -435,6 +443,11 @@ guaranteed gain is positive the reward must rise. The steps small enough for tha
 step inside it every time is TRPO's monotonic improvement. The bound is loose: at 30 points it promises nothing
 and the step still gained 18, and $T(T-1)$ loosens it further for long responses. In practice the size of the
 region is a tuned number.
+
+TRPO's penalty is a bias term: it is computed from exact quantities and does not shrink with the batch. There is
+also a trust region for the variance term. Metelli et al. [[24]](#ref-24) bound how far an importance-weighted
+estimate can fall below the real value by a term in $\sqrt{(1 + \chi^2)/N}$, the divergence of 6.2 over the
+batch size, and optimize that lower bound on each batch. The two regions are the two terms of section 4's error.
 
 ### 7.3 PPO measures the move by one token's ratio, DPPO by the mass that moved
 
@@ -539,3 +552,4 @@ Table 4: each choice, the term it lowers and the term it raises.
 21. <a id="ref-21"></a>MiniMax (A. Chen et al.). *MiniMax-M1: Scaling Test-Time Compute Efficiently with Lightning Attention* (CISPO). arXiv:2506.13585, 2025.
 22. <a id="ref-22"></a>C. Zheng, S. Liu, M. Li, X.-H. Chen, B. Yu, C. Gao, K. Dang, Y. Liu, R. Men, A. Yang, J. Zhou, J. Lin. *Group Sequence Policy Optimization* (GSPO). arXiv:2507.18071, 2025.
 23. <a id="ref-23"></a>Q. Yu et al. *DAPO: An Open-Source LLM Reinforcement Learning System at Scale.* arXiv:2503.14476, 2025.
+24. <a id="ref-24"></a>A. M. Metelli, M. Papini, F. Faccio, M. Restelli. *Policy Optimization via Importance Sampling.* NeurIPS, 2018; arXiv:1809.06098.
