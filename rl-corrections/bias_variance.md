@@ -393,10 +393,7 @@ total the loss counts 39 rewarded where the current model gets 38.
 This is dependence along the path. A token is written after all the tokens before it, and how often its context
 comes up depends on every one of them, so the miss grows with the length of the response. If a step makes each
 token of a 500-token response 1% less likely, the current model reaches the last token's context about 150 times
-less often than the batch did, and the loss still counts that token's row at the batch's rate. The box below sets
-the length and the change per token. The toy is 2 tokens and a 20% drop, from 50% to 40%.
-
-:::widget path
+less often than the batch did, and the loss still counts that token's row at the batch's rate.
 
 Multiplying the ratios is exact, but over 500 tokens the product has a variance too large for any batch. So every
 method adds, and accepts a bias. The bias is small while the model is close to the batch, where adding and
