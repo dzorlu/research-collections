@@ -441,9 +441,18 @@ and this one limits the variance term.
 
 ### 6.3 The theorem gives the square law; the threshold comes from experiment
 
-PPO keeps each ratio within 0.2 of 1. A token's moved mass is its old probability times how far its ratio is from
-1, so with every ratio in that band at most 0.2 of the mass leaves and arrives: a total variation of 0.1, the
-10-point row of Table 2. The ceiling there, per response:
+PPO keeps each ratio within 0.2 of 1. On the three-token toy, the biggest change that allows:
+
+| token | old | ratio | new | change |
+|---|---|---|---|---|
+| 0 | 0.50 | 0.8 | 0.40 | −0.10 |
+| 1 | 0.30 | 1.2 | 0.36 | +0.06 |
+| 2 | 0.20 | 1.2 | 0.24 | +0.04 |
+
+The 0.10 that left token 0 is the 0.10 that arrived at tokens 1 and 2. In general each change is at most 0.2 of
+the token's old probability, so the changes sum to at most 0.2, and that sum counts the moved mass twice, once
+leaving and once arriving. A ratio band of 0.2 therefore lets at most 0.1 of the mass move: a total variation of
+0.1, the 10-point row of Table 2. The ceiling there, per response:
 
 | response length | ceiling at $\mathrm{TV}_{\max} = 0.1$ | largest reward |
 |---|---|---|
