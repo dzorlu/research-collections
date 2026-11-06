@@ -337,10 +337,9 @@ $v$, so one coefficient gives it.
 
 1. **Unbiased is not better at $B = 16$.** On the close engine REINFORCE beats IS; on the far one TIS beats both.
    At $B = 256$ IS wins on both.
-2. **The trust-region methods have the largest error, and that is deliberate.** A dropped row is the zero vector
-   every time: no scatter, so no variance, and a bias of $-g$, which is the whole of the error. PPO and DPPO are not
-   trying to estimate this step's gradient well; they stop the step on a token that already moved too far, and what
-   that buys shows only across steps (section 7).
+2. **PPO and DPPO are not trying to estimate this step's gradient well.** They stop the step on a token that already
+   moved too far, and the next section shows why. A dropped row is the zero vector every time: no scatter, so no
+   variance, and a bias of $-g$, which is why they have the largest error in the table.
 
 ### 6.4 The best cap grows with the batch
 
