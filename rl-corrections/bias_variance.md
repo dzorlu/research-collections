@@ -14,8 +14,8 @@ the batch size.
   with importance weights costs variance in proportion to the squared weights, which is not (section 6).
 - A cap on the weight (TIS, CISPO) bounds that variance at the price of some bias. The best cap grows with the
   batch size (6.4).
-- Trust regions (PPO, DPPO, GSPO) drop tokens that moved too far. That is bias on those tokens, accepted so that
-  the batch's prediction of the next step stays honest (section 7).
+- Trust regions (PPO, DPPO, GSPO) drop tokens that moved too far. That is bias on those tokens, accepted because
+  the loss is only right near the model that wrote the batch (section 7).
 - At a batch of 16 the lowest error on both toy samplers belongs to a biased estimator (sections 4 and 6.3).
 
 Everything is worked on a toy with one position and three tokens, where the true gradient is exact and every
@@ -363,63 +363,89 @@ As $B$ grows, $c^*$ goes to $p_2 / q = \rho_2$, which is IS. Far engine:
 Common TIS implementations cap at 2 [[1]](#ref-1), close to the best at $B = 16$ and well below it at $B = 256$.
 The same trade appears in classic off-policy RL as V-trace [[15]](#ref-15) and Retrace [[16]](#ref-16).
 
-## 7. Across steps: the blind spot and the trust region
+## 7. The loss is only right near the model that wrote the batch
 
-Section 6 asked how far one estimate lands from $g$. This section asks what the estimate is good for once the
-parameters move. A step is one optimizer update; after it the model's probabilities have changed, and the question
-is whether the batch predicted the change in reward correctly.
+Table 1 shows PPO and DPPO dropping tokens and taking the largest error of any method. This section is the reason.
 
-Part of that change is out of reach of any per-token weight. Importance weighting corrects which token is written
-at each prefix. It does not correct how often each prefix is reached, because every prefix in the batch was reached
-at the old rate. The batch is blind to the step's effect on its own prefixes.
+Every loss in section 6 scores the current model on responses an earlier model wrote. The batch is sampled once,
+and each optimizer step after that moves the model away from it [[14]](#ref-14). Such a loss is called a
+surrogate: a stand-in for the reward the current model would really get, which cannot be measured without
+sampling again. The stand-in is accurate while the current model is close to the one that wrote the batch, and it
+overstates the gain once it is not. A trust region is the rule that keeps the model close. Two papers carry the
+section: TRPO [[18]](#ref-18) for why to stay close, and DPPO [[2]](#ref-2) for how to measure close.
 
-The three-token toy has one position, so nothing in it is reached more or less often after a step. This needs a
-prefix. A two-token toy: the first token is $a$ or $b$; reward is 1 if the second token is $b$. The old policy writes the
-first token 50/50, then $b$ with probability 0.1 after $a$ and 0.5 after $b$. Its average reward is
-$J = 0.5 \cdot 0.1 + 0.5 \cdot 0.5 = 0.3$. The advantage of each choice under the old policy, its value minus the
-value of the prefix:
+### 7.1 A token's ratio does not see the tokens before it
 
-| prefix | choice | value | prefix value | $A$ |
-|---|---|---|---|---|
-| start | $a$ | 0.1 | 0.3 | −0.2 |
-| start | $b$ | 0.5 | 0.3 | +0.2 |
-| after $a$ | $a$ | 0 | 0.1 | −0.1 |
-| after $a$ | $b$ | 1 | 0.1 | +0.9 |
+The three-token toy has one position, so this needs a toy with two. A response is two tokens, each $a$ or $b$, and
+the reward is 1 if the second token is $b$. One optimizer step moves the model:
 
-Define a step of size $d$ as moving mass $d$ toward the better choice at the start and after $a$, and nothing
-after $b$: $P(\text{first} = b)$ becomes $0.5 + d$, $P(b \mid a)$ becomes $0.1 + d$, $P(b \mid b)$ stays 0.5. The
-improvement at a prefix is the mass moved times the advantage difference. The gain in $J$ is that improvement
-times how often the prefix is reached, and here the two disagree:
+| | old model | current model |
+|---|---|---|
+| first token is $a$ | 50% | 40% |
+| second is $b$, after $a$ | 10% | 20% |
+| second is $b$, after $b$ | 50% | 50% |
 
-| prefix | improvement $d \cdot \Delta A$ | reached, old policy | reached, stepped policy | surrogate (old rate) | true gain (new rate) |
-|---|---|---|---|---|---|
-| start | $d \cdot 0.4 = 0.4\,d$ | 1 | 1 | $0.4\,d$ | $0.4\,d$ |
-| after $a$ | $d \cdot 1.0 = d$ | 0.5 | $0.5 - d$ | $0.5\,d$ | $0.5\,d - d^2$ |
-| after $b$ | 0 | 0.5 | $0.5 + d$ | 0 | 0 |
-| **total** | | | | $0.9\,d$ | $0.9\,d - d^2$ |
+The old model wrote the batch. Of 100 responses, 5 are "$a\,b$" and 25 are "$b\,b$": 30 rewarded. The current model
+would write "$a\,b$" 40% × 20% = 8 times and "$b\,b$" 60% × 50% = 30 times: 38 rewarded. The step gained 8.
 
-The surrogate is what the weighted batch predicts: the improvement at each prefix, counted at the old rate. The
-true gain counts it at the new rate. The step made "after $a$" rarer, which is good for $J$ on its own, but it also
-means the improvement placed there is reached less often. The surrogate overpromises by $d^2$:
+The loss has only the old batch. It holds "$a\,b$" five times, with one ratio per token:
 
-Table 2: the gain the batch predicts vs the gain in $J$.
-
-| $d$ | surrogate | true gain | gap |
+| token | old → current | ratio $\rho$ | applied to the 5 copies |
 |---|---|---|---|
-| 0.01 | 0.0090 | 0.0089 | −0.0001 |
-| 0.1 | 0.0900 | 0.0800 | −0.0100 |
-| 0.3 | 0.2700 | 0.1800 | −0.0900 |
+| first, $a$ | 50% → 40% | 0.8 | 5 × 0.8 = 4, one fewer |
+| second, $b$ after $a$ | 10% → 20% | 2.0 | 5 × 2.0 = 10, five more |
 
-The performance difference lemma [[17]](#ref-17) writes the true gain exactly as the sum over prefixes at the new
-rate. TRPO [[18]](#ref-18)[[19]](#ref-19) bounds the gap by the TV between old and new policies, and DPPO adapts
-the bound to LLM responses (Theorem 3.2 in [[2]](#ref-2)): the gap is at most a constant times the per-token TV
-summed over the response. So a step whose per-token TV is small has a surrogate it can trust. Keeping it small is
-a trust region, and the zeros in Table 1 are its price: a token that would move too far is dropped from the
-estimate, bias $-g$ on that token, so that the gap on the rest stays bounded.
+The loss is a sum over tokens, each with its own ratio, so it adds the two changes: 5 − 1 + 5 = 9. The current
+model writes 8. "Twice as likely" was applied to all five copies, but only four of those starts remain, and
+doubling four adds four. The second token's ratio does not see that the first token changed. On "$b\,b$" the
+second token did not move and the loss is exact, 25 × 1.2 = 30. So the loss counts 39 rewarded where the current
+model gets 38.
 
-PPO and DPPO measure "too far" differently. PPO uses the ratio, $|\rho - 1|$. DPPO uses the moved mass,
-$|p - p_{\text{engine}}| = p_{\text{engine}}\,|\rho - 1|$, which is the token's share of TV. The DPPO paper's own
-example (section 4.2 in [[2]](#ref-2)):
+In a long response every token depends on all the tokens before it, and its ratio sees none of them. The exact
+correction weights each response by all of its ratios multiplied, 0.8 × 2.0 = 1.6 here. Over hundreds of tokens
+that product has a variance no batch can afford, so every method keeps the per-token weight and accepts its bias.
+This is section 6's trade again, and the trust region is what keeps the bias side small.
+
+### 7.2 The error grows with the square of the step
+
+The same arithmetic for steps that move both probabilities by 1, 10, 20 and 30 points, per 100 responses:
+
+Table 2: the gain the loss reports, the gain the step delivers, and TRPO's guarantee.
+
+| step moves | loss says | actual | gap | bound on the gap | guaranteed |
+|---|---|---|---|---|---|
+| 1 point | +0.90 | +0.89 | 0.01 | 0.04 | +0.86 |
+| 10 points | +9 | +8 | 1 | 4 | +5 |
+| 20 points | +18 | +14 | 4 | 16 | +2 |
+| 30 points | +27 | +18 | 9 | 36 | −9 |
+
+The gap is the starts with $a$ that were lost times the improvement after $a$: 10 × 10%, 20 × 20%, 30 × 30%.
+Both factors come from the step, so the gap grows as its square. It is nothing at 1 point and a third of the
+reported gain at 30. The loss itself rises in a straight line, so following it alone never says stop.
+
+TRPO turns this into a guarantee [[17]](#ref-17)[[18]](#ref-18)[[19]](#ref-19): the actual gain is at least the
+loss's gain minus a penalty that grows with the square of the distance between the two models. DPPO states it for
+a response of $T$ tokens (Theorem 3.2 in [[2]](#ref-2)):
+
+$$\text{actual gain} \;\ge\; \text{loss's gain} \;-\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
+
+where $\xi$ is the largest reward and $\mathrm{TV}_{\max}$ the most probability mass that moved at any token.
+Here $\xi = 1$, $T = 2$ and $\mathrm{TV}_{\max}$ is the step, which gives the last two columns. While the
+guaranteed gain is positive the reward must rise. The steps small enough for that are the trust region, and a
+step inside it every time is TRPO's monotonic improvement. The bound is loose: at 30 points it promises nothing
+and the step still gained 18, and $T(T-1)$ loosens it further for long responses. In practice the size of the
+region is a tuned number.
+
+### 7.3 PPO measures the move by one token's ratio, DPPO by the mass that moved
+
+The zeros in Table 1 are the trust region at work. Once a token has moved too far from the model that wrote the
+batch, its row gets $w = 0$: a bias of $-g$ on that token, taken so that the loss is not followed past where it is
+right. On a fresh batch every ratio is 1 and nothing is dropped. The zeros appear on the second and later steps
+on one batch, or at once when an engine wrote the tokens.
+
+The bound is in moved probability mass, and PPO does not measure that. It checks the ratio of the one token that
+was sampled. DPPO's argument is that one token's ratio is a poor reading of how far the distribution moved
+(section 4.2 in [[2]](#ref-2)), and it measures the moved mass, $|p - p_{\text{engine}}|$, directly:
 
 Table 3: PPO and DPPO on a rare token with $A > 0$ and a confident token with $A < 0$.
 
@@ -428,12 +454,10 @@ Table 3: PPO and DPPO on a rare token with $A > 0$ and a confident token with $A
 | rare | 0.0001 → 0.01 | 100 | 0.0099 | $w = 0$ | $w = 100$ |
 | confident | 0.99 → 0.80 | 0.81 | 0.19 | $w = 0.81$ | $w = 0$ |
 
-PPO blocks the token that barely moved and passes the one that carries most of the TV. In the paper's ablation,
-masking only the negative-advantage tokens that moved far is enough to keep training stable (Figure 5 in
-[[2]](#ref-2)).
-
-Sections 5 to 7 took one factor of the row at a time. The last section puts every method's choice of both factors
-in one table, back on the three-token toy.
+PPO blocks the token that barely moved and passes the one that carries most of the move. In the paper's
+experiments the methods with no trust region, IS and CISPO, collapse even at the small learning rates of LLM
+fine-tuning, and masking only the negative-advantage tokens whose probability fell by more than 0.5, under 0.5% of
+updates, is enough to keep training stable (section 5 and Figure 5 in [[2]](#ref-2)).
 
 ## 8. What each algorithm trades
 
