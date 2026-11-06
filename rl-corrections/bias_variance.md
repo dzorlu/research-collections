@@ -364,8 +364,8 @@ for how to measure close.
 
 ### 6.1 A token's ratio does not see the tokens before it
 
-The three-token toy has one position, so this needs a toy with two. A response is two tokens, each $a$ or $b$, and
-the reward is 1 if the second token is $b$. One optimizer step moves the model:
+This needs two positions. A response is two tokens, each $a$ or $b$, and the reward is 1 if the second token is
+$b$. One optimizer step moves the model:
 
 | | old model | current model |
 |---|---|---|
@@ -373,34 +373,34 @@ the reward is 1 if the second token is $b$. One optimizer step moves the model:
 | second is $b$, after $a$ | 10% | 20% |
 | second is $b$, after $b$ | 50% | 50% |
 
-The old model wrote the batch. Of 100 responses, 5 are "$a\,b$" and 25 are "$b\,b$": 30 rewarded. The current model
-would write "$a\,b$" 40% × 20% = 8 times and "$b\,b$" 60% × 50% = 30 times: 38 rewarded. The step gained 8.
+Take the rewarded response "$a\,b$". Out of 100 responses the old model wrote it 5 times: 50 start with $a$, and
+10% of those end in $b$. The current model writes it 8 times: 40 start with $a$, and 20% of those end in $b$.
 
-The loss has only the old batch. It holds "$a\,b$" five times, with one ratio per token:
+The loss has only the old batch's 5, and re-counts them with one ratio per token:
 
-| token | old → current | ratio $\rho$ | applied to the 5 copies |
+| token | old → current | ratio $\rho$ | re-count of the 5 |
 |---|---|---|---|
 | first, $a$ | 50% → 40% | 0.8 | 5 × 0.8 = 4, one fewer |
 | second, $b$ after $a$ | 10% → 20% | 2.0 | 5 × 2.0 = 10, five more |
 
-The loss is a sum over tokens, each with its own ratio, so it adds the two changes: 5 − 1 + 5 = 9. The current
-model writes 8. "Twice as likely" was applied to all five copies, but only four of those starts remain, and
-doubling four adds four. The second token's ratio does not see that the first token changed. On "$b\,b$" the
-first token's ratio is 60% / 50% = 1.2 and the second did not move, so the loss is exact, 25 × 1.2 = 30. So the
-loss counts 39 rewarded where the current model gets 38.
+The loss is a sum over tokens, so it adds the two changes. The true count multiplies the two ratios:
+
+$$\text{loss: } 5 - 1 + 5 = 9, \qquad \text{current model: } 5 \times 0.8 \times 2.0 = 8.$$
+
+The other rewarded response, "$b\,b$", changed in its first token only, so it goes from 25 to 30 either way. In
+total the loss counts 39 rewarded where the current model gets 38.
 
 This is dependence along the path. A token is written after all the tokens before it, and how often its context
 comes up depends on every one of them, so the miss grows with the length of the response. If a step makes each
-token of a 500-token response 1% less likely (the toy's 50% → 40% is a 20% drop), the current model reaches the
-last token's context about 150 times less often than the batch did, and the loss still counts that token's row at
-the batch's rate. The box below sets the length and the change per token.
+token of a 500-token response 1% less likely, the current model reaches the last token's context about 150 times
+less often than the batch did, and the loss still counts that token's row at the batch's rate. The box below sets
+the length and the change per token. The toy is 2 tokens and a 20% drop, from 50% to 40%.
 
 :::widget path
 
-The exact correction weights each response by all of its ratios multiplied, 0.8 × 2.0 = 1.6 in the toy, and
-5 × 1.6 = 8. Over hundreds of tokens that product has a variance too large for any batch, so every method keeps
-the per-token weight and accepts its bias. This is section 5's trade again, and the trust region is what keeps the
-bias side small.
+Multiplying the ratios is exact, but over 500 tokens the product has a variance too large for any batch. So every
+method adds, and accepts a bias. The bias is small while the model is close to the batch, where adding and
+multiplying agree: 1.01 × 1.02 is almost 1 + 0.01 + 0.02.
 
 ### 6.2 The error grows with the square of the step
 
