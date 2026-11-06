@@ -398,8 +398,8 @@ Each further token multiplies in one more ratio, so the miss grows with the leng
 *Figure 2: the share of a token's credited gain that is real, by its position in the response, when a step makes
 every earlier token 0.5%, 1% or 2% less likely. At 1% it is 37% at token 100 and under 1% at token 500.*
 
-Multiplying the ratios is exact, but over 500 tokens the product has a variance too large for any batch. So every
-method adds, and accepts a bias.
+Multiplying the ratios is exact, but over 500 tokens the product has a variance too large for any batch, so every
+method in section 5 uses one ratio per token.
 
 ### 6.2 The error grows with the square of the step
 
