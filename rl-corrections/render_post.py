@@ -20,8 +20,14 @@ html.dark .w-panels svg [fill="#1d1d1b"] {{ fill:var(--ink); }}  html.dark .w-pa
 html.dark .w-panels svg [fill="#5f5e5a"] {{ fill:var(--muted); }} html.dark .w-panels svg [stroke="#5f5e5a"] {{ stroke:var(--muted); }}
 html.dark .w-panels svg [stroke="#e4e3df"] {{ stroke:var(--line); }}
 html.dark .w-panels svg [fill="#fff"] {{ fill:var(--widget); }}   html.dark .w-panels svg [stroke="#fff"] {{ stroke:var(--widget); }}
-.mode {{ float:right; font-size:13px; color:var(--muted); background:none; border:0; cursor:pointer; padding:0; }} .mode:hover {{ color:var(--accent); }}
-.mode::before {{ content:'\2600\FE0E\00A0dark'; }} html.dark .mode::before {{ content:'\263E\FE0E\00A0light'; }}
+/* --web: a top bar matching the Quarto site's navbar (brand left, GitHub + colour-scheme toggle right) */
+.topbar {{ position:sticky; top:0; z-index:20; height:56px; display:flex; align-items:center; justify-content:space-between;
+           padding:0 2.1rem; box-sizing:border-box; background:var(--bg); border-bottom:1px solid var(--line); }}
+.topbar .brand {{ font-size:1.25rem; font-weight:650; color:var(--ink); text-decoration:none; }}
+.topbar .tools {{ display:flex; gap:1rem; align-items:center; }}
+.topbar .tools a {{ color:var(--ink); font-size:1.1rem; line-height:1; text-decoration:none; }} .topbar .tools a:hover {{ color:var(--accent); }}
+.topbar .mode i::before {{ content:"\f5d5"; }} html.dark .topbar .mode i::before {{ content:"\f5d6"; }}
+body.web #toc {{ top:56px; height:calc(100vh - 56px); }}
 body {{ margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 -apple-system,system-ui,sans-serif; }}
 a {{ color:var(--accent); }}
 #toc {{ position:fixed; top:0; left:0; width:230px; height:100vh; overflow-y:auto; padding:40px 16px 40px 24px;
@@ -90,8 +96,8 @@ window.toggleMode = function () {{
 }};
 </script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
-</head><body>
-<nav id="toc"></nav><main id="c">{home}</main>
+{icons}</head><body class="{bodycls}">
+{topbar}<nav id="toc"></nav><main id="c"></main>
 <script id="md" type="text/plain">{md}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
@@ -208,8 +214,14 @@ def main():
   title = md.splitlines()[0].lstrip('# ').strip()
   names = re.findall(r'^:::widget[ \t]+(\S+)', md, flags=re.M)
   widgets = '\n'.join(open(os.path.join(folder, 'widgets', f'{n}.js')).read() for n in names)
-  home = '<a class="home" href="../../">Tinkerings</a><button class="mode" onclick="toggleMode()" aria-label="toggle dark mode"></button>' if web else ''
-  open(out, 'w').write(PAGE.format(title=html.escape(title), md=html.escape(md), widgets=widgets, home=home))
+  # on the site: the same bar as the Quarto pages, using the site's own Bootstrap Icons font
+  icons = '<link rel="stylesheet" href="../../site_libs/bootstrap/bootstrap-icons.css">\n' if web else ''
+  topbar = ('<header class="topbar"><a class="brand" href="../../">Tinkerings</a><span class="tools">'
+            '<a href="https://github.com/dzorlu" aria-label="GitHub"><i class="bi bi-github"></i></a>'
+            '<a class="mode" href="#" onclick="toggleMode(); return false;" title="Toggle dark mode"><i class="bi"></i></a>'
+            '</span></header>\n') if web else ''
+  open(out, 'w').write(PAGE.format(title=html.escape(title), md=html.escape(md), widgets=widgets,
+                                   icons=icons, topbar=topbar, bodycls='web' if web else ''))
   print(f'wrote {out}')
 
 
