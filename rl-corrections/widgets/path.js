@@ -1,4 +1,4 @@
-// The path widget (section 7.1): how often the current model reaches token t's context, relative to the batch.
+// The path widget (section 6.1): how often the current model reaches token t's context, relative to the batch.
 // If every earlier token's probability changed by the same fraction c, the context of token t is (1 + c)^(t - 1)
 // times as common as when the batch was written. The loss counts every token's row at the batch's rate, 1.
 window.widgets = window.widgets || {};

@@ -1,5 +1,5 @@
-// The samplers widget: section 4's two error terms against the sampler's q, with the model's p_2, the engine's q
-// and B under the reader's control. Closed form (section 4), nothing is sampled.
+// The samplers widget: section 3's two error terms against the sampler's q, with the model's p_2, the engine's q
+// and B under the reader's control. Closed form (section 3), nothing is sampled.
 //   p = ((1 - p_2) 5/8, (1 - p_2) 3/8, p_2),  v = p - e_2,  ||v||^2 = (1 - p_2)^2 * 98/64   (0.98 at p_2 = 0.2)
 //   ||bias||^2 = ||v||^2 (q - p_2)^2;  Var(x) = ||v||^2 q (1 - q);  error = ||bias||^2 + Var(x) / B.
 window.widgets = window.widgets || {};
