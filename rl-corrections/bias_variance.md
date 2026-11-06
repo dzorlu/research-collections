@@ -399,23 +399,23 @@ Each further token multiplies in one more ratio, so the miss grows with the leng
 every earlier token 0.5%, 1% or 2% less likely. At 1% it is 37% at token 100 and under 1% at token 500.*
 
 Multiplying the ratios is exact, but over 500 tokens the product has a variance too large for any batch. So every
-method adds, and accepts a bias. The bias is small while the model is close to the batch, where adding and
-multiplying agree: 1.01 × 1.02 is almost 1 + 0.01 + 0.02.
+method adds, and accepts a bias.
 
 ### 6.2 The error grows with the square of the step
 
-The same arithmetic for steps that move both probabilities by 1, 10, 20 and 30 points. The table counts both
-rewarded responses, per 100. "$b\,b$" changed in its first token only, so the loss counts it exactly: at 10
-points it goes from 25 to 30, which with "$a\,b$" makes +9 in the loss and +8 in truth.
+Repeat the example with a smaller or a bigger step: the first token's $a$ goes down by the same number of points
+that $b$ after $a$ goes up. 10 points is the example above. The table counts both rewarded responses, per 100.
+"$b\,b$" changed in its first token only, so the loss counts it exactly: at 10 points it goes from 25 to 30, which
+with "$a\,b$" makes +9 in the loss and +8 in truth.
 
-Table 2: the gain the loss reports, the gain the step delivers, and TRPO's guarantee.
+Table 2: the gain the loss reports and the gain the step delivers.
 
-| step moves | loss says | actual | gap | bound on the gap | guaranteed |
-|---|---|---|---|---|---|
-| 1 point | +0.90 | +0.89 | 0.01 | 0.04 | +0.86 |
-| 10 points | +9 | +8 | 1 | 4 | +5 |
-| 20 points | +18 | +14 | 4 | 16 | +2 |
-| 30 points | +27 | +18 | 9 | 36 | −9 |
+| step | loss says | actual | gap |
+|---|---|---|---|
+| 1 point | +0.90 | +0.89 | 0.01 |
+| 10 points | +9 | +8 | 1 |
+| 20 points | +18 | +14 | 4 |
+| 30 points | +27 | +18 | 9 |
 
 The gap is the starts with $a$ that were lost times the improvement after $a$: 10 × 10%, 20 × 20%, 30 × 30%.
 Both factors come from the step, so the gap grows as its square. It is 1% of the reported gain at 1 point and a
@@ -429,11 +429,20 @@ a response of $T$ tokens (Theorem 3.2 in [[2]](#ref-2)):
 $$\text{actual gain} \;\ge\; \text{loss's gain} \;-\; 2\,\xi\,T(T-1)\,\mathrm{TV}_{\max}^2,$$
 
 where $\xi$ is the largest reward and $\mathrm{TV}_{\max}$ the most probability mass that moved at any token.
-Here $\xi = 1$, $T = 2$ and $\mathrm{TV}_{\max}$ is the step, which gives the last two columns. While the
-guaranteed gain is positive the reward must rise. The steps small enough for that are the trust region, and a
-step inside it every time is TRPO's monotonic improvement. The bound is loose: at 30 points it promises nothing
-and the step still gained 18, and $T(T-1)$ loosens it further for long responses. In practice the size of the
-region is a tuned number.
+On the toy $\xi = 1$, $T = 2$ and the mass that moved is the step. At 10 points the penalty is
+$2 \cdot 1 \cdot 2 \cdot 1 \cdot 0.10^2 = 0.04$ per response, 4 per 100:
+
+| step | gap | penalty | guaranteed gain, loss says − penalty |
+|---|---|---|---|
+| 1 point | 0.01 | 0.04 | +0.86 |
+| 10 points | 1 | 4 | +5 |
+| 20 points | 4 | 16 | +2 |
+| 30 points | 9 | 36 | −9 |
+
+While the guaranteed gain is positive the reward must rise. The steps small enough for that are the trust region,
+and a step inside it every time is TRPO's monotonic improvement. The bound is loose: the penalty is four times
+the gap, and at 30 points it promises nothing while the step still gained 18. $T(T-1)$ loosens it further for long
+responses. In practice the size of the region is a tuned number.
 
 TRPO's penalty is a bias term: it is computed from exact quantities and does not shrink with the batch. There is
 also a trust region for the variance term. Metelli et al. [[24]](#ref-24) bound how far an importance-weighted
