@@ -229,14 +229,16 @@ Two engines stand in for both, differing from the model only in how often they w
 p     = [0.5,  0.3,  0.2 ]    # model: token 2 in 20 rows out of 100
 close = [0.6,  0.3,  0.1 ]    # engine: 10 out of 100
 far   = [0.69, 0.30, 0.01]    # engine: 1 out of 100
+
+v     = [0.5, 0.3, 0.2 - 1]   # the row when token 2 is drawn: p minus one-hot(2)
+g     = [0.2 * x for x in v]  # true gradient: v times how often the model draws it
+rho_2 = [0.2 / 0.1, 0.2 / 0.01]   # model's rate over the engine's: 2 (close), 20 (far)
 ```
 
-A row is one sampled token's update, $w\,A\,(p - e_y)$ (section 4). Only token 2 is rewarded, so the only nonzero
-row is $v = p - e_2 = (0.5, 0.3, -0.8)$, and the true gradient is $g = 0.2\,v$: $v$ times how often the model
-writes token 2. An engine writes it at a different rate, so a batch holds the wrong number of copies of $v$. Every
-method answers that with a weight on the row, a function of the ratio $\rho_y = p_y / p_{\text{engine},y}$; on
-token 2 the ratio is 2 for the close engine and 20 for the far one. $b = 0$ throughout, and every error below is
-measured against $g$.
+A row is one sampled token's update (section 4). Only token 2 is rewarded, so the only nonzero row is $v$, and the
+true gradient $g$ is $v$ times the model's rate for token 2. An engine writes it at a different rate, so a batch
+holds the wrong number of copies of $v$. Every method answers that with a weight on the row, chosen from the ratio
+$\rho$ of the model's rate to the engine's. $b = 0$ throughout, and every error below is measured against $g$.
 
 The weight does not remove the mismatch; it chooses how it is paid. Leave $w = 1$ and every batch comes up short by
 the same amount: bias. Multiply the row by $\rho$ to restore the count and the batches are right on average but
@@ -244,11 +246,17 @@ swing from one to the next: variance. A cap pays some of each.
 
 ### 6.1 Raising the weight trades bias for variance
 
-Write $w_2$ for the weight on token 2's row; the other rows are zero whatever their weight. On the far engine
-REINFORCE keeps $w_2 = 1$, IS [[10]](#ref-10)[[12]](#ref-12) uses the full ratio, $w_2 = \rho_2 = 20$, and TIS
-[[13]](#ref-13)[[1]](#ref-1) stops it at a cap, $w_2 = \min(\rho_2, 2) = 2$. A batch of 16 estimates $w_2$ times its
-token-2 count over 16, times $v$, and the far engine puts a token-2 row in about one batch in seven. Eight batches,
-one of which drew the row:
+Write $w_2$ for the weight on token 2's row; the other rows are zero whatever their weight. Three choices, on the
+far engine:
+
+```python
+rho_2 = 0.2 / 0.01                                        # 20
+w_2 = {'REINFORCE': 1, 'TIS': min(rho_2, 2), 'IS': rho_2}  # 1, 2, 20
+```
+
+REINFORCE ignores the ratio, IS [[10]](#ref-10)[[12]](#ref-12) uses all of it, and TIS [[13]](#ref-13)[[1]](#ref-1)
+stops it at a cap. A batch of 16 estimates $v$ times its token-2 count, times $w_2$, over 16, and the far engine
+puts a token-2 row in about one batch in seven. Eight batches, one of which drew the row:
 
 | batch | token-2 rows | REINFORCE, $w_2 = 1$ | TIS, $w_2 = 2$ | IS, $w_2 = 20$ |
 |---|---|---|---|---|
