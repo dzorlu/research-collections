@@ -21,7 +21,7 @@ html.dark .w-panels svg [fill="#5f5e5a"] {{ fill:var(--muted); }} html.dark .w-p
 html.dark .w-panels svg [stroke="#e4e3df"] {{ stroke:var(--line); }}
 html.dark .w-panels svg [fill="#fff"] {{ fill:var(--widget); }}   html.dark .w-panels svg [stroke="#fff"] {{ stroke:var(--widget); }}
 .mode {{ float:right; font-size:13px; color:var(--muted); background:none; border:0; cursor:pointer; padding:0; }} .mode:hover {{ color:var(--accent); }}
-.mode::before {{ content:'\2600\FE0E dark'; }} html.dark .mode::before {{ content:'\263E\FE0E light'; }}
+.mode::before {{ content:'\2600\FE0E\00A0dark'; }} html.dark .mode::before {{ content:'\263E\FE0E\00A0light'; }}
 body {{ margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 -apple-system,system-ui,sans-serif; }}
 a {{ color:var(--accent); }}
 #toc {{ position:fixed; top:0; left:0; width:230px; height:100vh; overflow-y:auto; padding:40px 16px 40px 24px;
