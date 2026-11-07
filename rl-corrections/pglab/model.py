@@ -78,16 +78,29 @@ class NN(nn.Module):
       # 3. Gradient for the layer below: at this layer's input, which is the previous layer's activation.
       ds = ds @ W.T                                   # [B, S, in]
 
-  def backward(self, w, A, y):
+  def backward(self, w, A, y, q=None):
     """
       w: token weights. [B, S]
       A: advantage. [B, S]
       y: token ids. [B, S]
+      q: the engine's distribution at each position, [B, S, V], or None.
+
+      Plain:     dlogits = w * A * (p - y_onehot) / (B * S)
+      Centered:  dlogits = w * A * (q - y_onehot) / (B * S)
+
+      The score y_onehot - p averages to 0 only when the trainer draws. The engine draws with q, so the average
+      over its draws is q - p: a push of p toward q at every position, scaled by the mean advantage, blind to which
+      token was good. Swapping p for q makes the average 0 under the engine and leaves the covariance with A as is.
+      Orthogonal to w: w fixes the sampling distribution per token through a ratio, this fixes the direction.
+      Score centering: https://arxiv.org/abs/2609.20807, Eq. 4-5. The paper's top-k tail ratio is not needed here:
+      V = 10 and the engine's softmax is fully known.
     """
     B, S, V = self.p.shape
     y_one_hot = F.one_hot(y, V)                       # [B, S, V]
     w_ = w.unsqueeze(-1)                              # [B, S, 1]
     A_ = A.unsqueeze(-1)                              # [B, S, 1]
+    if q is not None:
+      raise NotImplementedError
     dlogits = w_ * A_ * (self.p - y_one_hot) / (B * S)   # [B, S, V]  / (B * S): the loss is a mean over positions
     self.backward_(dlogits)
 

@@ -28,6 +28,7 @@ class Config(BaseSettings):
   lag: list[int] = [0]           # engine weights are this many updates old
   noise: list[float] = [0.0]     # std of the noise added to the engine's logits
   steps_per_rollout: list[int] = [1]   # minibatches per rollout, one optimizer step each (miles --num-steps-per-rollout)
+  center: bool = False           # score centering: dlogits subtracts the engine's q instead of the trainer's p (model.backward)
   seeds: int = 3
   steps: int = 300               # rollouts per run
   prompts: int = 64
@@ -71,6 +72,7 @@ class Rollout(BaseModel):
   R: torch.Tensor                # [B]     reward
   A: torch.Tensor                # [B, S]  GRPO advantage
   logp_engine: torch.Tensor      # [B, S]
+  q_engine: torch.Tensor         # [B, S, V]  the engine's full distribution at each position (score centering)
 
 
 def make_prompts(P):
@@ -132,13 +134,14 @@ def rollout(engine, spec, cfg):
   engine_logits = engine.logits + noise                # [B, S, V]
   y = torch.distributions.Categorical(logits=engine_logits).sample()   # [B, S]
   logp_engine = logp_of_tokens(engine_logits, y)       # [B, S]
+  q_engine = torch.softmax(engine_logits, -1)          # [B, S, V]  what the trainer needs to center the score
 
   # Reward: fraction of positions sorted correctly. Advantage: one per response, copied to every token.
   correct = (y == target).float()                      # [B, S]
   R = correct.mean(-1)                                 # [B]
   A = grpo_advantage(R, cfg.prompts, cfg.group)        # [B]
   A = A.unsqueeze(-1).expand(-1, S)                    # [B, S]
-  return Rollout(x=x, y=y, R=R, A=A, logp_engine=logp_engine)
+  return Rollout(x=x, y=y, R=R, A=A, logp_engine=logp_engine, q_engine=q_engine)
 
 
 @torch.no_grad()
@@ -168,7 +171,7 @@ def run(spec: RunSpec, cfg: Config) -> list[Row]:
       model.forward(ro.x[mb])
       logp_now = logp_of_tokens(model.logits, ro.y[mb])               # [b, S]  equals logp_old on the first minibatch
       w = METHODS[spec.method](logp_now, logp_old[mb], ro.logp_engine[mb], ro.A[mb])   # [b, S]
-      model.backward(w, ro.A[mb], ro.y[mb])
+      model.backward(w, ro.A[mb], ro.y[mb], q=ro.q_engine[mb] if cfg.center else None)
       model.step(cfg.lr)
       ws.append(w)
     w = torch.cat(ws)                                                 # [B, S]
