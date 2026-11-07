@@ -126,13 +126,23 @@ white-box  ───►  task + environment         ───► deliverable ─
                                                    white-box got through  →  fault is in the grader
 ```
 
-The black-box attacker works through a checklist of known hacks: hard-code the expected output, edit
-tests, shadow binaries, dig for leaked answers, hedge, take the easiest reading of an ambiguous prompt,
-ask the simulated user. It saw only what the policy will see, so anything it exploited is in the task
-or environment. The white-box attacker does not try to solve anything; it writes to the rubric's
-letter — a "Risk analysis" heading with one filler sentence, an empty chart, text aimed at the judge.
-It used knowledge the policy doesn't have, so a success means a criterion is loose. Exploited tasks
-are removed until repaired. Hacks found later during RL are added to the taxonomy.
+*Black-box attacker*
+- sees only what the policy will see: task text and environment;
+- works through a written checklist of known hacks: hard-code the expected output, edit tests or
+  `conftest.py`, shadow binaries on PATH, dig for leaked answers in git history or build artifacts,
+  hedge between answers, take the easiest reading of an ambiguous prompt, ask the simulated user;
+- a success means the fault is in the task or environment — the policy would find the same path.
+
+*White-box attacker* (rubric-graded tasks)
+- additionally sees the rubric, criterion weights, and grading spec;
+- does not try to solve the task; writes to the rubric's letter — a "Risk analysis" heading with one
+  filler sentence, a chart that exists but shows nothing, text addressed to the judge;
+- a success means a criterion is loose — it used knowledge the policy doesn't have.
+
+*Afterwards*
+- each attacker deliverable is frozen and scored by the rubric judge and by an independent goal judge;
+- rubric pass + goal fail → task exploitable; removed until repaired and re-validated;
+- hacks found later during RL are added to the taxonomy so every future task is tested for them.
 
 **5. Solve inspection.** A judge examines rollouts that *passed* (a failed rollout can't be a
 successful hack). This runs at three times:
