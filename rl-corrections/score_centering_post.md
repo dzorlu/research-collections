@@ -51,10 +51,11 @@ U = [[ 0.375, -0.225, -0.150],   # row v: A[v] * S[v]
      [ 0.125,  0.075, -0.200]]
 ```
 
-The engine draws token $v$ with probability $q_v$, so the expected update is the $q$-weighted sum of the rows:
+The engine draws token $v$ with probability $q_v$, so the expected update is the $q$-weighted sum of the rows: the
+matrix product of $q$ with $U$.
 
 ```python
-0.6 * U[0] + 0.3 * U[1] + 0.1 * U[2] = [0.275, -0.18, -0.095]
+q @ U = 0.6 * U[0] + 0.3 * U[1] + 0.1 * U[2] = [0.275, -0.18, -0.095]   # q = [0.6, 0.3, 0.1], the engine's draw probabilities
 ```
 
 ## The expected update is drift plus signal
@@ -63,11 +64,11 @@ Split it with the covariance identity $\mathbb{E}[XY] = \mathbb{E}[X]\,\mathbb{E
 is the advantage of the drawn token and $Y$ its score:
 
 ```python
-A_avg = 0.6*0.75 + 0.3*(-0.25) + 0.1*(-0.25) = 0.35
-s_bar = 0.6*S[0] + 0.3*S[1] + 0.1*S[2]       = [0.1, 0.0, -0.1]     # = q - p
+A_avg = q @ A = 0.6*0.75 + 0.3*(-0.25) + 0.1*(-0.25) = 0.35          # mean advantage under the engine's draws
+s_bar = q @ S = 0.6*S[0] + 0.3*S[1] + 0.1*S[2]       = [0.1, 0.0, -0.1]   # mean score under the engine's draws, = q - p
 
-drift  = A_avg * s_bar  = [0.035,  0.00, -0.035]
-signal = rest           = [0.240, -0.18, -0.060]
+drift  = A_avg * s_bar     = [0.035,  0.00, -0.035]
+signal = q @ U - drift     = [0.240, -0.18, -0.060]
 ```
 
 The drift raises token 0 and lowers token 2: it moves $p$ toward $q$, scaled by the average advantage, with no regard
@@ -86,12 +87,24 @@ Use $e_y - q$ as the score. Its mean under the engine's draws is $q - q = 0$, so
 The covariance is untouched, because a covariance already subtracts the means.
 
 ```python
-Sc = [[ 0.4, -0.3, -0.1],   # row v: e_v - q
+Sc = [[ 0.4, -0.3, -0.1],   # row v: e_v - q, the centered score of token v
       [-0.6,  0.7, -0.1],
       [-0.6, -0.3,  0.9]]
+Uc = [[ 0.300, -0.225, -0.075],   # row v: A[v] * Sc[v], the centered update if token v is drawn
+      [ 0.150, -0.175,  0.025],
+      [ 0.150,  0.075, -0.225]]
 
-0.6*Sc[0] + 0.3*Sc[1] + 0.1*Sc[2]                 = [0.0,  0.0,   0.0 ]   # mean zero under q
-0.6*A[0]*Sc[0] + 0.3*A[1]*Sc[1] + 0.1*A[2]*Sc[2]  = [0.24, -0.18, -0.06]  # = signal
+q @ Sc = 0.6*Sc[0] + 0.3*Sc[1] + 0.1*Sc[2] = [0.0,  0.0,   0.0 ]    # mean centered score under the engine: zero
+q @ Uc = 0.6*Uc[0] + 0.3*Uc[1] + 0.1*Uc[2] = [0.24, -0.18, -0.06]   # expected centered update = signal, no drift
+```
+
+In a training loop the change is the vector the one-hot is subtracted from. With `p` the trainer's probabilities and
+`q` the engine's at each position, both of shape `[B, T, V]`:
+
+```python
+y_onehot = F.one_hot(y, V)                        # [B, T, V]
+dlogits  = w * A * (p - y_onehot) / (B * T)       # plain: w is the method's per-token weight, 1 for REINFORCE
+dlogits  = w * A * (q - y_onehot) / (B * T)       # score centering
 ```
 
 The same holds for every baseline, because the drift is gone before the baseline enters:
