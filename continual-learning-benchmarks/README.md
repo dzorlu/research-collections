@@ -510,5 +510,46 @@ Continual learning for agents in 2026 means a frozen model plus a harness plus a
 
 **Where it sits.** The cleanest signal design among the drift benchmarks: score-only feedback, explicit withdrawal and re-entry, a Fully Specified slice that prices collateral damage, and Blind/Oracle brackets. Adds two analyses nobody else has: learning-speed curves per rule and an exploration metric. Does not grade memory contents (ReScopeBench does) and has no human baseline. It is the controlled version of ApprenticeBench's story, with the Oracle ceiling ApprenticeBench lacks.
 
+## 16. Self-evolving harnesses: the adjacent field
+
+Learning can live in weights, in a memory store, or in the harness itself (prompts, skills, tools, orchestration, source). The third is "agent harness evolution" or recursive self-improvement without weight updates. Same stage model, larger blast radius: one harness change touches every future task, so gains and regressions are both bigger than for a memory write.
+
+**Methods, by what they evolve** (ids from the ServeLearnBench and EvoAudit bibliographies)
+- Prompt/context: GEPA (2507.19457, ICLR 2026; reflective prompt evolution with Pareto selection), ACE (ICLR 2026; evolving playbooks, source of "context collapse"), Dynamic Cheatsheet, ReasoningBank (2509.25140, ICLR 2026).
+- Skills/procedures: SkillOpt (2605.23904), PolicyBank (2604.15505), Agent Workflow Memory, Voyager.
+- Whole harness state: Continual Harness (2605.09998; acting agent never sees scores, a Refiner revises prompt, memories, skills, subagents on a cadence), Prime Agent (2608.23552; self-improving code-runtime harness), Recursive Harness Self-Improvement (2607.15524), Adaptive Auto-Harness (2606.01770), JIT-Agent (2608.25593), HCL (2608.19013; retention during harness updates), RSIAgent (2609.15364), Meta-Harness.
+- World-model side: self-evolving world models for planning (2606.30639), Memento 3 (2610.11794).
+- Code/program: Darwin Gödel Machine, AlphaEvolve, STOP.
+
+**Audits**
+- Harness-Delta Attribution (2610.22466): 54% of reported gain is overfitting to the search set, 14% test-time compute.
+- Beneath the Surface / EvoAudit (2611.07624): below.
+- CODA (2610.20845): skill-bank drift erases 52–93% of the gain.
+- Can coding agents sustain continual evolution without forgetting (2611.03219): Meta-Harness 94.0 → 32.0 on SWE-Bench after five evolution rounds on a different task set.
+- Evolving agents in the dark (2606.05922, EMNLP 2026): retrospective harness optimization via self-preference, no verifier.
+- EvoAgentBench (2607.05202): self-evolution as ability transfer.
+
+**Where ServeLearnBench lands on these.** Prime and Continual Harness (whole-harness state, with a post-score reflection step) reach 57–62 on hidden-rule tasks; SkillOpt, Mem0, RAG 33–43. Exploration (distinct answers tried on a new rule) is a harness property and ranks the five identically to their reward.
+
+### EvoAudit / "Beneath the Surface: What We Overlook When We Talk About Agent Evolution" (USTC, Berkeley, BIGAI, SJTU; arXiv 2611.07624, Nov 5 2026)
+
+**Setup.** Agent = frozen model + harness. Four recipes: AHE and HyperAgents (implementation-centric), A-Evolve and GEPA (reflection-centric). Two harnesses: MiniSWE 2.4.5 (source-editable) and Codex 0.143.0 (outer layer only). Two benchmarks: τ3-Banking (97 tasks) and Terminal-Bench 2 (89), split train/val/test with evolution seeing only train/val. GPT-5.4. Seed and Champion each evaluated 8 times, giving reliability (Avg@8) and coverage (Pass@8) separately, plus per-task gained/lost counts and deployment cost.
+
+**RQ1, what improves.** 11/16 lineages improve reliability, 10/16 coverage, 4 move them in opposite directions. All 16 Champions gain and lose tasks: best case +15/−4 (AHE on MiniSWE, τ3), worst +6/−9 (GEPA on Codex, τ3). Reflection-centric methods barely move (A-Evolve and GEPA within ±2.7 everywhere). 8 of 11 reliability gains cost more per trial. Trace inspection: gains come from state preservation and dependency handling; losses from exact-grounding errors and premature handoff.
+
+**RQ2, transfer.** Test-split gains survive in 10/16, 7/8 for implementation-centric. Cross-benchmark: coverage falls for 7/8 Champions on τ3 → τ2-bench and rises for 7/8 on Terminal-Bench → DeepSWE. Gains are target-specific.
+
+**RQ3, per operator.**
+- Select: choosing the best-scoring Parent to evolve further beats random (25%) only on coding (55–60%) and is worse than random on general tasks (9–18%). Current score does not predict improvement potential.
+- Analyze: specific trace-grounded components beat generic reminders ("check tools, verify results") in 15/16 cases; generic reminders are flat or negative.
+- Mutate: 6/8 Champions beat either isolated component, so changes interact and must be tested combined.
+- Gate: a stricter admission rule (mean improvement and regression ≤ 0.05) drops the best candidate in 9 of 15 pools.
+
+**AGE (Audit-Guided Evolution).** Four revisions installed in A-Evolve: regression-aware tie-breaking in select, behavior-grounded diagnosis that excludes rewards and hidden tests from the judge's view, dependency-closed mutations with stated activation conditions, and a preservation-tracking gate. Beats A-Evolve on reliability and coverage in all four settings (τ3 MiniSWE 34.0 vs 26.3; τ3 Codex 38.1 vs 28.1; TB2 MiniSWE 71.8 vs 68.0; TB2 Codex 73.5 vs 68.0) and loses fewer seed-covered tasks in three. Eight experts endorsed the revisions 6.75/8.
+
+**Caveats.** One model, 20 generations, one seed. AGE is compared against A-Evolve, the weakest recipe; its margin over AHE and HyperAgents is 1–2 points. The durable contribution is methodological: report gained and lost tasks separately, price deployment, and evaluate each search operator by the decision it makes rather than by one aggregate score.
+
+**Relation to the rest of the survey.** Store and revise at the harness level. "Coverage is a flow" is the harness analogue of ServeLearnBench's Fully Specified damage, and the operator-level audit is the analogue of MemPABench's stage split: the same score can hide a bad select, a bad mutate, or a bad gate.
+
 ## Sources
 ApprenticeBench: neocognition.io/blog/apprentice-bench, apprenticebench.com (JS-rendered; numbers from the Nov 4 report). CLE: haoyu-zhao.github.io/CLE, arXiv 2610.33956, github.com/haoyu-zhao/Continual-Learning-Exam, HF Continual-Learning-Exam/CLE-Lite. CL-Bench: arXiv 2606.05661. AgentCL: arXiv 2606.02461 (v3, Sep 2026). AgentStream: arXiv 2608.00155, github.com/microsoft/Sico. Evo-Memory: arXiv 2511.20857. StreamBench: arXiv 2406.08747. LifeVal: arXiv 2611.06687 (local PDF ~/Documents/papers/2611.06687v1.pdf). SkillLearnBench 2604.20087, EvoMemBench 2605.18421, LifelongAgentBench 2505.11942, MemoryAgentBench 2507.05257, ACE 2510.04618, RL's Razor 2509.04259, sparse memory finetuning 2510.15103. Subagent-fetched paper sections marked "summary" in the fetch were not read verbatim; spot-check Table 1 of CLE and CL-Bench before quoting cost figures.
