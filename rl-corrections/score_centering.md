@@ -1,5 +1,29 @@
 # Score centering
 
+
+```
+
+E[X Y] = E[X] E[Y] + Cov(X, Y)
+
+```
+with 
+
+```
+X = A_{y_t} (scalar) 
+Y = s_{y_t} (vector) # [d] over all parameters. 
+```
+
+both random through the draw `y_t ~ q`. `E[X] = A_avg`, `E[Y] = s_bar`, `Cov = Σ_v q_v (A_v − A_avg)(s_v − s_bar)`.
+
+```
+# policy gradient ~ drift + signal
+# all averaged over q
+
+
+
+
+
+
 - **Problem:** the engine picks tokens with probabilities `q`, but REINFORCE subtracts the trainer's `y_hat`. So the
   score `onehot(k) - y_hat` does not average to 0; its average is `s_bar = q - y_hat`.
 - **Drift:** averaged over the engine's picks, the update carries `A_avg * s_bar`, a step of the trainer toward the
