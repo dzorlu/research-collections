@@ -1,5 +1,41 @@
 # Score centering
 
+## TLDR
+
+- Each update is advantage times score. The score of the drawn token is onehot(y) − p, the direction that makes it
+  more likely.
+- Average the score over the engine's draws:
+
+  ```
+  Σ_v q_v (onehot(v) − p) = q − p
+  ```
+
+  If the trainer draws, q = p and this is zero. If the engine draws, it is the gap between the two.
+- Any product of two random variables averages to mean times mean plus a covariance. Applied to advantage times score
+  under q, that gives two terms: A_avg × (q − p), the drift, and a covariance, the signal. The drift is a push of the
+  trainer toward the engine, blind to which token was good. On-policy the same split exists but the drift is zero
+  because q − p is; the mismatch is what makes it survive.
+- Fix: subtract q − p from the score.
+
+  ```
+  onehot(y) − p − (q − p) = onehot(y) − q
+  Σ_v q_v (onehot(v) − q) = q − q = 0
+  ```
+
+  Drift becomes A_avg × 0, for any baseline. The covariance does not change because every row got the same vector
+  subtracted.
+- In code, one line: where the gradient at the logits was A × (p − onehot(y)), write A × (q − onehot(y)). The engine
+  has to return its distribution q at each position (top-k in practice, with the tail modeled from p). No ratios, no
+  clipping, no hyperparameter, and it composes with any importance weight w.
+- Why it matters: the engine is rebuilt from the trainer every step with its error re-added, so the drift accumulates
+  instead of converging. Importance sampling corrects by reweighting toward the trainer and pays in variance.
+  Centering corrects by measuring against the engine and pays nothing.
+- Result: in the paper's worst setting (30B, INT8 engine, INT4 KV cache) centering reaches 30% training accuracy,
+  TIS 12%, everything else under 5%; in pglab with a fixed engine offset and no baseline, plain reinforce stays at
+  chance and centered reinforce learns at the noise-free pace.
+
+## One prefix, three tokens
+
 Everything below happens at one prefix: the prompt plus the tokens generated so far. The trainer has a distribution over
 the next token, the engine has a slightly different one, and the engine draws. Ascent sign throughout, so an update is
 added to the logits.
