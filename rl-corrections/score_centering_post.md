@@ -2,29 +2,67 @@
 
 ## Summary
 
-In RL for language models the tokens are drawn by an inference engine, and the gradient is computed by a trainer
-whose probabilities differ slightly from the engine's: quantization, a stale copy of the weights, different kernels.
-Every correction in use reweights each token by a ratio of the two probabilities, which fixes the mismatch exactly
-only when the ratio is left uncapped, and every practical method caps it. Score centering [[1]](#ref-1) does
-something else. It changes the direction of the gradient rather than its weight, and the whole method is one line.
+In RL for language models an inference engine draws the tokens and a trainer computes the gradient, and the two
+assign slightly different probabilities to the same token: quantization, a stale copy of the weights, different
+kernels. Every correction in use reweights each token by a ratio of the two probabilities. That fixes the mismatch
+exactly only when the ratio is left uncapped, and every practical method caps it. Score centering [[1]](#ref-1)
+changes the direction of the gradient instead of its weight, and the whole method is one line. The argument fits in
+a few lines.
 
-- **Each update is advantage times score.** The score of the drawn token $y$ is $e_y - p$: one-hot of the token minus
-  the trainer's probabilities, the direction that makes $y$ more likely.
-- **Averaged over the engine's draws, the score is $q - p$.** Weight each token's score by the engine's probability
-  $q_v$ and the sum collapses: $\sum_v q_v (e_v - p) = q - p$. If the trainer did the drawing this would be $p - p = 0$.
-- **The expected update splits into drift plus signal.** Any product of two random variables averages to mean times
-  mean plus a covariance. For advantage times score that gives $\bar A \,(q - p)$, the drift, and a covariance, the
-  signal. The drift pushes the trainer toward the engine and knows nothing about which token was good. On-policy the
-  same split exists but the drift is zero, because $q - p$ is.
-- **The fix subtracts $q - p$ from the score.** $(e_y - p) - (q - p) = e_y - q$. Averaged under the engine this is
-  $q - q = 0$, so the drift is zero for any advantage and any baseline. The covariance does not change, because every
-  draw had the same vector subtracted.
-- **In code it is one line.** Where the gradient at the logits was $A\,(p - e_y)$, write $A\,(q - e_y)$. The engine has
-  to return its distribution at each position. No ratios, no clipping, no hyperparameter, and it composes with any
-  importance weight.
-- **Why it matters.** The engine is rebuilt from the trainer after every step with its error added back, so the drift
-  accumulates instead of converging. Importance sampling corrects it by reweighting toward the trainer and pays in
-  variance. Centering corrects it by measuring against the engine and pays nothing.
+**The update is advantage times score.** The score of token $v$ is the gradient of its log-probability with respect to
+all $d$ parameters. At the logits it is one-hot minus the trainer's probabilities.
+
+$$
+s_v = \nabla_\theta \log p_\theta(v) \in \mathbb{R}^d, \qquad \text{at the logits: } s_v = e_v - p \in \mathbb{R}^V
+$$
+
+**The engine draws, so the expectation is under $q$.** One draw of token $y$ contributes $A_y s_y$. The engine draws
+$v$ with probability $q_v$:
+
+$$
+\mathbb{E}_q[A\,s] = \sum_v q_v\, A_v\, s_v
+$$
+
+**The mean score under $q$ is $q - p$.** The one-hots collect $q$; $p$ is the same vector in every term and comes out
+with the probabilities summing to one.
+
+$$
+\bar s = \sum_v q_v\, s_v = \sum_v q_v\,(e_v - p) = \sum_v q_v\, e_v - \Big(\sum_v q_v\Big)\, p = q - p
+$$
+
+If the trainer drew, this would be $p - p = 0$. The engine draws, so it is not.
+
+**So the expected update carries drift.** A product of two random variables averages to mean times mean plus a
+covariance. For advantage times score under $q$:
+
+$$
+\mathbb{E}_q[A\,s] = \underbrace{\bar A\,(q - p)}_{\text{drift}} + \underbrace{\sum_v q_v\,(A_v - \bar A)(s_v - \bar s)}_{\text{signal: } \mathrm{Cov}_q(A, s)}
+$$
+
+The drift pushes the trainer toward the engine, scaled by the mean advantage, blind to which token earned the reward.
+The signal is the only part that depends on that.
+
+**The fix subtracts $\bar s$ from every score, and $p$ cancels.**
+
+$$
+s_v - \bar s = (e_v - p) - (q - p) = e_v - q, \qquad \sum_v q_v\,(e_v - q) = q - q = 0
+$$
+
+The centered score has mean zero under the engine, so the drift term is $\bar A \times 0$ for any advantage and any
+baseline. The covariance is unchanged, because it already subtracts the mean score: replace $s$ by $s - \bar s$ and
+the factor $(s_v - \bar s)$ becomes $(s_v - \bar s) - 0$, the same term.
+
+$$
+\mathbb{E}_q[A\,(s - \bar s)] = \mathrm{Cov}_q(A, s)
+$$
+
+**In code it is one line.** Where the gradient at the logits was $A\,(p - e_y)$, write $A\,(q - e_y)$. The engine has
+to return its distribution at each position. No ratios, no clipping, no hyperparameter, and it composes with any
+importance weight.
+
+**Why it matters.** The engine is rebuilt from the trainer after every step with its error added back, so the drift
+accumulates instead of converging. In the paper's worst setting, a 30B model with an INT8 engine and INT4 KV cache,
+centering reaches 30% training accuracy, truncated importance sampling 12%, everything else under 5%.
 
 ## One position, three tokens
 
