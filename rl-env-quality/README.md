@@ -153,9 +153,11 @@ successful hack). This runs at three times:
   trajectory) and looks for unsupported provenance, criterion gaming, and text aimed at the evaluator.
   A vetoed rollout gets correctness 0 but keeps its length cost — the same reward as a failed attempt
   of equal length. Chain-of-thought is monitored for hacking intent but not optimized against.
-- *Post-hoc, per group*: reward-integrity judges on passes (did it exploit a test gap?), task-health
-  judges on all-fail groups (hard, underspecified, broken environment, or grader failure?), and a scan
-  for near-identical patches that received different grades.
+- *Offline, during the run*: on groups already scored and trained on, reading the logs rather than
+  changing rewards. Reward-integrity judges on passes (did it exploit a test gap?), task-health judges
+  on all-fail groups (hard, underspecified, broken environment, or grader failure?), and a scan for
+  near-identical patches that received different grades. Output is task decisions — remove, repair,
+  fix the grader — not reward changes.
 
 **6. RL derisking.** A short training run on the candidate tasks with the exact production reward
 setup — rubric judge, threshold, integrity judge, length penalty. Check 5 looks at individual
@@ -198,14 +200,6 @@ verifier and skip the request); two graders that penalize padding (follow-ups, s
 withholding (clarifying instead of answering), weighted by their precision against human labels.
 
 ---
-
-## Cheapest subset for a small harness
-
-- Deterministic 1 and 2 under the cheapest node's resource caps.
-- Agentic 1 and 2 with the reference withheld; the no-op control on the untouched environment.
-- One black-box adversarial pass per new task with a written taxonomy; remove, don't patch.
-- Strong-vs-weak gap and MinHash dedup before any GPU time.
-- Group-level triage on rollout logs already paid for; the online judge on passes as the backstop.
 
 ---
 
