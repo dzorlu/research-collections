@@ -48,7 +48,31 @@ answer rationalizes the tests from it), 3 independent calls per criterion, any n
 Repairable statements are rewritten and re-assessed; unresolved defects → excluded.
 
 ### A4. Specification ↔ verifier alignment (under- and over-specification)
-Static judges on SWE artifacts check that:
+Two axes that are easy to conflate.
+
+**Axis 1 — what the task *says* vs what the verifier *checks*.** This is the alignment check. The
+task text can be perfectly detailed and still fail either way:
+- *Verifier checks more than the task says* (Beam: "underspecified", "unstated constraints",
+  "assumes a particular implementation"). There are several valid ways to do the job and the verifier
+  silently accepts one. A correct solution scores 0 → reward noise, and the agent learns the grader's
+  taste instead of the task.
+- *Verifier checks less than the task says* (Beam: "too weak", "incomplete coverage"). A partial
+  solution scores 1 → the policy learns to stop early.
+
+**Axis 2 — how much the task *tells* the agent** (Beam's "specificity knob", set during synthetic
+generation for diversity, not a filter in itself):
+- *Low specificity*: requirements left to be inferred from the environment or common sense. Harder,
+  and allowed — as long as the omitted requirements are genuinely inferable. If they are not, it
+  collapses into axis 1 case 1 and is caught by A3 (determinable from the solver's view).
+- *High specificity*: every requirement and edge case spelled out. Easier; at the extreme the prompt
+  leaks the solution or reduces the task to step-following. Caught by the "statement does not leak the
+  solution" static judge below and the answer-in-the-question screen in A10.
+
+So: alignment = prompt and verifier must demand the same set of things; specificity = how much of
+that set the prompt states outright vs leaves to inference. "Too specific makes it easy" is axis 2,
+not an alignment failure.
+
+How axis 1 is checked — static judges on SWE artifacts:
 - the statement describes an actionable change without leaking the solution;
 - tests agree with the stated requirements, assert meaningful behavior, and **permit equivalent
   correct implementations**;
@@ -57,12 +81,13 @@ Static judges on SWE artifacts check that:
   checks for behavioral tests.
 
 Agentic audits (inspect the repo, trace the verifier, execute code):
-- **Ambiguity judge** — catches *underspecified* or *over-constrained* verifiers. Looks for
-  requirements enforced by tests but not justified by the visible spec. Where practical, writes an
-  alternative implementation consistent with the spec and shows the verifier rejecting it.
-- **Verifier-strength judge** — catches *too-weak* verifiers. Records the independently testable
-  requirements before seeing hidden tests, maps each to verification logic, then writes incomplete or
-  incorrect implementations to find gaps. Bypasses must be discoverable from solver-visible information.
+- **Ambiguity judge** — catches *verifier checks more than the task says*. Looks for requirements
+  enforced by tests but not justified by the visible spec. Where practical, writes an alternative
+  implementation consistent with the spec and shows the verifier rejecting it.
+- **Verifier-strength judge** — catches *verifier checks less than the task says*. Records the
+  independently testable requirements before seeing hidden tests, maps each to verification logic,
+  then writes incomplete or incorrect implementations to find gaps. Bypasses must be discoverable from
+  solver-visible information.
 
 Terminal verifier principles: alignment (no unstated constraints, no assumed implementation or file
 format), comprehensive coverage (every requirement tested, else partial solutions are rewarded),
