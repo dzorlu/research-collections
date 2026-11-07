@@ -1,10 +1,6 @@
 # Quality checks for RL environments
 
-Worked through from the Beam Model Technical Report (Reflection AI, Oct 2026,
-https://reflection.ai/documents/beam-model-tech-report; §4.1 task curation, §4.2.3 alignment RL,
-§4.4 and §6.4–6.6 infrastructure).
-
-## The mental model
+## Summary
 
 A reward is a measurement of "was the task done". Environment quality is the four properties any
 measurement needs:
@@ -185,3 +181,10 @@ withholding (clarifying instead of answering), weighted by their precision again
 - One black-box adversarial pass per new task with a written taxonomy; remove, don't patch.
 - Strong-vs-weak gap and MinHash dedup before any GPU time.
 - Group-level triage on rollout logs already paid for; the online judge on passes as the backstop.
+
+---
+
+## Reference
+
+Beam Model Technical Report, Reflection AI, Oct 2026 — https://reflection.ai/documents/beam-model-tech-report
+(§4.1 task curation by domain, §4.2.3 alignment-teacher RL, §4.4 and §6.4–6.6 infrastructure).
