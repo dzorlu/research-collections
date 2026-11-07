@@ -1,97 +1,144 @@
 # Score centering
 
-`E_q[R s_{y_t}]` is the policy gradient update.
+Everything below happens at one prefix: the prompt plus the tokens generated so far. The trainer has a distribution over
+the next token, the engine has a slightly different one, and the engine draws. Ascent sign throughout, so an update is
+added to the logits.
 
-```
-one draw:   R × s_y          = R × (onehot(y) − p)        paper's ascent sign; notes' dz = A × (p − onehot(y)) is the loss sign
-left side:  E_q[ R s_{y_t} ] = Σ_v q_v R_v s_v            the one-draw update averaged over which token the engine draws
-```
-
-No separate r and A: the paper writes R, and with a baseline R becomes A. The weight w is not there either; this is plain
-policy gradient. `p` `(V,)` is the trainer's next-token distribution, `q` `(V,)` the engine's, `y_t` `()` the drawn token,
-`s_v = ∇_θ log p_v` `(d,)` over all parameters; at the logits it is `onehot(v) − p` `(V,)`, and since backprop is linear
-every identity below holds in both.
-
-```
-E[X Y] = E[X] E[Y] + Cov(X, Y)      with  X = A_{y_t}  ()    scalar
-                                          Y = s_{y_t}  (d,)  over all parameters
-```
-both random through the draw `y_t ~ q`. `E[X] = A_avg = Σ_v q_v A_v` `()`, `E[Y] = s_bar = Σ_v q_v s_v` `(d,)`,
-`Cov = Σ_v q_v (A_v − A_avg)(s_v − s_bar)`.
-
-```
-# policy gradient = drift + signal
-# all averaged over q
-E_q[A s] = A_avg · s_bar  +  Σ_v q_v (A_v − A_avg)(s_v − s_bar)
-```
-
-## s_bar is q − p at the logits, and zero only on-policy
-`s_bar = Σ_v q_v s_v` `(d,)` has no closed form in weight space. At the logits, split the sum:
-```
-s_bar = Σ_v q_v (onehot(v) − p)
-      = Σ_v q_v onehot(v)  −  (Σ_v q_v) p
-      =        q           −     1 · p               (V,)
-```
-The first sum puts `q_v` in the `v`-th slot and gives `q`; `p` is the same vector in every term, so it comes out with
-`Σ_v q_v = 1`. On-policy, `q = p` and `Σ_v p_v ∇ log p_v = ∇ Σ_v p_v = ∇ 1 = 0`. Under the engine's `q` the weights no
-longer match the `p` inside the score, so `s_bar = q − p ≠ 0` and the drift `A_avg · s_bar` is a step of the trainer
-toward the engine, unrelated to which token was good.
-
-## The fix: subtract s_bar from the score
-Use `s − s_bar` instead of `s`. Its mean under `q` is `s_bar − s_bar = 0`, so
-```
-E_q[A (s − s_bar)] = E_q[A s] − E_q[A] s_bar = (drift + signal) − drift = signal
-Cov(A, s − s_bar)  = Cov(A, s)        covariance already subtracts the means, so the shift lands only on the
-                                      drift term, which becomes A_avg · E_q[s − s_bar] = A_avg · 0
-```
-At the logits it is one subtraction: `(onehot(k) − p) − (q − p) = onehot(k) − q`, so `dz = A × (q − onehot(k))`. In code,
-the engine returns `q` and the trainer has every `log p_v`, so the loss is `−A (log p_k − Σ_v sg[q_v] log p_v)`, whose
-gradient is `A (s_k − s_bar)`. If `q = p`, nothing changes.
-
-## The numbers on one state
 ```python
-y_hat = [0.5, 0.3, 0.2]   # (V,)  trainer's p; q differs because the engine is quantized or stale
-q     = [0.6, 0.3, 0.1]   # (V,)  engine draws token 0 60% of the time
-R     = [1.0, 0.0, 0.0]   # (V,)  reward if token 0, 1, 2 is drawn: only token 0 leads to a correct answer
-b     = 0.25              # ()    GRPO baseline: mean reward of this prompt's 4 rollouts (1 correct), used at every position
-A     = R - b             # (V,)  = [0.75, -0.25, -0.25]
-
-average_dz = Σ_v q_v * A[v] * (y_hat - onehot(v))  = [-0.275, 0.18, 0.095]   # (V,)  loss sign
-s_bar      = q - y_hat                              = [0.1, 0.0, -0.1]
-A_avg      = Σ_v q_v * A[v]                         = 0.35                    # expected reward here (0.6) minus b
-drift      = -A_avg * s_bar                         = [-0.035, 0.0, 0.035]    # training subtracts it: y_hat moves toward q
-signal     = -(q * (A - A_avg))                     = [-0.24, 0.18, 0.06]     # drift + signal = average_dz
-centered   = Σ_v q_v * A[v] * (q - onehot(v))       = [-0.24, 0.18, 0.06]     # = signal
+p = [0.5, 0.3, 0.2]      # (V,)  trainer's next-token probabilities
+q = [0.6, 0.3, 0.1]      # (V,)  engine's next-token probabilities; it does the drawing
+R = [1.0, 0.0, 0.0]      # (V,)  reward if token 0, 1, 2 is drawn
+b = 0.25                 # ()    baseline, the mean reward of this prompt's rollouts
+A = [0.75, -0.25, -0.25] # (V,)  R - b
 ```
-Drift is 0 only when `q = y_hat` or `A_avg = 0` (baseline equals this state's expected reward, 0.6); GRPO's `b` is one
-number per prompt while the expected reward changes per position, so `A_avg` is rarely 0. Centering gives the same
-update for every baseline (runnable, each `dz` checked by autograd: [score_centering.ipynb](score_centering.ipynb)):
 
-| `b` | `A_avg` | plain average dz | drift | score-centered average dz |
+## The policy gradient update is the advantage times the score
+
+The score of a token is the direction that makes it more likely. At the logits it is one-hot minus p. In the paper the
+score is taken with respect to all d weights and is a d-vector, but backprop is linear, so every statement here holds
+there too.
+
+```python
+S = [[ 0.5, -0.3, -0.2],   # (V, V)  row v is s_v = onehot(v) - p, the score of token v
+     [-0.5,  0.7, -0.2],
+     [-0.5, -0.3,  0.8]]
+```
+
+One draw of token y gives the update A[y] times its score. The engine draws y with probability q[y], so the expected
+update is the q-weighted sum of the three possible updates.
+
+```python
+U = [[ 0.375, -0.225, -0.150],   # (V, V)  row v is A[v] * S[v], the update if token v is drawn
+     [ 0.125, -0.175,  0.050],
+     [ 0.125,  0.075, -0.200]]
+
+E_q[A s] = 0.6 * U[0] + 0.3 * U[1] + 0.1 * U[2] = [0.275, -0.18, -0.095]   # (V,)
+```
+
+## The expected update splits into drift plus signal
+
+The update is a product of two random things, the advantage A[y] and the score S[y], both random through the draw.
+For any such product the expectation splits into the product of the means plus a covariance.
+
+```python
+E[X Y] = E[X] E[Y] + Cov(X, Y)          # X = A[y] scalar, Y = S[y] vector
+
+E[X] = A_avg = 0.6*0.75 + 0.3*(-0.25) + 0.1*(-0.25) = 0.35                    # ()
+E[Y] = s_bar = 0.6*S[0] + 0.3*S[1] + 0.1*S[2]       = [0.1, 0.0, -0.1]        # (V,)
+
+drift  = A_avg * s_bar       = [0.035, 0.00, -0.035]                           # (V,)
+signal = E[XY] - drift       = [0.240, -0.18, -0.060]                          # (V,)  the covariance
+```
+
+The drift pairs the average advantage with the average score. It has forgotten which token earned which reward. The
+signal is what is left: whether a high advantage comes with a particular score direction. Only the signal says which
+token was good.
+
+## s_bar is q minus p, and zero only when the trainer draws
+
+Split the sum that defines s_bar. The one-hot part collects q. The p part is the same vector in every term, so it comes
+out with the probabilities summing to one.
+
+```python
+s_bar = 0.6*[1,0,0] + 0.3*[0,1,0] + 0.1*[0,0,1]  -  (0.6 + 0.3 + 0.1) * p
+      =        [0.6, 0.3, 0.1]                   -   1.0 * [0.5, 0.3, 0.2]
+      =        q - p                             =   [0.1, 0.0, -0.1]           # (V,)
+```
+
+If the trainer did the drawing the weights would be p, and p minus p is zero. So on-policy there is no drift. Under the
+engine the weights are q while the score still subtracts p, and the drift is a push of p toward q at every prefix,
+scaled by the average advantage. Nothing about which token was good enters it.
+
+```python
+on-policy: 0.5*S[0] + 0.3*S[1] + 0.2*S[2] = [0.0, 0.0, 0.0]
+```
+
+In weight space s_bar has no closed form; it stays the q-weighted sum of the d-dimensional scores.
+
+## The fix subtracts s_bar from the score
+
+Use the centered score, the score minus s_bar, in the update. Its mean under q is zero, so the drift term is the average
+advantage times zero. The covariance does not change, because a covariance already subtracts the means.
+
+```python
+E_q[A (s - s_bar)] = E_q[A s] - A_avg * s_bar = (drift + signal) - drift = signal
+```
+
+At the logits the subtraction is one line, and p cancels.
+
+```python
+(onehot(y) - p) - (q - p) = onehot(y) - q
+
+Sc = [[ 0.4, -0.3, -0.1],    # (V, V)  row v is onehot(v) - q, the centered score
+      [-0.6,  0.7, -0.1],
+      [-0.6, -0.3,  0.9]]
+
+0.6*Sc[0] + 0.3*Sc[1] + 0.1*Sc[2]                 = [0.0,  0.0,   0.0 ]       # (V,)  mean zero under q
+0.6*A[0]*Sc[0] + 0.3*A[1]*Sc[1] + 0.1*A[2]*Sc[2]  = [0.24, -0.18, -0.06]      # (V,)  = signal
+```
+
+The update changes; this is a different estimator, chosen because the signal is the only term that depends on which
+token won. In code the engine returns q, the trainer has every log p, and the loss is the usual term minus a q-weighted
+sum of all log-probabilities with the gradient stopped through q.
+
+```python
+loss = -A * (log_p[y] - sum(stop_grad(q[v]) * log_p[v] for v in V))     # gradient: A * (s_y - s_bar)
+```
+
+The centered update is the same for every baseline, because the drift is zero before the baseline enters.
+
+| `b` | `A_avg` | plain update | drift | centered update |
 |---|---|---|---|---|
-| 0 | 0.60 | [-0.300, 0.18, 0.120] | [-0.060, 0, 0.060] | [-0.24, 0.18, 0.06] |
-| 0.25 | 0.35 | [-0.275, 0.18, 0.095] | [-0.035, 0, 0.035] | [-0.24, 0.18, 0.06] |
-| 0.6 | 0 | [-0.240, 0.18, 0.060] | [0, 0, 0] | [-0.24, 0.18, 0.06] |
-| 1.0 | -0.40 | [-0.200, 0.18, 0.020] | [0.040, 0, -0.040] | [-0.24, 0.18, 0.06] |
+| 0 | 0.60 | [0.300, -0.18, -0.120] | [0.060, 0, -0.060] | [0.24, -0.18, -0.06] |
+| 0.25 | 0.35 | [0.275, -0.18, -0.095] | [0.035, 0, -0.035] | [0.24, -0.18, -0.06] |
+| 0.6 | 0 | [0.240, -0.18, -0.060] | [0, 0, 0] | [0.24, -0.18, -0.06] |
+| 1.0 | -0.40 | [0.200, -0.18, -0.020] | [-0.040, 0, 0.040] | [0.24, -0.18, -0.06] |
+
+A baseline equal to this prefix's expected reward under q, 0.6, would also zero the drift. GRPO's baseline is one
+number per prompt and the expected reward changes at every position, so in practice it does not.
 
 ## Why drift matters
-Drift is a small fine-tuning step toward the engine, errors included. Toward a fixed teacher that would be harmless, but
-after each step the engine reloads the trainer's new weights and adds its error again, so the target stays one error
-ahead and the error builds up instead of settling. In the paper (REINFORCE with group-centered rewards, one optimizer
-step per batch, about 800 steps), Qwen3-30B-A3B-Base on INTELLECT-2 math with an INT8 engine and an INT4 KV cache
-reached 30% training accuracy with score centering, 12% with TIS, and below 5% with every other method. With an FP8
-engine and an FP4 KV cache, plain REINFORCE collapsed within 200 steps; score centering ended at 52%, TIS at 51%.
 
-Cost and limits:
-- miles needs the engine's top 128 candidates per position (`--loss-type score_centering`,
-  `--rollout-top-logprobs-num 128`), about 1 KiB each, and models the rest of `q` from the trainer's tail. In the
-  paper, 128 or even 32 candidates matched full centering. The trainer still runs its forward pass to backpropagate `dz`.
-- It does not reweight tokens inside the signal (TIS, MIS and IcePop do; it combines with them), does not limit
-  several optimizer steps per batch (no PPO clip), and does not remove the mismatch itself.
-- Drift is usually small: GRPO advantages average to about 0 per group and `y_hat − q` is small when the engine
-  matches the trainer closely. It grows under heavy quantization or a stale engine.
+Drift is a small fine-tuning step toward the engine, its errors included. Toward a fixed teacher that would be harmless.
+But after each step the engine reloads the trainer's new weights and adds its error again, so the target stays one error
+ahead and the pushes accumulate instead of settling. In the paper, Qwen3-30B-A3B-Base on INTELLECT-2 math with an INT8
+engine and an INT4 KV cache reached 30% training accuracy with score centering, 12% with TIS, and under 5% with every
+other method. With an FP8 engine and an FP4 KV cache, plain REINFORCE collapsed within 200 steps; score centering ended
+at 52%, TIS at 51%.
 
-Sources: Marek and Ryabinin, "Score Centering Stabilizes Off-policy Reinforcement Learning",
-[arXiv 2609.20807](https://arxiv.org/abs/2609.20807), Eq. 3-5, sections 4-5; the
-[Score Function Centering blog](https://huggingface.co/blog/NormalUhr/sfc) (no experiments); miles main at 8855b832e4,
-`miles/backends/training_utils/loss/hub/score_centering/estimator.py` lines 83-90.
+## Cost and limits
+
+- The engine must return its top candidates per position; 128 in miles (`--loss-type score_centering`,
+  `--rollout-top-logprobs-num 128`), about 1 KiB each. The rest of q is modeled from the trainer's tail. In the paper
+  128 or even 32 candidates matched full centering.
+- It does not reweight tokens inside the signal (TIS, MIS and IcePop do; it composes with them), does not allow several
+  optimizer steps per batch (no PPO clip), and does not remove the mismatch itself.
+- Drift is small when the engine matches the trainer closely. It grows under heavy quantization or a stale engine.
+
+## Sources
+
+- Marek and Ryabinin, "Score Centering Stabilizes Off-policy Reinforcement Learning",
+  [arXiv 2609.20807](https://arxiv.org/abs/2609.20807): Eq. 3-5, sections 4-5.
+- [Score Function Centering blog](https://huggingface.co/blog/NormalUhr/sfc) (no experiments).
+- miles main at 8855b832e4: `miles/backends/training_utils/loss/hub/score_centering/estimator.py` lines 83-90.
+- Runnable version with every update checked by autograd: [score_centering.ipynb](score_centering.ipynb).
