@@ -1,5 +1,18 @@
 # Score centering
 
+Eq[Rsyt] is policy gradient update
+
+one draw:   R × s_y          = R × (onehot(y) − p)        paper's ascent sign; notes' dz = A × (p − onehot(y)) is the loss sign
+left side:  E_q[ R s_{y_t} ] = Σ_v q_v R_v s_v            the one-draw update averaged over which token the engine draws
+
+No separate r and A: the paper writes R, and with a baseline R becomes A. The weight w is not there either; this is plain policy gradient.
+
+```
+one draw:   R × s_y          = R × (onehot(y) − p)        paper's ascent sign; notes' dz = A × (p − onehot(y)) is the loss sign
+left side:  E_q[ R s_{y_t} ] = Σ_v q_v R_v s_v            the one-draw update averaged over which token the engine draws
+```
+
+
 
 ```
 
