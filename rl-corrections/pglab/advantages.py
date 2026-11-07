@@ -29,7 +29,7 @@ def none(R):
     R:         [P, G]
     returns A: [P, G]
   """
-  raise NotImplementedError
+  return R
 
 
 @register("mean")

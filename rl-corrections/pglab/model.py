@@ -88,6 +88,8 @@ class NN(nn.Module):
       Plain:     dlogits = w * A * (p - y_onehot) / (B * S)
       Centered:  dlogits = w * A * (q - y_onehot) / (B * S)
 
+      # p [B, S, V]
+
       The score y_onehot - p averages to 0 only when the trainer draws. The engine draws with q, so the average
       over its draws is q - p: a push of p toward q at every position, scaled by the mean advantage, blind to which
       token was good. Swapping p for q makes the average 0 under the engine and leaves the covariance with A as is.
@@ -99,9 +101,9 @@ class NN(nn.Module):
     y_one_hot = F.one_hot(y, V)                       # [B, S, V]
     w_ = w.unsqueeze(-1)                              # [B, S, 1]
     A_ = A.unsqueeze(-1)                              # [B, S, 1]
-    if q is not None:
-      raise NotImplementedError
-    dlogits = w_ * A_ * (self.p - y_one_hot) / (B * S)   # [B, S, V]  / (B * S): the loss is a mean over positions
+    # centering
+    center = self.p if q is None else q
+    dlogits = w_ * A_ * (center - y_one_hot) / (B * S)   # [B, S, V]  / (B * S): the loss is a mean over positions
     self.backward_(dlogits)
 
   @torch.no_grad()

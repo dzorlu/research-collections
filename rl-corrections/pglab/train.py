@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pglab.advantages import ADVANTAGES
 from pglab.methods import METHODS
 from pglab.model import NN
 
@@ -27,7 +28,9 @@ class Config(BaseSettings):
   methods: list[str] = ['reinforce', 'ppo', 'cispo', 'tis']
   lag: list[int] = [0]           # engine weights are this many updates old
   noise: list[float] = [0.0]     # std of the noise added to the engine's logits
+  noise_fixed: bool = False      # draw the noise once per run as a [V] logit offset and add the same one every rollout
   steps_per_rollout: list[int] = [1]   # minibatches per rollout, one optimizer step each (miles --num-steps-per-rollout)
+  advantage: str = 'grpo'        # one of pglab.advantages: none, mean, loo, grpo
   center: bool = False           # score centering: dlogits subtracts the engine's q instead of the trainer's p (model.backward)
   seeds: int = 3
   steps: int = 300               # rollouts per run
@@ -120,9 +123,12 @@ def grpo_advantage(R, prompts, group):
   return A.reshape(-1)                                 # [B]
 
 
-def rollout(engine, spec, cfg):
+def rollout(engine, spec, cfg, offset=None):
   """
     The engine (weights from `lag` updates ago, noisy logits) writes `group` responses per prompt.
+    offset: [V] or None. A fixed logit offset, the same every rollout: a persistent error like quantization or the
+    paper's weight noise (https://arxiv.org/abs/2609.20807, 5.2). Fresh noise points q - p in a random direction each
+    step and the drift averages out; a fixed offset points it the same way every step and the drift compounds.
   """
   x, target = make_prompts(cfg.prompts)                # [P, S, I], [P, S]
   x = x.repeat_interleave(cfg.group, 0)                # [B, S, I]  B = P * G, each prompt G times in a row
@@ -130,7 +136,10 @@ def rollout(engine, spec, cfg):
 
   # Sample from the engine: its logits differ from the trainer's by lag and noise.
   engine.forward(x)
-  noise = spec.noise * torch.randn_like(engine.logits)  # [B, S, V]
+  if offset is None:
+    noise = spec.noise * torch.randn_like(engine.logits)   # [B, S, V]  fresh every rollout
+  else:
+    noise = offset                                         # [V]        same every rollout, broadcast over B, S
   engine_logits = engine.logits + noise                # [B, S, V]
   y = torch.distributions.Categorical(logits=engine_logits).sample()   # [B, S]
   logp_engine = logp_of_tokens(engine_logits, y)       # [B, S]
@@ -139,7 +148,7 @@ def rollout(engine, spec, cfg):
   # Reward: fraction of positions sorted correctly. Advantage: one per response, copied to every token.
   correct = (y == target).float()                      # [B, S]
   R = correct.mean(-1)                                 # [B]
-  A = grpo_advantage(R, cfg.prompts, cfg.group)        # [B]
+  A = ADVANTAGES[cfg.advantage](R.reshape(cfg.prompts, cfg.group)).reshape(-1)   # [B]
   A = A.unsqueeze(-1).expand(-1, S)                    # [B, S]
   return Rollout(x=x, y=y, R=R, A=A, logp_engine=logp_engine, q_engine=q_engine)
 
@@ -152,12 +161,13 @@ def run(spec: RunSpec, cfg: Config) -> list[Row]:
 
   # The engine always loads the oldest snapshot: weights `lag` updates behind the trainer.
   snapshots = collections.deque([copy.deepcopy(model.state_dict())], maxlen=spec.lag + 1)
+  offset = spec.noise * torch.randn(V) if cfg.noise_fixed else None   # [V]  drawn once per run
 
   rows = []
   for step in range(cfg.steps):
     # 1. Rollout with the lagged, noisy engine.
     engine.load_state_dict(snapshots[0])
-    ro = rollout(engine, spec, cfg)
+    ro = rollout(engine, spec, cfg, offset)
 
     # 2. The trainer's log-probs of the same tokens before any update: fixed for this rollout.
     model.forward(ro.x)
