@@ -117,6 +117,33 @@ The centered update is the same for every baseline, because the drift is zero be
 A baseline equal to this prefix's expected reward under q, 0.6, would also zero the drift. GRPO's baseline is one
 number per prompt and the expected reward changes at every position, so in practice it does not.
 
+## In pglab the drift cancels the learning, and centering restores it
+
+[pglab](pglab/) trains a two-layer network to sort four digits, with a copy of it as the engine. The swap of p for q
+is one line in `model.backward` (`--center true`). The engine's error is a `[V]` logit offset drawn once per run and
+added at every rollout (`--noise-fixed true`); fresh noise each rollout had no effect, because then q − p points a
+different way every step and the pushes average out. Mean reward of the engine's rollouts in 40-rollout windows,
+reinforce with no baseline (A = R), two seeds averaged:
+
+| engine offset std | gradient | 0-40 | 40-80 | 80-120 | 120-160 | 160-200 |
+|---|---|---|---|---|---|---|
+| 0 | plain or centered | .105 | .108 | .116 | .124 | .137 |
+| 1.0 | plain | .103 | .101 | .105 | .101 | .103 |
+| 1.0 | centered | .104 | .111 | .121 | .131 | .140 |
+
+Chance is 0.1. With all-positive rewards A_avg is the expected reward itself, so every step carries a full push of p
+toward the offset engine, and it is as large as the signal: plain reinforce stays at chance. Centered, the curve under
+the offset matches the curve without it.
+
+With GRPO advantages the same runs show no drift at all, and the reason is a quirk of pglab: a position's input is the
+prompt and the slot, not the tokens written so far, so q − p is identical for all eight responses of a prompt, and
+group-centered advantages sum to zero against it. In a real model the prefixes diverge after the first token and that
+cancellation is gone. Reproduce:
+
+```
+python -m pglab.train --methods reinforce --advantage none --noise 0,1.0 --noise-fixed true --seeds 2 --steps 200 --center true
+```
+
 ## Why drift matters
 
 Drift is a small fine-tuning step toward the engine, its errors included. Toward a fixed teacher that would be harmless.

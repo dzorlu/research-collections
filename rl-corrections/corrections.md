@@ -258,6 +258,11 @@ so `q - y_onehot` is exact only when those cover the vocabulary.
 
 Loss: notebook `score_centering_check`; miles `score_centering/estimator.py:66` (`--loss-type score_centering`).
 
+In pglab (`--center true`, one line in `model.backward`): with a fixed logit offset on the engine and no baseline,
+plain reinforce stays at chance for 200 rollouts and centered reinforce learns at the noise-free pace. With GRPO
+advantages the drift is already zero there, because pglab's inputs do not depend on earlier tokens, so q − y_hat is the
+same across a prompt's group. Table and command in [score_centering.md](score_centering.md).
+
 ## 5. `norm`: how token losses are averaged
 
 The loss averages the token losses; the backward pass gives each token the factor it had in that average.
