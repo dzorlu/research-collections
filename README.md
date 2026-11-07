@@ -39,6 +39,10 @@ notebook.
 - [miles-harness/](miles-harness/): build spec for a long-horizon agent RL harness on upstream miles (session
   server, agent and reward hooks, screenshot folding, policy-written summaries, eval, test gates), plus
   per-model recipes as miles flags for Qwen3.8-27B, GLM-5.3-Flash and Muse Spark Open.
+- [rl-env-quality/](rl-env-quality/): quality checks for RL environments, worked through from the Beam
+  technical report: controls on every verifier, solvability and spec↔verifier judges, guessability and
+  leakage checks, black-box and white-box adversarial attacks, rollout validation and RL derisking,
+  online integrity judges, group triage, and the anti-Goodhart loop for judge-rewarded environments.
 - [rl-infra/](rl-infra/): getting the most agent RL training out of a few GPUs: fully async training on
   shared GPUs (how it works, flags miles refuses, loss correction, harness rules, run checks), a run plan
   for Qwen3.8-27B on one 8×B200 node at 96K, and memory and precision levers (FP8 engine weights, bf16
