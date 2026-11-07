@@ -1,350 +1,187 @@
 # Quality checks for RL environments
 
-How a frontier lab keeps RL rewards honest, worked through from the Beam Model Technical Report
-(Reflection AI, Oct 2026, https://reflection.ai/documents/beam-model-tech-report; §4.1 task curation
-by domain, §4.2.3 alignment-teacher RL, §4.4 and §6.4–6.6 infrastructure). Cross-references to
-MAI-Thinking-1 (Microsoft AI, https://microsoft.ai/pdf/mai-thinking-1.pdf) where Beam borrows from it.
+Worked through from the Beam Model Technical Report (Reflection AI, Oct 2026,
+https://reflection.ai/documents/beam-model-tech-report; §4.1 task curation, §4.2.3 alignment RL,
+§4.4 and §6.4–6.6 infrastructure).
 
-**The one property every check serves:** reward = 1 exactly when the task was genuinely done.
-Each check removes one way that fails: the task is broken, the grader is wrong, the agent cheats, or
-the training loop drifts. Checks are ordered cheapest first; most bad tasks die at A1–A2.
+## The mental model
+
+A reward is a measurement of "was the task done". Environment quality is the four properties any
+measurement needs:
+
+1. **Correct work scores 1.** Fails when the environment doesn't run under training limits, the task
+   is unsolvable or ambiguous, the gold answer is wrong, or the verifier demands things the task never
+   said.
+2. **Non-work scores 0.** Fails when the verifier checks less than the task asks, the answer can be
+   guessed, found leaked, or recalled from memory, or the agent can reach the verifier by a path other
+   than doing the task (editing tests, flattering the judge).
+3. **Same work, same score.** Fails with flaky tests, inconsistent judges, timeouts.
+4. **Still true under optimization.** The policy gets stronger every step and finds what static checks
+   missed; judges and human preferences drift over a multi-week run.
+
+Every check below protects one of these. The checks come in three kinds, by who does the judging.
 
 ---
 
-## A. Before a task enters the pool
+## Deterministic checks — code, no model judgment
 
-### A1. Environment works
-- Image builds; task format valid (Harbor); Dockerfile layered for cache reuse.
-- Reference solution run 3 independent times **under the training resource limits** (CPU, memory,
-  timeouts of the rollout sandbox). Inconsistent outcomes → drop. Catches tasks that pass on a dev box
-  but OOM or time out in training (a correct solution would score 0), and flaky tests.
-- Task re-run through the *training* grading path (extract submission → apply in a separate verifier
-  env) to confirm it works under production isolation.
+Cheap, run first, most bad tasks die here.
 
-### A2. Verifier discriminates (positive and negative controls)
-- Oracle (reference) solution → 1.0 on 5/5 runs.
-- No-op (environment unchanged / no actions taken) → 0.0 on 5/5 runs.
-- SWE: tests fail before the reference patch and pass after (fail-to-pass); previously passing tests
-  still pass (pass-to-pass).
-- Competitive coding: minimum number of test cases; output-comparison script matches the prompt
-  (case sensitivity, whitespace, numeric precision); reference passes in *their* sandbox; no prompts
-  that promise partial scoring.
-- Math: gold must resolve to a SymPy object, else grading silently degrades to string match → drop.
-  LaTeX vs numeric answers routed to the right resolver (false positives); normalizations added for
-  ASCII `sqrt(13)`, European interval markers, stylistic commands (false negatives).
+**1. Environment works.** Build the task image; run the reference solution three separate times
+inside the same CPU, memory, and time limits the RL sandbox uses; all three must agree. Catches tasks
+that pass on a developer's machine but time out or OOM in training (a correct solution would then
+score 0) and flaky setups.
 
-### A3. Solvable from the solver's view
-A judge reads the task statement and flags:
-- references to things the agent cannot see (figure, attachment, earlier sub-question, discussion);
-- self-contradiction, missing assumptions, two valid readings;
-- format demands that contradict the training format; spurious characters; non-English.
+**2. Verifier discriminates.** Two controls on every verifier: the reference ("oracle") solution must
+score 1.0 on five runs; a no-op (unchanged environment, no actions) must score 0.0 on five runs. SWE
+adds fail-to-pass (tests fail before the reference patch, pass after) and pass-to-pass (previously
+passing tests still pass). Math: the gold answer must parse into a SymPy object, otherwise grading
+silently falls back to string matching. Competitive coding: a minimum number of test cases, and the
+output-comparison script must honor what the prompt says about case, whitespace, and precision.
 
-SWE stricter pass, with the **reference solution withheld** from the judge (a judge that sees the
-answer rationalizes the tests from it), 3 independent calls per criterion, any negative rejects:
-- every tested requirement is determinable from the prompt plus visible repository;
-- the tests enforce the requested behavior;
-- trivial or incomplete implementations cannot pass.
+**3. Structural guarantees.** Hacks that are made impossible rather than detected:
+- the agent runs in an untrusted sandbox; grading runs in a fresh container from a pinned image; only
+  the diff or output files cross between them, so nothing the agent did to its own box (shadowed
+  `pytest`, edited `conftest.py`, installed packages) reaches the verifier;
+- network leaves the sandbox through a policy proxy with mirrors and per-sandbox logs;
+- verifier guards reject edits to test-selection config and import hooks;
+- answers are regex-extracted and length-capped before any judge sees them (search: max(150,
+  4.5 × gold length) chars; math: 200 chars), which removes hedging ("3 or 4 or 5") mechanically;
+- the online judge is fail-closed: if it errors after retries the rollout fails, so an unreviewed pass
+  never becomes positive reward;
+- serving instances verify transferred weights before adopting them.
 
-Repairable statements are rewritten and re-assessed; unresolved defects → excluded.
+**4. Leak scans.** Strip post-fix git history from repo images; rebuild compiled artifacts from the
+modified repo so stale copies of removed code don't survive; grep images for the removed code or
+tests; for web tasks, blocklist URLs of known answer dumps and fuzzy-match question+answer against
+pages the model fetched.
 
-### A4. Specification ↔ verifier alignment (under- and over-specification)
-Two axes that are easy to conflate.
+**5. Statistical filters computed from rollouts.**
+- *Pass-rate band*: drop tasks that are all-fail or all-pass for the current model (no gradient).
+- *Strong-vs-weak gap*: sample a strong and a weak model; keep a question only if the strong model
+  wins by a margin (web: ≥ 12.5 points, or weak = 0). A weak model beating a strong one usually means
+  the gold answer is wrong.
+- *Memorized*: a search question the model answers correctly with no tools is dropped.
+- *Too easy*: dropped if the initial checkpoint solves it at a low thinking budget.
+- *Guessable by statistics*: drop questions whose gold answer is unusually frequent across the pool
+  (0, 1, π).
+- *Dedup and decontamination*: character 7-gram MinHash; 0.95 similarity within training data, 0.80
+  against evaluation sets; SWE also matches patches to held-out evals.
+- *During training*: discard rollouts past their task deadline; keep a group only if enough finished;
+  discard groups where every rollout got the same reward.
 
-**Axis 1 — what the task *says* vs what the verifier *checks*.** This is the alignment check. The
-task text can be perfectly detailed and still fail either way:
-- *Verifier checks more than the task says* (Beam: "underspecified", "unstated constraints",
-  "assumes a particular implementation"). There are several valid ways to do the job and the verifier
-  silently accepts one. A correct solution scores 0 → reward noise, and the agent learns the grader's
-  taste instead of the task.
-- *Verifier checks less than the task says* (Beam: "too weak", "incomplete coverage"). A partial
-  solution scores 1 → the policy learns to stop early.
+---
 
-**Axis 2 — how much the task *tells* the agent** (Beam's "specificity knob", set during synthetic
-generation for diversity, not a filter in itself):
-- *Low specificity*: requirements left to be inferred from the environment or common sense. Harder,
-  and allowed — as long as the omitted requirements are genuinely inferable. If they are not, it
-  collapses into axis 1 case 1 and is caught by A3 (determinable from the solver's view).
-- *High specificity*: every requirement and edge case spelled out. Easier; at the extreme the prompt
-  leaks the solution or reduces the task to step-following. Caught by the "statement does not leak the
-  solution" static judge below and the answer-in-the-question screen in A10.
+## Agentic checks — a model judges
 
-So: alignment = prompt and verifier must demand the same set of things; specificity = how much of
-that set the prompt states outright vs leaves to inference. "Too specific makes it easy" is axis 2,
-not an alignment failure.
+Each is a prompt-plus-checklist or an agent with tools. They are themselves models and can be wrong,
+which is why the human checks below exist.
 
-How axis 1 is checked — static judges on SWE artifacts:
-- the statement describes an actionable change without leaking the solution;
-- tests agree with the stated requirements, assert meaningful behavior, and **permit equivalent
-  correct implementations**;
-- the reference fix is relevant, has no hard-coded answers, and does not modify test files;
-- the verifier command does not manufacture success, suppress failures, or substitute superficial
-  checks for behavioral tests.
+**1. Task soundness.** A judge is given the task prompt (and for SWE the repository) with the
+reference solution withheld, and runs a checklist: Does the prompt reference something the agent
+can't see (a figure, an attachment, an earlier discussion)? Does it contradict itself? Can it be read
+two ways? Does it demand a format the grader can't handle? Is the answer guessable from the form of
+the question (yes/no, multiple choice, a quantity with few possible values)? The reference is withheld
+because a judge who sees the answer rationalizes the task from it.
 
-Agentic audits (inspect the repo, trace the verifier, execute code):
-- **Ambiguity judge** — catches *verifier checks more than the task says*. Looks for requirements
-  enforced by tests but not justified by the visible spec. Where practical, writes an alternative
-  implementation consistent with the spec and shows the verifier rejecting it.
-- **Verifier-strength judge** — catches *verifier checks less than the task says*. Records the
-  independently testable requirements before seeing hidden tests, maps each to verification logic,
-  then writes incomplete or incorrect implementations to find gaps. Bypasses must be discoverable from
-  solver-visible information.
+**2. Specification ↔ verifier alignment.** The prompt and the verifier must demand the same set of
+things. Two judges, one per direction:
+- *Ambiguity judge* — verifier demands more than the prompt states. It looks for test requirements
+  not justified by the visible spec and, where practical, writes an alternative implementation that
+  satisfies the spec and shows the verifier rejecting it.
+- *Verifier-strength judge* — verifier demands less than the prompt states. It lists the requirements
+  from the prompt, maps each to a test, then writes a deliberately incomplete solution to see if it
+  passes.
+A separate knob, task *specificity* (how much the prompt spells out vs leaves to inference), is a
+generation setting for diversity, not a filter; a low-specificity task still has to pass check 1.
 
-Terminal verifier principles: alignment (no unstated constraints, no assumed implementation or file
-format), comprehensive coverage (every requirement tested, else partial solutions are rewarded),
-robustness (test inputs and expected outputs unmodifiable by the agent).
+**3. Gold verification.** The gold answer is not trusted. Models re-derive it blind — with tools, or
+several independent solvers that must agree — and the result is compared to the gold. Separately a
+model reviews question+gold for validity. Questions are rewritten to pin units, precision, and
+constants so correct reasoning always lands on the gold. Web tasks also sample many rollouts and
+check whether a common alternative answer is actually the better one.
 
-General tool use: drop tasks where the verifier demands things the instruction never stated, the
-reward is unreasonable given the request, tools are insufficient, or criteria are vague or unscorable.
-
-### A5. Gold answer is right
-- A model reviews the gold; a model re-derives it with tools; several independent solvers must agree.
-- Questions rewritten to pin units, precision, and constants (9.8 vs 9.81) so correct reasoning
-  always lands on the gold.
-- **Strong-vs-weak gap**: if a weaker model scores higher than a stronger one, the gold is probably
-  wrong. Also used as a difficulty signal.
-- Web search: sample many rollouts and extract answers that recur; drop the question if a model
-  prefers the alternative, or judges the question contradictory (neither answer fits) or
-  underspecified (both fit).
-- Science Q&A: rewrite until the reference is the *unique* correct answer; solve several times with the
-  training judge; a final diagnosis step separates wrong reference / ambiguous question / judge noise /
-  genuine difficulty.
-
-### A6. Not guessable, not leaked, not memorized
-A task whose answer can be produced without doing the work teaches the policy to guess, which stops
-chain-of-thought from scaling. Beam treats this as a reward hack to avoid completely.
-
-Guessability — how it is checked:
-- *Judge over the question text*: yes/no, multiple choice, wording that hands out a shortlist,
-  asked quantities with few possible values (rank of a matrix, finite probability masses),
-  definition-recall questions, answers visible in the prompt.
-- *Pool statistics*: drop questions whose gold answer is unusually frequent across the pool (0, 1, π).
-- *Empirical*: tool-use tasks must score 0 on the untouched environment; generated math problems must
-  be self-solved by the generator and revised if a one- or two-line shortcut works.
-
-Leakage — how it is checked. Mostly mechanical scrubbing and scanning, with one adversary whose
-job is to *exploit* a leak rather than read for the answer (the only test that catches leaks you did
-not think to scan for):
-- *Scrub*: strip post-fix git history from repo images; rebuild derived artifacts (compiled files,
-  caches, docs) from the modified repo so no stale copy of removed code survives.
-- *Scan*: grep the image for the removed code or tests; lexical and judge checks of the prompt text
-  against the answer; terminal rule-based check that no privileged information is in the sandbox.
-- *Guard*: verifier rejects unauthorized changes to test-selection config and import hooks.
-- *Web*: URL blocklists for known answer dumps (datasets, papers, blogs) plus a dynamic blocklist that
-  fuzzy-matches question+answer against pages the model actually fetched during rollouts.
-- *Adversary*: an agent told "find and use anything leaked to pass without solving"; success → drop.
-- *Simulated user*: its hidden notes and real rollouts are checked so it can never be talked into
-  disclosing the expected answer.
-
-Memorization — how it is checked:
-- Run the model on the search question **without tools**; a correct answer → drop.
-
-### A7. Adversarial attack on the task and grader
-Two attackers, one instruction: get reward 1.0 without doing the task. They differ only in what
-they can see, so they find different faults.
+**4. Adversarial attack.** Two attackers, one instruction — get reward 1.0 without doing the task —
+differing only in what they see:
 
 ```text
-                 sees                      produces                 scored by
-                 ----                      --------                 ---------
-black-box  ───►  task + environment  ───►  deliverable  ───┐
-                 + hack taxonomy                           ├──►  rubric judge   (criteria met?)
-white-box  ───►  task + environment  ───►  deliverable  ───┘     goal judge     (job actually done?)
+                 sees                            produces              scored by
+black-box  ───►  task + environment         ───► deliverable ──┐
+                 + written hack taxonomy                       ├──►  rubric judge  (criteria met?)
+white-box  ───►  task + environment         ───► deliverable ──┘     goal judge    (job actually done?)
                  + rubric + grading spec
-                                                     rubric PASS & goal FAIL  →  task exploitable
-                                                       black-box got through  →  fix the task
-                                                       white-box got through  →  fix the grader
-                                                                               (remove until repaired)
+                                                 rubric PASS & goal FAIL  →  task is exploitable
+                                                   black-box got through  →  fault is in the task
+                                                   white-box got through  →  fault is in the grader
 ```
 
-- **Black-box** works through a written taxonomy of hacks (hard-code outputs, edit tests or
-  `conftest.py`, shadow binaries, dig for leaked answers, hedge, pick the easiest reading of an
-  ambiguous prompt, ask the simulated user). Success = the *task* has a shortcut.
-- **White-box** does not try to solve anything; it writes to the rubric's letter — a "Risk analysis"
-  heading with one filler sentence, an empty chart, text aimed at the judge. Success = the *grader*
-  is leaky (coarse, redundant, keyword-satisfiable criteria).
-- Hacked tasks are removed, not patched. Hacks found later during RL are added to the taxonomy.
-- Rubrics pass static checks first: coverage, atomicity, observability, non-duplication, weighting.
+The black-box attacker works through a checklist of known hacks: hard-code the expected output, edit
+tests, shadow binaries, dig for leaked answers, hedge, take the easiest reading of an ambiguous prompt,
+ask the simulated user. It saw only what the policy will see, so anything it exploited is in the task
+or environment. The white-box attacker does not try to solve anything; it writes to the rubric's
+letter — a "Risk analysis" heading with one filler sentence, an empty chart, text aimed at the judge.
+It used knowledge the policy doesn't have, so a success means a criterion is loose. Exploited tasks
+are removed until repaired. Hacks found later during RL are added to the taxonomy.
 
-### A8. Rollout validation (empirical solvability) + pass-check on solves
-Sample k attempts per task from a strong model; no training.
-- Zero successes in k → drop (or inspect: repeated failure is a practical filter, not proof the task
-  is broken).
-- **Successful rollouts go to a judge** for reward hacking and for environment issues (missing tools)
-  that interfered with the intended path. Only passes are inspected; a failed rollout cannot be a
-  successful hack.
-- The pass-rate band gives difficulty for *this* model.
+**5. Solve inspection.** A judge examines rollouts that *passed* (a failed rollout can't be a
+successful hack). This runs at three times:
+- *Curation*: a strong model attempts each task k times; successes go to a judge for hacks and for
+  environment problems (missing tools) that interfered with the intended path.
+- *Online*: a fixed judge model, served separately and never updated with the policy, reviews every
+  pass during training and can veto it. It sees the final deliverable (and, for rubric tasks, the
+  trajectory) and looks for unsupported provenance, criterion gaming, and text aimed at the evaluator.
+  A vetoed rollout gets correctness 0 but keeps its length cost — the same reward as a failed attempt
+  of equal length. Chain-of-thought is monitored for hacking intent but not optimized against.
+- *Post-hoc, per group*: reward-integrity judges on passes (did it exploit a test gap?), task-health
+  judges on all-fail groups (hard, underspecified, broken environment, or grader failure?), and a scan
+  for near-identical patches that received different grades.
 
-### A9. RL derisking
-A short RL run on the candidate task set with the **exact production reward setup** (rubric judge,
-threshold, integrity judge, length penalty). The only check that applies optimization pressure. Catches:
-- exploits the policy converges to that random sampling never hits;
-- reward noise that destabilizes groups;
-- tasks that saturate within a few steps.
+**6. RL derisking.** A short training run on the candidate tasks with the exact production reward
+setup — rubric judge, threshold, integrity judge, length penalty. Check 5 looks at individual
+rollouts; this looks at what the *policy converges to* under optimization pressure: exploits that
+random sampling never hits, reward noise that destabilizes groups, tasks that saturate in a few steps.
+Findings feed back into checks 1–4; the task re-enters only after re-validation.
 
-Failures feed back into A3–A7: tasks revised or removed, rubric criteria and grader checks updated,
-task re-evaluated before re-entry.
+**7. Synthetic authoring gate.** When a model writes the task, the task is judged before it is used:
+is it professionally meaningful, hard enough, does the rubric cover it, is the ground truth protected
+from the solver. Because author and judge share a model family, accepted tasks also pass a majority
+vote from a different model family. The authoring agent gets ten revision rounds, then the task is
+abandoned.
 
-### A10. Difficulty and dedup
-- Drop what the initial checkpoint solves frequently at a low thinking budget; drop what a reference
-  model solves reliably.
-- Web: keep if strong − weak solve rate ≥ 12.5 points, or weak = 0.
-- "Wrong-reason" screen: tasks that look easy because the answer leaked, or hard because of missing
-  context, chat-template formatting errors, impossible questions (which induce hacking), inaccessible
-  sites, over-strict memory/time limits.
-- Model-specific: solvable without chain-of-thought → low quality for this model.
-- Dedup: character-7-gram MinHash-LSH with exact Jaccard verification; 0.95 within training data,
-  0.80 against evaluation sets. SWE additionally excludes task IDs and *patch matches* tied to held-out
-  evals; competitive coding matches canonical problem IDs; terminal uses taxonomy tags plus embedding
-  similarity to drop templated near-duplicates.
-
-### A11. Synthetic authoring gates
-- Terminal / knowledge-work authoring agent builds the task in a sandbox and gets 10 rounds to pass
-  the gate (static checks + judged criteria), then the task is abandoned.
-- Knowledge work: 8 deterministic validators + 9 judged criteria (professional meaningfulness,
-  difficulty, rubric coverage, ground-truth protection). Because author and in-loop judge share a model
-  family, accepted tasks also pass an independent majority vote from a **different model family**
-  (3 votes over 5 defect classes) — retains ~42%.
-- Expert math / physics: adversarial generate–solve–refine loop; independent solvers expose
-  ambiguities, errors, and shortcuts; physics checked for consistency with the source paper and for
-  sufficiency of the given information.
+**8. Leak adversary and simulated-user audit.** An agent is told to find and use anything leaked to
+pass without solving — the only test for leaks nobody thought to scan for. The simulated user's hidden
+notes and real rollouts are checked so it can never be talked into disclosing the answer.
 
 ---
 
-## B. Per rollout, during training
+## Human checks
 
-### B1. Isolation: untrusted vs trusted
-- The agent runs in an **untrusted** sandbox: anything it touched is presumed compromised (binaries,
-  test files, env vars, Python path).
-- Grading runs in a fresh **trusted** container built from a digest-pinned image; only the deliverable
-  (a diff, or output files) crosses over as inert data.
-- Beam abandoned the legacy Harbor format (agent and verifier in one runtime) because it was hackable.
-- Network: a per-sandbox enforcer re-originates only policy-allowed traffic; package-registry mirrors;
-  per-sandbox request logs; TLS interception via an installed CA. Supporting containers are mounted
-  read-only; no registry credentials exist inside the sandbox.
+Every agentic check is a model that can drift or be gamed. Two human processes anchor them.
 
-### B2. Answer hardening before any judge
-- Regex extraction of the final answer ("The answer is: …", `\boxed{}`); unextractable → 0.
-- Length caps: search `max(150, 4.5 · len(gold))` characters; math 200 characters (or 3× gold).
-  Kills hedging ("3 or 4 or 5") mechanically before a judge can be fooled by it.
-- Judge prompts carry few-shot examples on handling ambiguity and rejecting hedges.
-- Competitive coding: binary reward, isolated grading sandbox, time limits; compile errors, runtime
-  failures, wrong output, timeouts all score 0.
-- Tool use: reward 1 only if every criterion passes; meta-tool rejects unknown tool names; verifiers
-  may use an expected environment state-hash.
+**1. Judge calibration.** Annotators sample judge decisions to measure whether each automated check
+does what it was meant to; check definitions are expanded when a systemic flaw appears (e.g. tasks
+with "black-box" binaries the agent could simply reverse-engineer).
 
-### B3. Online judges on passes
-- **Independent judge service**: a fixed model, served separately, never updated with the policy.
-  Reviews rollouts that passed automated checks against versioned criteria and can veto.
-  **Fail-closed**: if the judge call errors after retries, the rollout fails — an unreviewed pass never
-  becomes a positive reward.
-- SWE: the judge sees the final patch and the verifier; confirmed hacks get zero reward.
-- Knowledge work **integrity judge** sees artifact *and* trajectory. Flags: unsupported provenance
-  (citing sources or computations never performed), surface-level criterion gaming (writing to the
-  rubric's keywords), evaluator manipulation (text aimed at the judge).
-- Vetoed rollout: correctness 0, **length cost kept** → same reward as a failed attempt of equal length.
-- Chain-of-thought is monitored for hacking intent but never optimized against.
-- Rollouts that exhaust the effort budget get no correctness reward.
+**2. Fresh labels for judge-rewarded RL.** Where the reward is itself a model (conversational
+quality), humans label the *current* policy's outputs every two weeks — 200–300 prompts, five
+annotators, ground truth = mean of the three most agreeing — and both the proxy arena judge and the
+generative reward model are recalibrated to them. The relative weight humans put on attributes shifts
+as the policy changes, so a judge calibrated once goes stale. Beam's first recipe collapsed when the
+policy exploited its reward model; the final recipe's predicted 56.5% human win rate matched the
+measured 56.3%.
 
-### B4. Deadlines and staleness
-- Task-dependent rollout deadlines; rollouts exceeding them are discarded; a group is kept only when
-  enough rollouts completed.
-- Policy version recorded per token; staleness (avg ~5 versions behind) is monitored, not hard-bounded.
-  (MAI-Thinking-1 by contrast discards rollouts more than 8 inference updates stale.)
+Other anti-gaming designs in the same section: a ternary reward (correct 1 / abstain 0.5 / wrong 0)
+after a five-level confidence reward was gamed through wording; a double-gated instruction-following
+reward (Python verifier *and* judge, because verifier-only training taught the model to satisfy the
+verifier and skip the request); two graders that penalize padding (follow-ups, self-validation) and
+withholding (clarifying instead of answering), weighted by their precision against human labels.
 
 ---
 
-## C. Per prompt group
+## Cheapest subset for a small harness
 
-- Groups with saturated rewards (all identical) are discarded by the trainer — no gradient.
-- **Task-health judges** on all-fail groups: genuine difficulty, underspecified prompt, broken
-  environment, or grading failure?
-- **Reward-integrity judges** on passes: exploited a test gap? Do hidden tests assume unstated things?
-- Near-identical patches receiving different grades → grader bug, not agent behavior.
-
----
-
-## D. Over the run
-
-- Rubrics updated as new hacks appear; tasks on which hacks or breakage are observed are pulled from
-  the mixture until repaired and re-validated; harder task sets introduced as pass rates rise.
-- Offline audits of artifacts and trajectories feed findings back into task, rubric, and online judge.
-- Training–inference integrity: nucleus masks and routed experts replayed in the trainer; FP32 LM head
-  and router; router weights and load-balancing biases frozen during RL. Per-token KL between
-  sampling and training policies monitored (median 2.2e-4 nats; 8.7e-5 right after a restart is the
-  irreducible floor).
-- Stability telemetry: gradient norm, response length per mixture phase, sampled-token NLL split by
-  reasoning vs answer tokens.
-
----
-
-## E. Alignment-teacher RL (judge-rewarded environments)
-
-Here the "verifier" is itself a model and can be Goodharted; the defenses are different.
-
-Knowledge calibration:
-- Question filters: time-sensitive, ambiguous, unanswerable from source, false-premise → drop.
-- 16 samples per question scored with the RL judge; drop if all receive the same reward; bin the rest
-  by mean reward into five bands, sample equally, require abstentions in the low bands.
-- Ternary reward vs search-verified gold: correct 1.0 / abstain 0.5 / wrong 0.0.
-- A five-way reward (confident correct > hedged correct > abstain > …) was **abandoned**: the policy
-  learned to game the judge's inference of confidence from wording. Judge prompt tightened to penalize
-  multiple and empty answers and to score hedged commitments as abstentions.
-
-Instruction following:
-- Filter malformed instructions, unreliable verifiers, incompatible request–instruction pairs, tasks
-  trivial for the starting policy.
-- **Double-gated** reward: a response must pass the Python verifier **and** a judge that it genuinely
-  addressed the request — "verifier-only training makes the model circumvent the underlying task."
-- Rubric tasks (~22 rubrics each): all-or-nothing beat averaging partial credit.
-- Multi-turn conversations checked for satisfiability and consistency.
-
-Faithfulness and long context:
-- Claim-level faithfulness judge; because judges degrade as input context grows, SQL-based rule
-  rewards are used instead where possible. The SQL pipeline rejects unsafe SQL, idle stages, unstable
-  cut-offs, and leaked answers, and runs a **reverse check**: a second model rebuilds the SQL from the
-  question alone; both must agree on real and perturbed data.
-
-Helpfulness (RLAIF):
-- **Fresh human labels every two weeks** on the *current* policy's outputs (200–300 prompts, five
-  annotators, ground truth = mean of the three most agreeing). Framed as the main defense against
-  Goodharting: only fresh labels on the trained policy's outputs detect judge–human divergence.
-- Proxy arena judge and generative reward model recalibrated to those labels, because attribute
-  weights drift as the policy changes; the proxy clears the human inter-rater agreement ceiling.
-- Anchor responses filtered by claim-level factuality and temporal checks (2.6% of prompts dropped).
-- Position bias cancelled by fixing comparison order per prompt within a GRPO group; pairwise verdicts
-  over pointwise scores (which compressed the reward range and saturated).
-- **Two anti-gaming graders** multiplied onto the preference reward: unnecessary content (follow-up
-  questions, self-validation) and withheld content (clarifying instead of answering, unwarranted
-  refusal). Each flag's weight set from its measured precision against human labels.
-- Linear length penalty on the final answer to counter the judge's preference for long responses.
-- Evidence: recipe v1 "collapsed as the policy exploited its reward model"; the final recipe's
-  arena-predicted 56.5% win rate vs GLM 5.2 matched the 56.3% measured with human raters.
-
----
-
-## F. Infrastructure guarantees underneath
-
-- Serving instances pull and verify transferred weights before adopting a version; exhausted
-  verification retries fail the instance rather than serve a corrupt policy.
-- Rollouts interrupted by faults are preserved and retried, not scored as zeros.
-- The judge service scales independently and never participates in policy updates.
-- Vendor task validation is routed to clusters separate from training and evaluation workloads.
-
----
-
-## Recurring moves
-
-1. **Controls on every grader** — the known-good solution must pass, doing nothing must fail.
-2. **Judge from the solver's seat** — hide the reference when judging whether a task is fair.
-3. **Gate with two independent signals** when one is gameable — verifier + judge; rubric judge +
-   goal judge; proxy judge + fresh human labels.
-4. **Integrity is monitored state, not a one-time gate** — online veto, group triage, derisking runs,
-   human recalibration keep catching what a stronger policy finds later.
-
-## Cheapest high-leverage subset for a small harness
-
-- A2 controls (oracle 5/5, no-op 5/5) run under the cheapest node's resource caps, three trials.
-- A3/A4 judge with the reference withheld; A6 empirical no-op check on the untouched environment.
-- A7 one black-box adversarial pass per new task with a written hack taxonomy; drop, don't patch.
-- A10 strong-vs-weak gap as a combined difficulty and wrong-gold filter; MinHash dedup first.
-- C group-level consistency checks on rollout logs already paid for.
-- B3 online judge on passes as the backstop (one model call per *pass*, prompt = deliverable + rubric).
+- Deterministic 1 and 2 under the cheapest node's resource caps.
+- Agentic 1 and 2 with the reference withheld; the no-op control on the untouched environment.
+- One black-box adversarial pass per new task with a written taxonomy; remove, don't patch.
+- Strong-vs-weak gap and MinHash dedup before any GPU time.
+- Group-level triage on rollout logs already paid for; the online judge on passes as the backstop.
