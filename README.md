@@ -4,6 +4,11 @@ Personal collection of worked-through research notes. Each topic gets a
 directory with a human-readable writeup and, where useful, a runnable
 notebook.
 
+- [continual-learning-benchmarks/](continual-learning-benchmarks/): how agents are evaluated on learning
+  from experience. Cards and numbers for ApprenticeBench, CLE, CL-Bench, AgentCL, AgentStream, ReScopeBench,
+  SCLATE, MemPABench and the Sep–Nov 2026 wave; how the environments are constructed; a taxonomy built on a
+  five-stage model (acquire, store, retrieve, realize, revise) with a dimension matrix and the axes that
+  change a conclusion (stateless control, drift, memory grading, autonomy).
 - [attention/](attention/): where memory and compute actually go in modern
   attention mechanisms (standard, FlashAttention, MLA, DSA, KDA), worked
   through on GLM-5.3-Flash's real dimensions. Includes a line-by-line
