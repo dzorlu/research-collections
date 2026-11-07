@@ -2,9 +2,10 @@
 
 - **Problem:** the engine picks tokens with probabilities `q`, but REINFORCE subtracts the trainer's `y_hat`. So the
   score `onehot(k) - y_hat` does not average to 0; its average is `s_bar = q - y_hat`.
-- **Drift:** every update then carries `A_avg * s_bar`: a fine-tuning step toward the engine (away if `A_avg < 0`),
-  unrelated to which token was good. The engine is re-synced from the trainer each step, so the error compounds and
-  can collapse training.
+- **Drift:** averaged over the engine's picks, the update carries `A_avg * s_bar`, a step of the trainer toward the
+  engine (away if `A_avg < 0`), unrelated to which token was good. Toward a fixed teacher that would be harmless. But
+  the engine is rebuilt from the trainer after every step, with its error added again, so the target stays one error
+  ahead and the pushes add up step after step until training collapses.
 - **Fix:** subtract `s_bar` from each pick's score, so the score becomes `onehot(k) - q` and
   `dz = A[k] * (q - onehot(k))`. The average score is 0, so drift = 0. The signal (which token was better than
   expected) is unchanged.
@@ -12,8 +13,59 @@
   reached 30% training accuracy, TIS 12%, everything else under 5%.
 - **Cost:** the engine must return its top candidates per position (128 in miles).
 
-The rest of this page derives each line on one state with numbers. Runnable version in PyTorch, with every `dz` checked by autograd:
-[score_centering.ipynb](score_centering.ipynb).
+## 0. The formulation
+
+Everything happens at one prefix: the prompt plus the tokens already generated. There the trainer has one
+distribution over the next token, the engine has another, and one token gets drawn. The paper's Eq. 3-5 are
+statements about that one draw, averaged over how it could have gone.
+
+**Notation.** The notes stop at the logits, so every gradient is a `(V,)` vector. The paper differentiates with respect
+to all `d` weights, so its vectors are `(d,)`; backprop turns one into the other and is linear, so every identity below
+holds in both.
+
+| notes | paper | meaning | shape |
+|---|---|---|---|
+| `y_hat` | `p` | trainer's next-token probabilities, `p_v` one entry | `(V,)` |
+| `q` | `q` | engine's next-token probabilities; the draw uses these | `(V,)` |
+| `k` | `y_t` | the token that was drawn | `()` |
+| `R`, `b`, `A = R - b` | `R` | reward per possible token, baseline, advantage | `(V,)`, `()`, `(V,)` |
+| `onehot(k) - y_hat` | `s_{y_t} = ∇_θ log p_{y_t}` | score of the drawn token: nudge weight `j`, `log p` moves by entry `j` | `(V,)` here, `(d,)` in the paper |
+| `s_bar = q - y_hat` | `s_bar = Σ_v q_v s_v` | score averaged over the engine's draws | same as the score |
+| `A_avg` | `E_q[R]` | advantage averaged over the engine's draws, `Σ_v q_v A_v` | `()` |
+| `dz` | `-R s_{y_t}` | the update for one draw; notes use the loss sign, paper the ascent sign | same as the score |
+
+In real training these are indexed per position: `y_hat`, `q` are `(B, T, V)`, `A` is `(B, T)`, and the sums below run
+at each of the `B × T` prefixes separately.
+
+**The expected update is a sum over the vocabulary.** The draw is the only random thing, and it lands on `v` with
+probability `q_v`, so averaging over draws means weighting each token's update by `q_v`:
+
+```
+E_q[ A_{y_t} s_{y_t} ]  =  Σ_v q_v · A_v · s_v                              (V,): a scalar q_v A_v times a vector s_v
+```
+
+**Covariance identity.** For a scalar `X` and a vector `Y` drawn together, `E[XY] = E[X] E[Y] + Cov(X, Y)`. With
+`X = A_{y_t}` and `Y = s_{y_t}` this is the paper's Eq. 3:
+
+```
+Σ_v q_v A_v s_v  =  A_avg · s_bar   +   Σ_v q_v (A_v - A_avg)(s_v - s_bar)
+                    drift               signal
+```
+
+`E[X]E[Y]` pairs the average advantage with the average score, so it has forgotten which token earned which reward.
+The covariance is what is left: whether a high advantage tends to come with a particular score direction.
+
+**On-policy the drift is zero.** With `q = y_hat`, `s_bar = Σ_v p_v ∇ log p_v = Σ_v ∇ p_v = ∇ 1 = 0`. At the logits:
+`Σ_v p_v (onehot(v) - p) = p - p = 0`. Under the engine's `q` the weights no longer match the `p` inside the score,
+`s_bar = q - p ≠ 0`, and the drift `A_avg · s_bar` is a step of the trainer toward the engine.
+
+**Centering.** Replace the score by `s_tilde = s_{y_t} - s_bar` (Eq. 4). Then `E_q[s_tilde] = s_bar - s_bar = 0`, so the
+drift term is `A_avg · 0` for any baseline, and the covariance is unchanged because shifting `Y` by a constant does not
+change `Cov(X, Y)` (Eq. 5). `s_bar` is computable: the engine returns `q`, the trainer has `log p_v` for every `v`, and
+in code it is one extra term in the loss, `-A (log p_k - Σ_v sg[q_v] log p_v)`, whose gradient is `A (s_k - s_bar)`.
+
+The rest of this page computes each of these on one state with numbers. Runnable version in PyTorch, with every `dz`
+checked by autograd: [score_centering.ipynb](score_centering.ipynb).
 
 ## 1. The state
 
@@ -56,8 +108,9 @@ The score of a pick is `onehot(k) - y_hat`: the direction that makes token `k` m
 Its average over the engine's picks is `s_bar`:
 
 ```python
-s_bar = 0.6*([1,0,0] - y_hat) + 0.3*([0,1,0] - y_hat) + 0.1*([0,0,1] - y_hat)
-      = q - y_hat = [0.1, 0.0, -0.1]                                                      # (V,)
+s_bar = Σ_i q_i * (onehot(i) - y_hat)                                                    # (V,)  i runs over the 3 tokens
+      = 0.6*([1,0,0] - y_hat) + 0.3*([0,1,0] - y_hat) + 0.1*([0,0,1] - y_hat)
+      = q - y_hat = [0.1, 0.0, -0.1]
 ```
 
 `s_bar` is not 0 because the engine picks with `q` while each score subtracts the trainer's `y_hat`. It is the
@@ -66,7 +119,7 @@ direction one fine-tuning step toward the engine would move the logits.
 Split each advantage into its average and each pick's difference from it:
 
 ```python
-A_avg     = 0.6*0.75 + 0.3*(-0.25) + 0.1*(-0.25) = 0.35     # ()    = expected reward here (0.6) minus b
+A_avg     = Σ_i q_i * A[i] = 0.6*0.75 + 0.3*(-0.25) + 0.1*(-0.25) = 0.35     # ()  advantage averaged over the engine's picks: expected reward here (0.6) minus b
 A - A_avg = [0.40, -0.60, -0.60]                             # (V,)  how much better or worse each pick is
 
 drift  = -A_avg * s_bar         = [-0.035, 0.00, 0.035]                     # (V,)
