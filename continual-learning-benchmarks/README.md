@@ -365,6 +365,40 @@ Plus the training plumbing: snapshot/restore of agent + memory state across cont
 - Information Flow and Initiative & Autonomy (preferences about actions) are hardest, 34–44% PSA; Expression Style and Disclosure (preferences about the reply) 55–69%.
 - Under Oracle, five settings (Hide rationale, Terse, Iterative/Structured elicitation, Low breadth) pass BRS≥4 in only 60% of correctly selected probes vs 95% for the rest. The model keeps adding "Why that day:" sections after choosing Hide. Saying is easier than doing.
 
+**Vocabulary.** An *interaction attribute* is one knob on the agent's behavior (14 of them: verbosity, autonomy level, proactive outreach, ...), each with 2 or 3 *settings* (Terse/Detailed; Reactive/Self-directed/Autonomous; Low/High). A *cell* is one attribute in one context, work or personal; 14 x 2 = 28 cells per user. A cell is *stable* if the user's setting never changes over the four months (23 per user) or *changing* if it flips once at a scripted event (5 per user). The agent never sees the table; it must infer each cell from the user's reactions. At a *decision point* the agent must *pick* a setting by calling a tool such as `IX_verbosity("Terse")`, then write its reply; a wrapper enforces the pick where it can (hold actions, hide a rationale field, suppress outreach). The pick is scored against the table; the delivered reply is scored by a judge and by the simulated user.
+
+**Session types, per user**
+
+| Session type | Count | Purpose | Scripted or live | Scored |
+|---|---|---|---|---|
+| Accumulation, stable cell | 69 (23 x 3) | agent learns the cell from reactions | live, on-policy | no |
+| Accumulation, changing cell, before event | 15 (5 x 3) | agent learns the old setting | live | no |
+| Preference-change event | 5 | a consequence makes the user revise one cell | scripted, replayed identically for every memory system | no |
+| Accumulation, changing cell, after event | 10 (5 x 2) | new setting reinforced | live | no |
+| Pre-event probe | 5 | did the agent hold the old setting just before the change | isolated branch, 3 repeats | PET (first half) |
+| Final probe | 28 | does the agent hold the current setting at the end | isolated branch, 3 repeats | PSA, CS, PET (second half), BRS, PRS |
+
+Live = the simulator generates the user's lines at run time in reaction to the agent. On-policy = the history the agent later relies on came from its own actions. Time is narrative (sessions carry storyline dates) but execution is turn-based: no simulated clock, nothing fires between sessions. A probe runs on a frozen copy of world + memory (no raw conversation), and the copy is discarded, so probes neither teach the agent nor affect each other.
+
+**The five metrics on a worked example.** One user, four cells, end-of-timeline probes:
+
+| Cell | User wants | Pick | Pick right? | Reply the user saw | BRS (judge) | PRS (user) |
+|---|---|---|---|---|---|---|
+| work, outreach | Low | High | no | pinged the user about an unrequested event | 1 | 1 |
+| work, verbosity | Terse | Terse | yes | answer, then three paragraphs of reasons | 2 | 2 |
+| personal, verbosity | Detailed | Detailed | yes | answer with background and a caveat | 5 | 4 |
+| personal, autonomy | Reactive (after the change) | Self-directed | no | sent the rebooking message without asking | 1 | 1 |
+
+- **PSA**, preference selection accuracy: picks right over all cells. 2/4 = 50%.
+- **CS**, context sensitivity: only attributes whose work and personal settings differ (here verbosity). A pair scores 1 only if both contexts are picked right. 1/1. Had the agent picked Detailed at work too, 0/1: it failed to keep contexts apart.
+- **PET**, preference evolution tracking: only changed cells (here personal autonomy), probed before the change and at the end. Scores 1 only if the old setting was picked before and the new one after. Before: wanted Self-directed, picked Self-directed. End: wanted Reactive, picked Self-directed. 0/1: the agent kept the old setting after the user changed it.
+- **BRS**, behavioral realization: a judge reads the delivered reply and executed actions against the definition of the user's target setting, 1 to 5, without seeing the pick. Row 2 is the split that matters: pick right, reply wrong, BRS 2.
+- **PRS**, perceived realization: the simulated user, memory cleared, rates the same reply 1 to 5 as "did this match what I wanted." Row 3: judge gives 5 for meeting the definition, the user gives 4 because this persona is hard to please. BRS applies one rubric to everyone; PRS carries the persona.
+
+Three scores on the pick (PSA, and its stricter cuts CS and PET), two on the reply (BRS, PRS). Why force a pick at all: without it a wrong reply cannot be split into "did not know the preference" (memory problem) and "knew it, could not do it" (model habit); and settings like "hold this action for approval" need a runtime signal to enforce. The cost is that no real assistant announces its setting.
+
+**Personas.** Four, from the first three seasons of The Big Bang Theory (A, B) and The Office (C, D). A two-pass LLM extraction tags transcript scenes with an attribute and context, then decides a setting per cell with a confidence level; reactions to others' help outweigh the character's own speech style. Human review checks every setting against its cited scenes: of 112 cells, 53 confirmed at high confidence, 34 reviewed and kept, 23 reset by the reviewer, 2 set by hand (User A is 27/28 transcript-derived; User D is mostly reviewer judgment). Names, workplaces and places are then swapped by an approved substitution table; a reader check confirms the anonymized persona reacts to preference violations the same way (14/14), and a shortcut check shows a backbone guessing the 28 cells drops from 53.2% (real identity) to 46.4% (anonymized), chance 45.2%.
+
 **Why it belongs in the survey.** It is the only benchmark here with (a) on-policy history (the agent's own actions shape what it later has to remember), (b) a context axis (same preference, different setting at work vs home), (c) scheduled preference changes replayed identically across conditions, (d) a three-stage failure decomposition with floor and ceiling controls, and (e) selection made observable through a forced tool call. Weaknesses: 4 users, sitcom personas, a fixed harness (nanobot), LLM-simulated user and judge, no memory-content grading beyond case studies.
 
 ## 14. Taxonomy, built from the five benchmarks read in full
