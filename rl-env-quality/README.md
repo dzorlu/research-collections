@@ -86,7 +86,7 @@ Any flag fails the task; repairable prompts are rewritten and re-judged. The ref
 because a judge who sees the answer rationalizes the task from it.
 
 **2. Specification ↔ verifier alignment.** The prompt and the verifier must demand the same set of
-things. Two judges, one per direction:
+things.
 - *Ambiguity judge* — verifier demands more than the prompt states. It looks for test requirements
   not justified by the visible spec and, where practical, writes an alternative implementation that
   satisfies the spec and shows the verifier rejecting it.
@@ -96,11 +96,21 @@ things. Two judges, one per direction:
 A separate knob, task *specificity* (how much the prompt spells out vs leaves to inference), is a
 generation setting for diversity, not a filter; a low-specificity task still has to pass check 1.
 
-**3. Gold verification.** The gold answer is not trusted. Models re-derive it blind — with tools, or
-several independent solvers that must agree — and the result is compared to the gold. Separately a
-model reviews question+gold for validity. Questions are rewritten to pin units, precision, and
-constants so correct reasoning always lands on the gold. Web tasks also sample many rollouts and
-check whether a common alternative answer is actually the better one.
+**3. Gold verification.** The gold answer is not trusted. Three checks:
+- *Blind re-derivation*: a strong model is given the question only — never the gold — and solves it
+  with tools (code execution, search). Several such solvers run independently. The question is
+  accepted only if they agree with each other and with the gold. If they can't solve it or disagree,
+  the question is dropped: the cause can't be told apart (wrong gold, ambiguous question, solver too
+  weak), so it isn't admitted. Conservative — some hard valid questions are lost.
+- *Review with the gold*: a separate model sees question + gold and judges whether the gold is valid.
+  Web tasks also sample many rollouts, collect answers that recur, and ask a model whether a common
+  alternative is the better answer or whether the question is contradictory (neither fits) or
+  underspecified (both fit).
+- *Rewrite*: questions are edited to pin units, precision, and constants (9.8 vs 9.81) so correct
+  reasoning always lands on the gold instead of being graded on rounding.
+
+Wrong golds that slip through are caught statistically by the strong-vs-weak gap (deterministic 5): a
+weak model out-scoring a strong one usually means the key is wrong.
 
 **4. Adversarial attack.** Two attackers, one instruction — get reward 1.0 without doing the task —
 differing only in what they see:
