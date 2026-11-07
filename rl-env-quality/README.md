@@ -139,41 +139,30 @@ Memorization — how it is checked:
 - Run the model on the search question **without tools**; a correct answer → drop.
 
 ### A7. Adversarial attack on the task and grader
-Two attackers, same instruction — obtain reward 1.0 with an insufficient or incorrect solution — but
-different information, so they find different faults.
+Two attackers, one instruction: get reward 1.0 without doing the task. They differ only in what
+they can see, so they find different faults.
 
-**Black-box attacker.** Sees only what the solver sees: task text and environment. Works through a
-written **taxonomy of reward hacks** rather than discovering attack classes from scratch, so every
-task gets the same battery. The taxonomy is not published; from hacks described across the report it
-covers at least:
-- shortcut the verifier: hard-code expected outputs, stub a function to return the test value, create
-  the file the check looks for but leave it empty;
-- tamper with the measurement: edit or delete tests, change test-selection config, add `conftest.py`
-  or import hooks, shadow binaries on PATH, mock dependencies;
-- find leaked answers: git history, build artifacts, docs, caches, reverse-engineer "black-box" binaries;
-- exploit grader semantics: hedged or multiple answers, format tricks, verbose output that matches on
-  substring;
-- exploit task ambiguity: take the easiest reading of an underspecified prompt and do only that;
-- manipulate the simulated user or judge: ask the persona for the answer, write text aimed at the
-  evaluator.
-A black-box success means the **task** has a shortcut or ambiguity.
+```text
+                 sees                      produces                 scored by
+                 ----                      --------                 ---------
+black-box  ───►  task + environment  ───►  deliverable  ───┐
+                 + hack taxonomy                           ├──►  rubric judge   (criteria met?)
+white-box  ───►  task + environment  ───►  deliverable  ───┘     goal judge     (job actually done?)
+                 + rubric + grading spec
+                                                     rubric PASS & goal FAIL  →  task exploitable
+                                                       black-box got through  →  fix the task
+                                                       white-box got through  →  fix the grader
+                                                                               (remove until repaired)
+```
 
-**White-box attacker** (rubric-graded tasks). Additionally sees the rubric, criterion weights, and
-grading spec. Does *not* try to solve the task; writes a deliverable that satisfies the rubric's
-letter while missing its intent: a "Risk analysis" heading with one generic sentence, a chart that
-exists but shows nothing, a confident conclusion with no supporting computation, text addressed to the
-judge. A white-box success means the **grader** is leaky (coarse, redundant, or keyword-satisfiable
-criteria).
-
-**What is done with their outputs.** Every attacker deliverable is frozen and scored twice:
-- the production **rubric judge** — are the stated criteria satisfied?
-- an independent **goal judge** — was the underlying professional objective actually achieved?
-"Rubric passes, goal fails" marks the task exploitable; which attacker produced it says whether to
-fix the task or the grader. Hacked tasks are **removed**, not patched, until repaired and
-re-validated. New hacks seen during RL are added to the taxonomy, so all future tasks are tested for them.
-
-Before the attackers run, rubrics pass static checks: coverage, atomicity, observability,
-non-duplication, appropriate weighting; rubrics may include penalty criteria for undesirable outputs.
+- **Black-box** works through a written taxonomy of hacks (hard-code outputs, edit tests or
+  `conftest.py`, shadow binaries, dig for leaked answers, hedge, pick the easiest reading of an
+  ambiguous prompt, ask the simulated user). Success = the *task* has a shortcut.
+- **White-box** does not try to solve anything; it writes to the rubric's letter — a "Risk analysis"
+  heading with one filler sentence, an empty chart, text aimed at the judge. Success = the *grader*
+  is leaky (coarse, redundant, keyword-satisfiable criteria).
+- Hacked tasks are removed, not patched. Hacks found later during RL are added to the taxonomy.
+- Rubrics pass static checks first: coverage, atomicity, observability, non-duplication, weighting.
 
 ### A8. Rollout validation (empirical solvability) + pass-check on solves
 Sample k attempts per task from a strong model; no training.
