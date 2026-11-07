@@ -551,5 +551,51 @@ Learning can live in weights, in a memory store, or in the harness itself (promp
 
 **Relation to the rest of the survey.** Store and revise at the harness level. "Coverage is a flow" is the harness analogue of ServeLearnBench's Fully Specified damage, and the operator-level audit is the analogue of MemPABench's stage split: the same score can hide a bad select, a bad mutate, or a bad gate.
 
+## 17. AgentCL notes (OSU, Huan Sun and Yu Su; arXiv 2606.02461, v3 Sep 26 2026)
+
+**TLDR.** You cannot measure continual learning on a stream unless the stream was built so later tasks can reuse earlier ones, and you cannot separate plasticity from stability without running the stream twice. On streams with guaranteed reuse, memory methods gain +14 to +40 points; on ordinary streams and held-out tasks every memory method is at or below a memoryless agent.
+
+**Formalism.** Memory M persists across tasks; retrieve before, write after; no ground-truth feedback during memory construction. Three cross-task relations: *conventional* (same domain, reuse unknown), *dependent* (subtasks placed before complex tasks that need them, relation hidden, ~1% of stored episodes relevant and half a stream back), *independent* (held out from a different source, memory frozen).
+
+**Two-pass protocol and metrics.** B = memoryless ReAct. F = first pass with read and write. S = second pass over the same tasks with memory frozen. H = held-out with frozen memory.
+
+```python
+PG = F - B   # plasticity: did earlier experience help this task
+SG = S - F   # stability: did writing this task's experience make it reusable after later updates
+GG = H - B   # generalization: does the memory transfer to a different source
+```
+
+**Construction.** Coding: CodeEval-Pro self-invoking pairs (48 subtask + complex pairs from BigCodeBench-Lite-Pro; the complex solution calls the subtask's, reuse guaranteed); 120 HumanEval-Pro as held-out. Deep research: 100 BrowseComp+ tasks; 308 subtasks synthesized by GPT-5.2 sharing evidence documents with the parent, filtered so none are paraphrases (Jaccard 0.10 mean, no pair > 0.30, 1.6% share answer and evidence). Conventional-only: MMLU-Pro (300), ScienceWorld (90), BabyAI (40; plus a 56-task dependent stream). Backbone Qwen3.5-35B-A3B (gpt-oss-120b for research), top-2 retrieval, 3 runs for coding.
+
+**Methods.** ReAct; LangMem, Mem0 (adaptive); AWM, Dynamic Cheatsheet (procedural); ExpRAG, ReMem, MemProbe (self-evolving). MemProbe = three stores (interaction, insight, skill) with a syntactic checker and LLM judge filtering writes.
+
+**Results, CodeEval-Pro complex tasks (Table 10, 3-run means).**
+
+| Method | Dep. 1st (PG) | Dep. 2nd (SG) | Held-out (GG) | Conv. 1st (PG) | Conv. 2nd (SG) |
+|---|---|---|---|---|---|
+| ReAct | 44.8 | 44.8 | 72.5 | 44.8 | 44.8 |
+| LangMem | 44.4 (−0.4) | 45.8 (+1.4) | 70.8 (−1.7) | 39.6 (−5.2) | 42.4 (+2.8) |
+| Mem0 | 43.8 (−1.0) | 44.4 (+0.6) | 70.8 (−1.7) | 43.8 (−1.0) | 42.4 (−1.4) |
+| AWM | 39.6 (−5.2) | 38.2 (−1.4) | 70.0 (−2.5) | 44.5 (−0.3) | 41.0 (−3.5) |
+| DC-RS | 48.6 (+3.8) | 50.7 (+2.1) | 60.8 (−11.7) | 35.4 (−9.4) | 39.6 (+4.2) |
+| ExpRAG | 62.5 (+17.7) | 62.5 (0.0) | 68.3 (−4.2) | 39.6 (−5.2) | 39.6 (0.0) |
+| ReMem | 58.3 (+13.5) | 56.3 (−2.0) | 67.5 (−5.0) | 41.7 (−3.1) | 43.8 (+2.1) |
+| MemProbe | 66.7 (+21.9) | 64.6 (−2.1) | 71.7 (−0.8) | 43.1 (−1.7) | 44.5 (+1.4) |
+| Std across methods | 9.4 | 8.8 | 3.5 | 3.0 | 1.9 |
+
+BrowseComp+ (Table 11): MemProbe 90.0 (+40.0) dependent PG; ExpRAG +32.0; ReMem +26.0 then SG −10.0; Mem0 conventional SG −11.0. Std 14.9 dependent vs 2.3 conventional.
+
+**Findings.**
+1. Dependent streams separate methods; conventional streams compress them (9.4 vs 3.0; 14.9 vs 2.3).
+2. On conventional streams every memory method is at or below ReAct on the first pass.
+3. On held-out tasks every memory method is below ReAct (−0.8 to −11.7). Memory from one source interferes on another.
+4. Plasticity and stability trade off: the three methods with large PG have SG ≤ 0; DC-RS has the best conventional SG and the worst GG.
+5. No forgetting window: PG stays +18 at 76 tasks' distance, Hits@2 > 90%. On dependent streams PG rises with position (+8.3 → +22.2); on conventional streams it falls (MMLU-Pro +8.5 → +0.5).
+6. MemProbe ablation: oracle feedback in place of the judge changes nothing; dropping any of the three stores hurts on dependent streams, not on conventional.
+
+**Caveats.** Synthetic reuse pairs are an upper bound for "reuse when it is exactly there." Held-out tasks are still coding, so GG is a mild shift. 35B backbone with top-2 retrieval (B.9 claims the same trends on gpt-oss-120b and Sonnet 5). No drift, no budget, no human baseline, no grading of memory contents, memory writes judged only by the agent. Stream-position results are single-run.
+
+**Where it sits.** The retrieve stage with the best controls in the field: per-task memoryless baseline, a second pass that isolates consolidation, a held-out split. The lesson other benchmarks inherit is finding 1: a flat result on a stream without built-in reuse is uninformative. It predates and explains CL-Bench's and AgentStream's "memory does not beat context" results, which were measured on streams of the conventional kind.
+
 ## Sources
 ApprenticeBench: neocognition.io/blog/apprentice-bench, apprenticebench.com (JS-rendered; numbers from the Nov 4 report). CLE: haoyu-zhao.github.io/CLE, arXiv 2610.33956, github.com/haoyu-zhao/Continual-Learning-Exam, HF Continual-Learning-Exam/CLE-Lite. CL-Bench: arXiv 2606.05661. AgentCL: arXiv 2606.02461 (v3, Sep 2026). AgentStream: arXiv 2608.00155, github.com/microsoft/Sico. Evo-Memory: arXiv 2511.20857. StreamBench: arXiv 2406.08747. LifeVal: arXiv 2611.06687 (local PDF ~/Documents/papers/2611.06687v1.pdf). SkillLearnBench 2604.20087, EvoMemBench 2605.18421, LifelongAgentBench 2505.11942, MemoryAgentBench 2507.05257, ACE 2510.04618, RL's Razor 2509.04259, sparse memory finetuning 2510.15103. Subagent-fetched paper sections marked "summary" in the fetch were not read verbatim; spot-check Table 1 of CLE and CL-Bench before quoting cost figures.
