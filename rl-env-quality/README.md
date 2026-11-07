@@ -74,10 +74,15 @@ Each is a prompt-plus-checklist or an agent with tools. They are themselves mode
 which is why the human checks below exist.
 
 **1. Task soundness.** A judge is given the task prompt (and for SWE the repository) with the
-reference solution withheld, and runs a checklist: Does the prompt reference something the agent
-can't see (a figure, an attachment, an earlier discussion)? Does it contradict itself? Can it be read
-two ways? Does it demand a format the grader can't handle? Is the answer guessable from the form of
-the question (yes/no, multiple choice, a quantity with few possible values)? The reference is withheld
+reference solution withheld, and runs a checklist:
+- references something the agent can't see — a figure, an attachment, an earlier discussion;
+- contradicts itself or is missing an assumption;
+- can be read two ways;
+- demands an answer format the grader can't handle;
+- answer guessable from the form of the question — yes/no, multiple choice, a quantity with few
+  possible values, a definition to recite.
+
+Any flag fails the task; repairable prompts are rewritten and re-judged. The reference is withheld
 because a judge who sees the answer rationalizes the task from it.
 
 **2. Specification ↔ verifier alignment.** The prompt and the verifier must demand the same set of
