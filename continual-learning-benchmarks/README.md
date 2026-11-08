@@ -1,6 +1,6 @@
 # Continual learning benchmarks for LLM agents
 
-Notes on how agents are tested on learning from experience. We read eight benchmarks: ApprenticeBench, CLE, ServeLearnBench, ReScopeBench, MemPABench, SCLATE, EvoAudit, AgentCL. Others we only skimmed are listed at the end. Longer working notes are in `archive/`.
+Notes on how agents are tested on learning from experience. We read eight benchmarks: ApprenticeBench, CLE, ServeLearnBench, ReScopeBench, MemPABench, SCLATE, EvoAudit, AgentCL. Longer working notes are in `archive/`.
 
 ## 1. What "learning" means here
 
@@ -77,40 +77,90 @@ Instead of writing notes, the agent can rewrite its own harness: prompts, skills
 
 ## 7. The benchmarks
 
-**ApprenticeBench** (NeoCognition). A new accounts-payable clerk's first hundred bills at a simulated construction company. It gets six months of old bills and a month of mentor feedback, then keeps notes in a text file. Best model 72%, best human 51%. Without history or feedback, 11%. Almost no drift. Private, single run, two humans.
+### ApprenticeBench (NeoCognition, Sept 2026)
 
-**CLE** (UCL). 120 job tasks, each five levels where later levels build on earlier ones. Best agent clears 48% of levels. Feedback plus one retry adds a median 5 points, which is small. No no-memory baseline, so you cannot tell learning from a second try.
+**Mental model.** A new accounts-payable clerk's first hundred bills.
 
-**ServeLearnBench** (CMU, Amazon). Retail, banking, and sales tasks with hidden rules that change. Score-only feedback. Given the rule, agents score 95; with no memory, 14; best learner, 62. Learning costs 4 to 100 times more than being told. The more different answers a method tries, the better it learns.
+**Setup.** A simulated construction company running real Odoo accounting software. The agent joins in May. It gets six months of old bills, the company handbook, and a tutorial. Then it processes 100 new bills in order, with no reset. In the first month a mentor corrects every bill. After that, feedback only comes at month end.
 
-**ReScopeBench** (HKUST, Huawei). 18 fake business apps, 26 silent changes, a lookup budget, and grading of the memory itself (Section 4). Best model goes from 26 without memory to 81 with it.
+**What has to be learned.** Company habits you can only pick up on the job: which cost code each item goes to, which vendor always bills in the wrong units, that the tax line must be 9.125% and not zero, that a safety certificate expired, that a sign-off limit changed in October.
 
-**MemPABench** (NYU Abu Dhabi). Interaction preferences and autonomy (Section 5).
+**How the agent learns.** It writes Markdown notes through a normal Claude Code or Codex setup. No special memory system.
 
-**SCLATE** (Apple). A simulated clock and agent scheduling (Section 5). Also the only one that trains weights: a 4B model gains 8 to 12 points on later days.
+**Results.** Best model 72%, best human tester 51%, second human 40%. One model tested with parts removed: 11% with nothing, 31% with old bills only, 35% with mentor feedback only, 43% with both. The agents slowed down as their notes grew to hundreds of thousands of words; the humans sped up. One model was corrected 17 times on the same mistake and never changed.
 
-**EvoAudit** (USTC and others). Harness evolution (Section 6).
+**Catch.** Private. One run per model. Only two humans. Almost no drift (one rule change). The company that built it sells the agent.
 
-**AgentCL** (Ohio State). Dependent vs conventional streams, and the plasticity, stability, generalization metrics (Sections 1 and 2).
+### CLE, Continual Learning Exam (UCL, Oct 2026)
 
-## 8. Open problems
+**Setup.** 120 job tasks written by 50+ domain experts across 89 roles: equity analyst, bioinformatician, load forecaster, music engraver. Each task is a ladder of five levels. Each level is an email from a manager asking for a deliverable (a spreadsheet, a report, a patch). Later levels build on earlier work and earlier files. Real public data, often thousands of files per task.
 
-- Grade memory contents on a simulated calendar: ReScopeBench's answer key on SCLATE's clock.
-- Make asking cost something. In MemPABench, always asking first is free.
-- Add noise between sessions.
-- Get human baselines. Only ApprenticeBench has any.
-- Run things more than once. Most results are a single run, and run-to-run noise (2 to 5 points) is as big as most gains.
+**How it runs.** All 120 tasks in one fixed order. The agent keeps its memory across tasks. A level passes only if every item on a hidden checklist passes, and passing unlocks the next level. Two settings: one try per level, or one try plus feedback naming what failed and a second try.
 
-## Skimmed, not read
+**Results.** Best agent (Opus 5 in Claude Code) clears 48% of levels and finishes all five on 23% of tasks. Feedback plus a retry adds a median 5 points. The harness matters: on the same models, Hermes beats OpenClaw by about 6 points.
 
-| Benchmark | arXiv | One line |
-|---|---|---|
-| CL-Bench | 2606.05661 | Hidden structure in six domains; plain context beats memory systems on most tasks |
-| AgentStream | 2608.00155 | Conventional streams; only 34 of 45 setups beat no memory |
-| CLR-Bench | 2610.40758 | Hidden rules added per level; one fixed lesson beats every self-improvement method |
-| EvoHarnessBench | 2609.04280 | Adding tools and skills makes the agent forget old tasks |
-| Δτ-Bench | 2610.34238 | Tool set changes over time; best 42% |
-| Harness-Delta Attribution | 2610.22466 | Most harness-evolution gain is overfitting |
-| Memento 3 | 2610.11794 | Model writes code that emulates the environment and plans inside it |
-| LifeVal | 2611.06687 | Models rarely use facts buried in past conversations |
-| ARC-AGI-3 | 2603.24621 | Learning inside one game; humans 100%, models under 1% |
+**Catch.** No run without memory, so you cannot separate learning from just getting a second try. The authors say so. Only 20 of the 120 tasks are released, and only after approval. The released tasks are files and folders; the mock apps are in the gated package.
+
+### ServeLearnBench (CMU and Amazon, Oct 2026)
+
+**Setup.** Three jobs: retail support (cancel, return, exchange orders), bank case review (approve or deny transactions), and writing short sales pitches. The agent has a manual. Hidden rules override the manual and change over time.
+
+**How the rules change.** Time is split into windows. Between windows a rule can switch on, switch off, narrow, or come back. Example: "block exchange of audio items" is off, then on, then off, then on again. In banking it is a number: the approval limit for electronics is $650, then $460, then $650. In sales the hidden buyer type changes.
+
+**How it runs.** Each window has practice tasks with a score, then test tasks with no feedback. The agent only ever sees a score. Never the rule, never a correction. Some tasks need the hidden rule; others are fully covered by the manual, which lets them check whether learning breaks things that already worked.
+
+**Results.** Told the rule, agents score 95. With no memory, 14. Best learning system, 62. On the hardest retail level the typical setup scores 22. Every learning system got worse on tasks the manual already covered. Learning costs 4 to 100 times more than being told. Dropping a rule that went away is as slow as learning it. The more different answers a system tries when it keeps failing, the better it learns, and this depends on the harness, not the model. Training a 14B or 32B model on this was tried and abandoned: too few successes to learn from.
+
+**Catch.** One run each. The five learning systems are built very differently, so the comparison is between whole systems.
+
+### ReScopeBench (HKUST and Huawei, Nov 2026)
+
+**Setup.** 18 fake business apps modeled on real ones (SAP, Kubernetes, ticketing, clinical records), with made-up names so the model cannot know them in advance. Streams of 16 to 32 tasks per app. 26 silent changes: a folder moves, a policy changes, a permission is revoked.
+
+**How it was built.** Backwards. The authors first picked the facts an agent should learn, wrote an answer key for each, then wrote tasks that need those facts, then scheduled changes that break specific facts.
+
+**How it runs.** Each lookup costs budget, so rereading everything every time is not affordable. Each model runs twice: once keeping its memory between tasks, once wiping it. After each task, a judge reads the agent's memory and checks it against the answer key.
+
+**Results.** Best model goes from 26 without memory to 81 with it. Weak models barely move. After a change, agents keep 91% of facts that are still true but record only 65% of the new ones four tasks later, and 38% on the first task. Most models write down where things are more completely than the rules for using them.
+
+**Catch.** One run each. The memory judge was checked against another AI, not humans. Extra junk in memory is not penalized.
+
+### MemPABench (NYU Abu Dhabi, Oct 2026)
+
+**Mental model.** A course and its exams. The exams are thrown away.
+
+**Setup.** Four simulated users, based on sitcom characters with the names changed. Each user has 28 hidden preferences: 14 behaviors (how long to talk, whether to explain, whether to act without asking, whether to message unprompted) times work and home. Each lives in a four-month world with calendars, messages, and files.
+
+**How it runs.** 99 sessions. Each one is a normal task built so the agent has to make one behavior choice, and the user reacts but never says the rule. Five times, something goes wrong and the user changes a preference. At the end, the agent is tested on copies of its memory, and the copies are deleted so the tests never teach anything.
+
+**Results.** Fact-oriented memory systems (Mem0, MemOS, RAG) score the same as no memory, about 50% against 45% chance. They stored the user's complaints but did not bring them back at the right moment. Putting all memory in the prompt scores 59%. Keeping work and home apart, and following a changed preference, both sit at 10 to 25%. Preferences about actions (asking first, messaging unprompted) are the hardest. Even when told the right preference, models fall back to their habits 40% of the time on the hard ones.
+
+**Catch.** Never checks whether the task got done. Asking first is always free. Nothing happens between sessions.
+
+### SCLATE (Apple, Sept 2026)
+
+**What it is.** Not a benchmark. A way to run benchmarks with real time in them.
+
+**Two ideas.** Time passes: the clock runs while the agent works and jumps over idle gaps, so 40 days of work runs in about 6 hours. The agent can schedule things: a nightly memory clean-up or a reminder fires at the right simulated time. It runs real harnesses (Claude Code, Codex, Hermes) unchanged.
+
+**Results.** On a 30-workday office benchmark, every memory setup beat no memory, but no setup was best for every model. On a recall test split into daily sessions, Claude Code's memory scored 85 to 91 and Hermes's 51 to 66, because Hermes's memory fills up and drops facts. It also trains weights: a 4B model trained this way gains 8 to 12 points on later days and learns to write more useful notes.
+
+**Catch.** Grades the final answer only. The training teacher saw the correct feedback, which flatters the result.
+
+### EvoAudit, "Beneath the Surface" (USTC and others, Nov 2026)
+
+**Setup.** Tests four methods that let an agent rewrite its own harness, on a banking benchmark and a coding benchmark, with two harnesses. Each original and evolved agent runs eight times, so they can see which tasks were gained and which were lost.
+
+**Results.** Every evolved agent gained some tasks and lost others. Gains were 2 to 7 points, inside the run-to-run noise for many. Picking the best-scoring version to improve further was worse than picking at random on banking. A stricter rule for keeping changes threw away the best version in 9 of 15 cases. Their improved method beats the weakest of the four by 4 to 10 points and the strongest by 1 to 2.
+
+**Catch.** One model, one random seed.
+
+### AgentCL (Ohio State, Sept 2026)
+
+**Setup.** Builds two kinds of task stream from the same tasks. In the dependent stream, a simpler subtask comes earlier and its solution is needed later. In the conventional stream, the subtasks are left out. Coding and web research tasks, plus a held-out set from a different source.
+
+**How it runs.** Every task is run three ways: with no memory, with memory being written (first pass), and again with memory frozen (second pass). That gives plasticity, stability, and generalization (Section 1).
+
+**Results.** On the dependent stream, the best memory methods gain 18 to 40 points. On the conventional stream, every method is at or below no memory. On held-out tasks, every method is below no memory. Methods that learn fast tend to lose it on the second pass. The memory found the right earlier task even when it was 76 tasks back.
+
+**Catch.** The reuse is built in on purpose, so these gains are a best case.
