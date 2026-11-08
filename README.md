@@ -12,6 +12,10 @@ notebook.
   learning half: methods by where the update lands (context, text memory, harness state, fast weights,
   adapters and full weights), the Sep to Nov 2026 parametric literature with numbers, the delta rule and
   the two forgetting fixes worked in Python, the gating pattern, and where Core Automation sits.
+- [ttt-discover/](ttt-discover/): TTT-Discover (test-time RL on one problem, arXiv 2601.16175) worked through:
+  the select, roll out, score, sharpen, backprop loop; the reuse ladder; the entropic objective on a kernel
+  example; why β is chosen per group so KL = ln 2 ("about half the batch"); PUCT on a toy archive; the
+  Table 8 ablation; and what the 118 follow-ups found.
 - [attention/](attention/): where memory and compute actually go in modern
   attention mechanisms (standard, FlashAttention, MLA, DSA, KDA), worked
   through on GLM-5.3-Flash's real dimensions. Includes a line-by-line
