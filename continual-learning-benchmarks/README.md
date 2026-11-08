@@ -1,6 +1,18 @@
 # Continual learning benchmarks for LLM agents
 
-Notes on how agents are tested on learning from experience. We read eight benchmarks: ApprenticeBench, CLE, ServeLearnBench, ReScopeBench, MemPABench, SCLATE, EvoAudit, AgentCL. Longer working notes are in `archive/`.
+Notes on how agents are tested on learning from experience. We read eight benchmarks and sort them into five buckets by what changes over time. Longer working notes are in `archive/`.
+
+| Bucket | What changes over time | Benchmarks |
+|---|---|---|
+| Sequential tasks | Nothing in the world changes. Later tasks reuse what earlier tasks taught. | ApprenticeBench, CLE, AgentCL |
+| Environment drift | The rules or state of the world change under the agent. | ServeLearnBench, ReScopeBench |
+| Preference change | The user's wishes change, and differ by context. | MemPABench |
+| Time and lifecycle | Days pass, sessions restart, the agent schedules its own actions. | SCLATE |
+| Self-modification | The agent rewrites its own harness. | EvoAudit |
+
+A sixth kind, memory recall, sits outside continual learning: find a fact in a long history, with no improvement over a stream expected (LongMemEval, LifeVal). SCLATE turns recall into the time bucket by cutting the history into sessions.
+
+Some benchmarks touch two buckets. ApprenticeBench has one rule change, so a little drift. MemPABench learns each preference over three sessions, so it is also sequential.
 
 ## 1. What "learning" means here
 
@@ -23,59 +35,22 @@ stability      = S - F         # -2   the agent could not get its own notes back
 generalization = H - 72        # -1   memory did not help elsewhere
 ```
 
-## 2. Dependent streams vs conventional streams
+## 2. Two things to check in any benchmark
 
-A stream is a sequence of tasks. AgentCL splits them in two:
+**Was reuse built into the stream?** A stream is a sequence of tasks. AgentCL splits them in two:
 
 - **Dependent**: later tasks need what earlier tasks taught. ApprenticeBench (bill 60 needs the cost code learned on bill 12), CLE, ServeLearnBench, ReScopeBench, MemPABench.
 - **Conventional**: tasks only share a topic. Most "stream an existing dataset" benchmarks (AgentStream, Evo-Memory, MMLU-Pro).
 
 This decides everything. On dependent streams, memory methods gain 14 to 40 points. On conventional streams and held-out tasks, every memory method is at or below no memory. So when a paper says "memory does not beat plain context," first ask whether the stream had anything to reuse.
 
-## 3. Drift: the world changes
-
-In drift benchmarks the environment changes under the agent, and nobody says so. A rule that was true is now false, or a user changed their mind.
-
-- **ServeLearnBench**: hidden rules switch on and off between windows. Example: "block exchange of audio items" is off, then on, then off, then on again. The agent only sees its score drop.
-- **ReScopeBench**: 26 silent changes. A file moved, a policy changed. The agent finds out when a call fails.
-- **MemPABench**: five times per user, something goes wrong and the user changes a preference.
-
-What they find: keeping old facts is easy, updating them is hard. ReScopeBench agents keep 91% of facts that stayed true but record only 65% of facts that changed, four tasks after the change. ServeLearnBench agents drop a withdrawn rule as slowly as they learned it.
-
-ServeLearnBench also probes forgetting in two ways. Can the agent drop a rule when it goes away? And does learning break tasks it already did right? (It does. Every method loses accuracy on tasks the manual fully covers.)
-
-## 4. What gets graded: the result, or the memory?
-
-Almost every benchmark grades only the final result: was the bill right, did the order end in the right state. They never open the memory file.
+**Is the result graded, or the memory?** Almost every benchmark grades only the final result: was the bill right, did the order end in the right state. They never open the memory file.
 
 ReScopeBench is the exception. The authors wrote an answer key for what should be in memory after each task, and an LLM judge checks the memory against it. That is how they can say "the agent finished the task but left the wrong answer in its notes." Example: the agent found a moved folder and finished the job, but its notes still pointed to the old folder.
 
-## 5. Personal agents
+## 3. Sequential tasks
 
-**Interaction preferences** are how the user wants the agent to act, not what the agent should know. How long to talk, whether to explain, whether to ask first, whether to message the user unprompted.
-
-**Autonomy** is the key axis. For some things the user wants the agent to just do it. For others the agent must ask first. The right answer can differ at work and at home.
-
-**MemPABench** is the one benchmark built on this. Mental model: a course and its exams. The agent lives with a simulated user for 99 sessions over four months (the course). The user never states a preference, only reacts. Then the agent is tested on frozen copies of its memory, and the copies are thrown away (the exams), so an exam never teaches anything. It never scores whether the task got done, only whether the agent behaved the way the user wanted.
-
-Results: memory systems built for facts (Mem0, MemOS, RAG) score the same as no memory, about 50% against 45% chance. They store the user's complaint but never retrieve it. Putting everything in the prompt gets 59%. Autonomy-type preferences are the hardest. Even when told the right preference, models fall back to their habits 40% of the time on the hard ones.
-
-**SCLATE** adds two things personal agents need:
-
-1. **Time passes.** The clock runs while the agent works and jumps over idle gaps, so 40 days run in 6 hours. Facts written on day 3 must survive restarts and be found on day 28. This tests memory the way real use does, instead of dumping everything into one long prompt.
-2. **The agent can schedule things.** It can set a nightly memory clean-up or a reminder, and the clock will fire it. A personal agent is idle most of the time and sometimes acts on its own; turn-based benchmarks cannot represent that.
-
-Still missing everywhere: in real life a lot happens between sessions. Emails arrive, plans change. In these benchmarks nothing happens between sessions, so memory only ever holds useful material.
-
-## 6. Harness evolution (adjacent)
-
-Instead of writing notes, the agent can rewrite its own harness: prompts, skills, tools, code. This is next door to continual learning. One change affects every future task, so gains and losses are both bigger.
-
-**EvoAudit** tested four such methods. Every evolved agent solved some new tasks and lost some old ones. Best case: +15 tasks, −4. Gains were 2 to 7 points. Most cost more to run. A related paper found 54% of reported gains were overfitting to the tasks used during evolution.
-
-**A-Evolve** is a framework for this. It edits files in the agent's workspace, keeps a change only if it passes held-out tasks, and tags each kept change in git.
-
-## 7. The benchmarks
+Later tasks need what earlier tasks taught, and the world stays the same. This is the plainest form of continual learning: acquire, then reuse.
 
 ### ApprenticeBench (NeoCognition, Sept 2026)
 
@@ -101,6 +76,27 @@ Instead of writing notes, the agent can rewrite its own harness: prompts, skills
 
 **Catch.** No run without memory, so you cannot separate learning from just getting a second try. The authors say so. Only 20 of the 120 tasks are released, and only after approval. The released tasks are files and folders; the mock apps are in the gated package.
 
+### AgentCL (Ohio State, Sept 2026)
+
+**Setup.** Builds two kinds of task stream from the same tasks. In the dependent stream, a simpler subtask comes earlier and its solution is needed later. In the conventional stream, the subtasks are left out. Coding and web research tasks, plus a held-out set from a different source.
+
+**How it runs.** Every task is run three ways: with no memory, with memory being written (first pass), and again with memory frozen (second pass). That gives plasticity, stability, and generalization (Section 1).
+
+**Results.** On the dependent stream, the best memory methods gain 18 to 40 points. On the conventional stream, every method is at or below no memory. On held-out tasks, every method is below no memory. Methods that learn fast tend to lose it on the second pass. The memory found the right earlier task even when it was 76 tasks back.
+
+**Catch.** The reuse is built in on purpose, so these gains are a best case.
+
+## 4. Environment drift
+
+In drift benchmarks the environment changes under the agent, and nobody says so. A rule that was true is now false.
+
+- **ServeLearnBench**: hidden rules switch on and off between windows. Example: "block exchange of audio items" is off, then on, then off, then on again. The agent only sees its score drop.
+- **ReScopeBench**: 26 silent changes. A file moved, a policy changed. The agent finds out when a call fails.
+
+What they find: keeping old facts is easy, updating them is hard. ReScopeBench agents keep 91% of facts that stayed true but record only 65% of facts that changed, four tasks after the change. ServeLearnBench agents drop a withdrawn rule as slowly as they learned it.
+
+ServeLearnBench also probes forgetting in two ways. Can the agent drop a rule when it goes away? And does learning break tasks it already did right? (It does. Every method loses accuracy on tasks the manual fully covers.)
+
 ### ServeLearnBench (CMU and Amazon, Oct 2026)
 
 **Setup.** Three jobs: retail support (cancel, return, exchange orders), bank case review (approve or deny transactions), and writing short sales pitches. The agent has a manual. Hidden rules override the manual and change over time.
@@ -125,6 +121,14 @@ Instead of writing notes, the agent can rewrite its own harness: prompts, skills
 
 **Catch.** One run each. The memory judge was checked against another AI, not humans. Extra junk in memory is not penalized.
 
+## 5. Preference change
+
+**Interaction preferences** are how the user wants the agent to act, not what the agent should know. How long to talk, whether to explain, whether to ask first, whether to message the user unprompted.
+
+**Autonomy** is the key axis. For some things the user wants the agent to just do it. For others the agent must ask first. The right answer can differ at work and at home.
+
+MemPABench is the one benchmark built on this.
+
 ### MemPABench (NYU Abu Dhabi, Oct 2026)
 
 **Mental model.** A course and its exams. The exams are thrown away.
@@ -137,6 +141,15 @@ Instead of writing notes, the agent can rewrite its own harness: prompts, skills
 
 **Catch.** Never checks whether the task got done. Asking first is always free. Nothing happens between sessions.
 
+## 6. Time and lifecycle
+
+SCLATE adds two things personal agents need:
+
+1. **Time passes.** The clock runs while the agent works and jumps over idle gaps, so 40 days run in 6 hours. Facts written on day 3 must survive restarts and be found on day 28. This tests memory the way real use does, instead of dumping everything into one long prompt.
+2. **The agent can schedule things.** It can set a nightly memory clean-up or a reminder, and the clock will fire it. A personal agent is idle most of the time and sometimes acts on its own; turn-based benchmarks cannot represent that.
+
+Still missing everywhere: in real life a lot happens between sessions. Emails arrive, plans change. In these benchmarks nothing happens between sessions, so memory only ever holds useful material.
+
 ### SCLATE (Apple, Sept 2026)
 
 **What it is.** Not a benchmark. A way to run benchmarks with real time in them.
@@ -147,6 +160,12 @@ Instead of writing notes, the agent can rewrite its own harness: prompts, skills
 
 **Catch.** Grades the final answer only. The training teacher saw the correct feedback, which flatters the result.
 
+## 7. Self-modification (adjacent)
+
+Instead of writing notes, the agent can rewrite its own harness: prompts, skills, tools, code. This is next door to continual learning. One change affects every future task, so gains and losses are both bigger.
+
+**A-Evolve** is a framework for this. It edits files in the agent's workspace, keeps a change only if it passes held-out tasks, and tags each kept change in git.
+
 ### EvoAudit, "Beneath the Surface" (USTC and others, Nov 2026)
 
 **Setup.** Tests four methods that let an agent rewrite its own harness, on a banking benchmark and a coding benchmark, with two harnesses. Each original and evolved agent runs eight times, so they can see which tasks were gained and which were lost.
@@ -154,13 +173,3 @@ Instead of writing notes, the agent can rewrite its own harness: prompts, skills
 **Results.** Every evolved agent gained some tasks and lost others. Gains were 2 to 7 points, inside the run-to-run noise for many. Picking the best-scoring version to improve further was worse than picking at random on banking. A stricter rule for keeping changes threw away the best version in 9 of 15 cases. Their improved method beats the weakest of the four by 4 to 10 points and the strongest by 1 to 2.
 
 **Catch.** One model, one random seed.
-
-### AgentCL (Ohio State, Sept 2026)
-
-**Setup.** Builds two kinds of task stream from the same tasks. In the dependent stream, a simpler subtask comes earlier and its solution is needed later. In the conventional stream, the subtasks are left out. Coding and web research tasks, plus a held-out set from a different source.
-
-**How it runs.** Every task is run three ways: with no memory, with memory being written (first pass), and again with memory frozen (second pass). That gives plasticity, stability, and generalization (Section 1).
-
-**Results.** On the dependent stream, the best memory methods gain 18 to 40 points. On the conventional stream, every method is at or below no memory. On held-out tasks, every method is below no memory. Methods that learn fast tend to lose it on the second pass. The memory found the right earlier task even when it was 76 tasks back.
-
-**Catch.** The reuse is built in on purpose, so these gains are a best case.
