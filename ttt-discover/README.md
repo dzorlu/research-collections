@@ -156,6 +156,50 @@ Reuse does most of the work; without it RL is no better than sampling. Weight up
 - **Not a Gödel machine.** The learning procedure (RL rule, PUCT, objective) is fixed by hand. Only the LoRA and the archive change, for one problem. CLE's definition: fixed-procedure TTT is not recursive self-improvement.
 - **Not the first RL-in-the-loop.** EvoTune, MiGrATe and ThetaEvolve (2511.23473) did it before; TTT-Discover beats ThetaEvolve by small margins on Qwen3-8B. New here: the entropic objective with adaptive β and PUCT reuse.
 
+## The main follow-up lineage: separate the strategist from the executor
+
+The strongest follow-ups keep TTT-Discover's loop (PUCT reuse, entropic objective, LoRA) but stop training the model that writes the solution. A small model is trained to propose what to try; a frozen, stronger model implements it.
+
+```python
+parent = puct_select(archive)                      # unchanged
+idea   = guide.sample(prompt(problem, parent))     # small model, trained: "fuse the two matmuls, keep the
+                                                   #   intermediate in shared memory"
+code   = executor.generate(parent, idea)           # big frozen model writes the kernel
+R      = score(run(code))                          # same verifier
+archive.add(code, R)
+guide.lora_step(entropic_advantage(R))             # only the strategist learns
+```
+
+| Paper | Who | Trained at test time | Frozen executor | Result vs TTT-Discover |
+|---|---|---|---|---|
+| Guidance-TTT (2610.06269, Oct 2026) | MIT, Paul Pu Liang | 8B guidance model, LoRA r=32, proposes edits in language | GLM-5.2 | wins all 4 tasks (Polyomino 91.89 vs 83.72, TriMul 1129 vs 1262 µs re-evaluated) at about $120 vs $283 |
+| PACEvolve++ (2605.07039, May 2026) | Google / GDM | 4B or 8B advisor, phase-adaptive RL | Gemini-3.1-pro | beats it on load balancing, recommender, Multi-Evolve; calls the entropic objective "the least stable overall" |
+| HarnessTTT (2610.17370, Oct 2026) | Zou and Choi (original authors), NVIDIA | LoRA proposer that writes prompts, tools, middleware | yes | wins Erdős and AC1, loses AC2, ties CP26, with about 1,280 vs 25,600 trajectories |
+| MELD (2610.24454) | GWU | coordinator and scientist policies, alternating GRPO | shared frozen executor | abstract only |
+
+### Why split the roles
+
+1. **Credit assignment.** The verifier scores only the final program, so one number must judge both the strategy and its implementation. With one model, a good idea implemented badly gets R = 0 and the update pushes down the idea tokens too.
+
+   ```python
+   rollouts = [("fuse matmuls",    "correct code", 0.53),
+               ("fuse matmuls",    "off-by-one",   0.00),   # best idea, most negative advantage
+               ("tweak tile size", "correct code", 0.42)]
+   ```
+
+   If an idea is hard to implement and the model fails half the time, training can steer it away from its best idea. With the split, the gradient reaches only the idea tokens; implementation errors are noise on a fixed, competent coder, not training signal.
+
+2. **Sharpening a cleaner target.** TTT-Discover deliberately sharpens, but with one model it sharpens the joint distribution over ideas and code, including lucky implementations. The split sharpens only the distribution over ideas. The executor's distribution over code stays broad, so collapsing onto one strategy still leaves many implementations of it. This also eases the entropy collapse PACEvolve++ reports.
+3. **Smaller action space.** There are far fewer ideas than programs, so the RL signal per idea is less noisy.
+4. **Cost.** RL on an 8B proposer is much cheaper than RL on a 120B solver.
+5. **No damage to the strong model.** Sharpening touches only the proposer, so the frontier executor keeps its general coding skill. This is the continual-learning concern in miniature: confine the update to a small, separable component.
+
+### Caveats
+
+- With a matched gpt-oss-120b executor, Guidance-TTT scores 83.19 vs TTT-Discover's 83.72 on Polyomino. Much of the headline win is the stronger frozen executor, not a better learning rule.
+- Training the 8B model to write solutions directly fails: 41.63 on Polyomino and 9665 µs on TriMul. Small models can learn strategy but not implementation at this budget.
+- This is the weights-based version of harness learning (`../continual-learning-benchmarks/METHODS.md`, harness state): the strategy lives in a small model's LoRA instead of a prompt or skill file. HarnessTTT sits between the two.
+
 ## Since publication (as of Nov 2026)
 
 - About 118 citing papers. The extensions that beat it train a small strategist and keep a stronger executor frozen (Guidance-TTT, PACEvolve++, HarnessTTT).
