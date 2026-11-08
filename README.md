@@ -8,7 +8,10 @@ notebook.
   from experience, from the benchmark side. Eight benchmarks read in full (ApprenticeBench, CLE,
   ServeLearnBench, ReScopeBench, MemPABench, SCLATE, EvoAudit, AgentCL): a dimension matrix, one card each,
   how the environments are built, every metric worked in Python, nine findings, open problems, and a
-  one-row-each catalog of everything else.
+  one-row-each catalog of everything else. [METHODS.md](continual-learning-benchmarks/METHODS.md) is the
+  learning half: methods by where the update lands (context, text memory, harness state, fast weights,
+  adapters and full weights), the Sep to Nov 2026 parametric literature with numbers, the delta rule and
+  the two forgetting fixes worked in Python, the gating pattern, and where Core Automation sits.
 - [attention/](attention/): where memory and compute actually go in modern
   attention mechanisms (standard, FlashAttention, MLA, DSA, KDA), worked
   through on GLM-5.3-Flash's real dimensions. Includes a line-by-line
