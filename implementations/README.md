@@ -30,6 +30,11 @@ Backprop practice (hand-written forward and backward passes in NumPy, written be
   loss against a fixed value and every gradient against finite differences. Reference:
   `reference/backprop_practice_4.py`.
 
+Distributed drills live in `distributed/`: `dayNN_*.py` are the stubs, `reference/` the solutions, `_harness.py`
+runs N CPU processes with gloo and logs calls and bytes per rank. Run from that folder with the pglab env:
+`cd distributed && python day01_collectives.py`. After editing a reference, regenerate stubs with
+`python reference/_make_stubs.py`.
+
 Conventions:
 
 - `XX_name.ipynb` is the unsolved drill; `XX_name_solved.ipynb` is a worked version.
