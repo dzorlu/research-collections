@@ -1,43 +1,119 @@
 # Roadmap
 
-Target: post-training role, from data to large-scale RL optimization. The three coding hints stay the anchor
-(tensor manipulation; distributed computing and efficiency; components within a training pipeline), scoped to
-post-training and RL. Attention, especially the forward pass, gets its own track. Forward and backward passes by
-hand are the daily warm-up. Every drill is judged on two yardsticks: correct (it matches a single-process or
-unsharded reference) and efficient (bytes, calls, memory per rank or per request, overlap, FLOPs per byte).
-No LeetCode, no Q-learning. RL loss corrections and async RL design are existing strengths: they show up as talking
-points, not drills.
+Target: post-training role. Two pillars, in 15 days of 2 to 3 hours each:
 
-Format: every new drill is a `.py` file like `distributed/reference/01_ring_allreduce.py`. The docstring states the
-task and the yardsticks, the solution goes between `# >>> TODO` and `# <<< TODO`, and the tests under `__main__`
-assert correctness first, then efficiency. Distributed drills run on gloo through `_harness.launch` at 2 and 4
-ranks (6 for the weight-reshard drill), with sizes not divisible by N. Write blank-page first, then open the
-reference listed for the drill. Collectives are hand-rolled on local tensors, as current large-scale stacks do;
-DTensor appears only in one optional cross-check.
+- **Distributed primitives:** understand every collective, implement them from point-to-point sends, predict their
+  cost, and compose them (async and overlap, autograd duals, process groups, context parallel, MoE, weight
+  resharding).
+- **Attention, deeply:** implement all five types (full, sliding, linear, sparse, compressed) and the machinery
+  around them (variable-length batches, paged KV cache, online softmax, the backward pass).
 
-Budget: 15 must-do drills, about 20 hours, over 9 days plus one buffer day. Optional drills are listed; skip them
-unless a day finishes early.
+Every day: 30 minutes reviewing yesterday's core from a blank page under a timer, about 2 hours on the main topic,
+10 to 15 minutes of whiteboard. Every drill is a `.py` file with stubs and tests (`# >>> TODO` / `# <<< TODO`); the
+tests check correctness first, then efficiency. Distributed drills run on CPU with gloo through
+`distributed/_harness.py`, which logs calls and bytes per rank; for each one you first write `predict()` (bytes,
+messages, calls) and the test asserts it equals what the harness measured. Optional GPU sessions run on Modal with
+NCCL. ZeRO/FSDP, pipeline parallel and the RL pipeline drills are whiteboard topics or optional.
 
 ## 0. Day-by-day plan
 
-**Table 1. Plan.** Warm-up 20 to 25 minutes each morning; main work about 2.5 to 3.5 focused hours.
+**Day 1. Collective semantics + full attention.**
+Learn: what every collective does to shapes (all-reduce, reduce-scatter, all-gather, broadcast, all-to-all,
+send/recv); a blocking send without a matching recv deadlocks. Causal multi-head attention with a KV cache and the
+mask offset under a cache.
+Build: call each collective on 4 ranks and assert the shapes you predicted; a ring pass with send/recv. A1.
+Done when: shapes match; decoding with the cache equals the full forward.
 
-| Day | Warm-up | Main work | Whiteboard |
-|---|---|---|---|
-| 1 | W1 two-layer net, timed | A1 full MHA + KV cache (timed redo), A2 GQA and sliding window, A3 varlen | KV bytes per token |
-| 2 | W3 attention backward | A4 mixed batch + paged KV, A5 multi-turn KV reuse | KV per request, per GPU |
-| 3 | W7 GQA backward | A6 LSE merge (local and split across ranks), A7 compressed (MLA) | MHA vs GQA vs MLA cache bytes |
-| 4 | W2 LayerNorm, RMSNorm | A8 linear attention (parallel, recurrent, chunked, gated delta), A9 sparse top-k | prefill vs decode FLOPs per byte |
-| 5 | W4 SwiGLU | D2 data parallel with buckets, D3 tensor-parallel MLP | ring bytes, NVLink vs cross-rack |
-| 6 | W5 top-k gating | D4 FSDP by hand, with global grad-norm clip | Adam and ZeRO memory per rank |
-| 7 | W6 policy gradient through logits | T1 MoE routing with router replay, D6 MoE expert parallel, D5 weight reshard | weight-update bandwidth |
-| 8 | W1 again, timed | P1 length-balanced packing, P2 chunked log-probs + policy loss | logits memory |
-| 9 | W3 again, timed | P3 async rollout buffer with staleness bound and resume | inference share, Little's law, checkpoints |
-| 10 | any | Mock: A4 and D5 from a blank page under time; talking points out loud; then optional drills | all of section 6 |
+**Day 2. Ring all-reduce.**
+Learn: reduce-scatter and all-gather as rings; all-reduce is the two in sequence; why the ring is bandwidth-optimal.
+Build: ring reduce-scatter and all-gather from send/recv, composed into all-reduce, with `predict()`.
+Done when: equal to `dist.*` on uneven sizes; predicted bytes equal measured.
+Whiteboard: 1 GB all-reduce on 8 GPUs, NVLink vs. across racks.
+Optional (Modal): NCCL all-reduce bandwidth on 2 to 8 GPUs against your prediction.
 
-Seven-day version: day 1 as written; day 2 A4 + A7; day 3 A8 + A9 (A5 and A6 become talking points); day 4 D3 + D4; day 5 D5 + D6; day 6 P1 + P2; day 7 P3, then the mock with whatever time is left.
+**Day 3. Sliding window + GQA (A2).**
+Learn: sharing KV heads without copying; MQA; band mask; interleaved local and global layers; ring-buffer cache
+capped at W.
+Build: one attention function with `n_kv_heads` and `window`.
+Done when: GQA equals MHA with repeated KV; the windowed cache equals the masked full cache.
+Whiteboard: KV bytes per token, MHA vs. GQA.
 
-## 1. Attention track (forward pass first)
+**Day 4. Linear attention (A8).**
+Learn: without the softmax, causal attention is a fixed-size state; parallel, recurrent and chunked forms; forget
+gate and delta rule (gated DeltaNet / KDA).
+Build: the three forms, then the gated delta update.
+Done when: the three forms agree; overwriting a key returns the new value.
+Whiteboard: state bytes vs. KV bytes at long context.
+
+**Day 5. Trees and latency + variable-length attention (A3).**
+Learn: broadcast and reduce as trees, recursive doubling; cost = latency x messages + bytes / bandwidth (small
+messages favor trees, large ones rings). Packed sequences: `cu_seqlens` to sequence ids, positions, document mask.
+Build: tree broadcast and recursive-doubling all-reduce; varlen attention.
+Done when: trees equal `dist.*`; varlen equals each sequence alone.
+
+**Day 6. Sparse attention (A9) + uniform all-to-all.**
+Learn: a lightweight indexer scores past tokens, causal top-k, attention over k rows, early queries with fewer than
+k keys. All-to-all as a transpose across ranks.
+Build: sparse top-k attention (1 h); uniform all-to-all from send/recv (1 h).
+Done when: sparse with k >= T equals full attention; all-to-all equals `all_to_all_single`.
+
+**Day 7. Uneven all-to-all + MoE dispatch.**
+Learn: exchange counts first; dispatch tokens to the experts' ranks, combine back in the original order; capacity
+and load imbalance.
+Build: uneven all-to-all with a count exchange; MoE dispatch, expert compute, combine.
+Done when: MoE equals the single-process version; predicted bytes equal measured.
+
+**Day 8. Paged KV cache + mixed batch (A4).**
+Learn: `query_start_loc`, `seq_lens`, `block_table`, `slot_mapping`; decodes and chunked prefills in one flat
+batch.
+Build: write new K, V into paged blocks, gather per request, attend.
+Done when: each request equals A1 run alone.
+Whiteboard: blocks and waste per request.
+
+**Day 9. Online softmax and tiled attention (A6).**
+Learn: running max and running sum; the LSE merge of partial results; attention over key blocks without the T x T
+matrix.
+Build: LSE merge, then a tiled forward.
+Done when: tiled equals full; a fully masked block merges without NaN.
+
+**Day 10. Async, overlap, deadlock.**
+Learn: `isend`, `irecv`, `wait`, `batch_isend_irecv`; overlapping communication with compute; bucketed async
+all-reduce during backward; diagnosing a hang from mismatched collective order.
+Build: bucketed async gradient all-reduce with hooks; fix a deliberately hanging script.
+Done when: gradients equal plain data parallel; the first all-reduce is issued before backward ends.
+Whiteboard: bucket size; ZeRO and FSDP memory and bytes.
+Optional (Modal): a profiler trace showing NCCL overlapping compute.
+
+**Day 11. Attention backward.**
+Learn: the chain through P V, the softmax, and Q Kᵀ; masks need no special backward; GQA sums the gradients of
+shared KV heads.
+Build: dq, dk, dv by hand, multi-head, then GQA.
+Done when: matches autograd in float64.
+
+**Day 12. Autograd through collectives + tensor parallel.**
+Learn: backward duals: all-gather and reduce-scatter, broadcast and reduce, all-reduce and all-reduce, all-to-all
+and its reverse. Megatron's paired communication functions.
+Build: `autograd.Function` wrappers; a column-then-row tensor-parallel MLP.
+Done when: output and grads equal the unsharded MLP; exactly 1 all-reduce forward and 1 backward.
+
+**Day 13. Process groups + ring attention (context parallel).**
+Learn: rank to coordinates, data x tensor groups; queries stay, KV chunks circulate, partial results merge with LSE;
+zigzag balances causal work.
+Build: groups by hand (45 min); ring attention with zigzag (1.5 h).
+Done when: ring attention equals full causal attention; per-rank work is balanced.
+
+**Day 14. Compressed attention (A7) + Ulysses.**
+Learn: cache a small latent, absorb the up-projections at decode; Ulysses swaps sequence sharding for head
+sharding with an all-to-all.
+Build: MLA naive vs. absorbed (1 h); Ulysses attention with your all-to-all (1 h).
+Done when: absorbed equals naive; Ulysses equals full attention.
+Whiteboard: MLA vs. GQA cache bytes; ring vs. Ulysses.
+
+**Day 15. Weight resharding + mock.**
+Learn: trainer layout to inference layout; send only the overlapping slices; version and checksum before adopting.
+Build: resharding with send/recv (1 h); then ring all-reduce and paged-KV attention from a blank page, timed (1 h).
+
+## 1. Attention drill specs (A1 to A9)
 
 Shared setup: x (T, D), H query heads, Hkv KV heads, head dim dh, float64 on CPU. Every drill is checked against a
 plain loop over requests or sequences that calls the reference `mha` from `reference/03_attention.py`.
@@ -115,7 +191,7 @@ Compare afterwards: the metadata slides in the attention-backend presentation
 (`/private/tmp/claude-501/-Users-dzorlu-repos/deb89c54-86dd-49dc-944b-0ad5a02578bd/scratchpad/pdf/vllm_attn.txt`);
 `~/src/torchtitan/torchtitan/models/common/attention/attention.py` for the varlen path.
 
-**A5. KV reuse across multi-turn rollout turns.** Must, 45 min. Builds on A4.
+**A5. KV reuse across multi-turn rollout turns.** Optional (talking point if skipped), 45 min. Builds on A4.
 Spec: a rollout alternates model turns and environment turns. On the next turn, keep the request's blocks, append
 the tool output and the next prompt as a chunked prefill against the cached context, then decode. Full blocks are
 keyed by a hash of (parent hash, block tokens) so identical prefixes across rollouts in a group share blocks with a
@@ -203,93 +279,10 @@ ks, vs = K[idx], V[idx]                                 # (T, k, H, dh)  gathere
 Compare afterwards: `~/src/torchtitan/torchtitan/models/deepseek_v4/attention.py` and `compressor.py` (indexer
 and compressed sparse attention), and the sparse-MLA and indexer slides in the attention-backend presentation.
 
-## 2. Distributed computing and efficiency
+## 2. Optional: training-pipeline drills
 
-The harness logs logical tensor bytes for collectives and wire bytes for point-to-point ops.
+Not in the 15-day plan; use them if time is left, or as talking points.
 
-**D1. Ring all-reduce from send/recv.** Done.
-
-**D2. Data parallel with bucketed, overlapped all-reduce and no_sync accumulation.** Must, 1.5 h.
-Spec: per-parameter post-accumulate-grad hooks fill fixed-size flat buckets; launch `all_reduce(async_op=True)` per
-full bucket; wait before the step; skip communication on the first k - 1 micro-batches.
-Correctness: weights after 3 steps match single-process training on the global batch, loss scaled to the global
-token-weighted mean.
-Efficiency: calls per step = number of buckets; bytes logged = gradient size once per step for any k; the first
-launch happens before the last gradient hook (overlap, from an event list the drill records).
-Compare afterwards: `~/src/picotron/picotron/data_parallel/bucket.py`.
-
-**D3. Tensor-parallel MLP with Megatron f/g autograd functions.** Must, 1.5 h.
-Spec: W1 column-split, W2 row-split; f is identity forward and all-reduce backward, g the reverse.
-Correctness: output, input grad and gathered weight grads match the unsharded MLP.
-Efficiency: exactly one all_reduce forward and one backward per MLP, each B x T x D x bytes.
-Optional (30 min): sequence-parallel variant (all_gather and reduce_scatter instead; same wire bytes, norm and
-residual activations 1 / N per rank).
-Compare afterwards: `~/src/picotron/picotron/tensor_parallel/tp_communications.py`.
-
-**D4. FSDP / ZeRO-3 by hand, with global grad-norm clipping.** Must, 2.5 h. The trainer side of every RL stack.
-Spec: each rank stores a 1 / N slice of each block's flat params; all-gather before a block's forward, free after,
-re-gather in backward, reduce-scatter grads when the block's backward ends; global norm = all_reduce of the sum of
-squares of local slices; AdamW on the local slice with fp32 master and m, v.
-Correctness: matches single-process AdamW plus `clip_grad_norm_` over 3 steps.
-Efficiency: all_gather_into_tensor calls = 2L per step, reduce_scatter_tensor calls = L; wire bytes 1.5x DDP;
-optimizer state per rank 1 / N; peak live full params at most 2 blocks.
-
-```python
-P = n_params * 8                                        # bytes, fp64 in the harness
-ddp_wire = 2 * (N - 1) / N * P                          # one all-reduce
-fsdp_wire = 3 * (N - 1) / N * P                         # gather fwd + gather bwd + reduce-scatter
-```
-
-Optional (20 min): wrap the same model with `fully_shard` and count collectives under `CommDebugMode`; the counts
-should match yours.
-Compare afterwards: `~/src/torchtitan/torchtitan/distributed/fsdp.py`, `FSDP.md`;
-`~/src/nanotron/src/nanotron/optim/zero.py`.
-
-**D5. Weight resharding from the trainer layout to the inference layout.** Must, 2 h. The post-training-specific
-distributed drill.
-Spec: 6 ranks. Ranks 0 to 3 are the trainer: every weight is an FSDP dim-0 shard (1 / 4 of the rows). Ranks 4 and 5
-are one inference replica with TP = 2: fused QKV and MLP up are column-parallel (split by output rows, grouped by
-head so each TP rank gets whole Q heads and whole KV heads), O and MLP down are row-parallel (split by input
-columns). For each (trainer rank, inference rank) pair, compute the intersection of what the trainer holds and what
-the inference rank needs, send only that slice with `batch_isend_irecv`, and assemble. Tag the push with a policy
-version and a checksum per weight; the inference ranks adopt the new weights only if every checksum matches,
-otherwise keep the old version.
-Correctness: each inference rank's shards equal the TP = 2 shards cut from the full weight; a corrupted message
-leaves the old version in place.
-Efficiency: bytes received per inference rank = exactly W / 2 (versus (N - 1) / N x W per rank for a naive
-all-gather to every trainer rank and then a full copy to each inference rank); count messages: column-parallel
-weights need 2 senders per inference rank, row-parallel weights need all 4 (each sends W / 8); optional bucketing of
-small weights into one flat buffer to cut message count.
-
-```python
-W                                                       # (out, in) full weight, never materialized
-trainer_rows = (r * out // 4, (r + 1) * out // 4)       # FSDP shard on trainer rank r
-need_col = (j * out // 2, (j + 1) * out // 2), (0, in)  # column-parallel, inference rank j: rows
-need_row = (0, out), (j * in // 2, (j + 1) * in // 2)   # row-parallel, inference rank j: columns
-send = W_local[lo - r0 : hi - r0, c0:c1]                # intersection only
-```
-
-Compare afterwards: `UpdateWeightFromDistributed`, `UpdateWeightFromTensor` in
-`~/src/slime/slime/backends/fsdp_utils/update_weight_utils.py` and
-`~/src/slime/slime/backends/megatron_utils/update_weight_utils.py`.
-
-**D6. MoE expert parallelism with uneven all_to_all_single.** Must, 1.5 h. Builds on T1.
-Spec: E experts, E / N per rank, top-k; exchange per-destination counts with one `all_to_all_single`, dispatch with
-split sizes, run local experts, reverse all_to_all, combine with router weights in the original order. Accept
-replayed expert indices from T1.
-Correctness: output and grads match a single-process MoE layer with the same capacity rule.
-Efficiency: 1 count exchange + 2 token all_to_alls per forward; dispatch bytes per rank = T x k x D x bytes; received
-tokens per expert never exceed capacity.
-Compare afterwards: `~/src/distributed-training/parallelization/model/expert_parallel.py` (your own);
-`AllToAllTokenDispatcher` in `~/src/torchtitan/torchtitan/models/common/moe/token_dispatcher.py`.
-
-Optional, pre-training heavy:
-- Ring context parallel with zigzag chunks (rank r holds chunks r and 2N - 1 - r), forward only, 1.5 h. Reuses A6's
-  merge. Compare: `HeadTailCPLoadBalancer` in `~/src/torchtitan/torchtitan/distributed/context_parallel.py`.
-- Pipeline 1F1B schedule simulator (bubble (p - 1) / (m + p - 1), peak in-flight p - s at stage s), 45 min.
-  Compare: `~/src/picotron/picotron/pipeline_parallel/pipeline_parallel.py`.
-
-## 3. Components within a training pipeline (RL post-training)
 
 **P1. Length-balanced packing of variable-length rollouts across DP ranks.** Must, 1.5 h.
 Spec: given rollout lengths, sample weights, R data-parallel ranks and a token budget per micro-batch, assign
@@ -355,7 +348,6 @@ Optional:
 - Concat-then-split packing and best-fit bin packing of a corpus (pre-training), 45 min. Compare:
   `~/src/torchtitan/torchtitan/components/data/packing.py`.
 
-## 4. Tensor manipulation
 
 Most tensor work now lives inside the attention track (masks, cu_seqlens, slot mapping, gathers) and P2 (gather,
 segment sums). One standalone drill:
@@ -384,27 +376,7 @@ Optional: Tensor Puzzles (https://github.com/srush/Tensor-Puzzles) as filler.
 Cut: corpus materialization and tail-patching; separate LR-schedule and AdamW drills; ZeRO-1 and ZeRO-2 as separate
 drills (D4 covers the ideas); attention variants as a scattered list (now the attention track).
 
-## 5. Daily warm-up: forward and backward by hand
-
-NumPy, finite-difference check on every gradient (the `check` pattern in `reference/backprop_practice_4.py`).
-W1 is the phone-screen question: target 15 minutes.
-
-**Table 2. Warm-up rotation.**
-
-| # | Network | What it trains |
-|---|---|---|
-| W1 | two-layer net, ReLU, stable softmax cross-entropy | p - onehot, the max trick, mean over B |
-| W2 | LayerNorm and RMSNorm | mean and variance paths, sum over the normalized axis |
-| W3 | causal attention, multi-head | softmax row rule, masked entries get 0, split and merge heads |
-| W4 | SwiGLU MLP | product rule through the gate |
-| W5 | top-k gating over k experts | grads only to selected experts, softmax over k |
-| W6 | log-softmax with temperature, policy gradient weighted by advantages and a mask | w x A x (p - onehot) / T / norm |
-| W7 | GQA attention backward | dK, dV of a shared KV head = sum over its G query heads (broadcast forward, sum backward) |
-
-Stable softmax, out loud: exp(1000) overflows; subtracting the row max puts the largest score at 0, every exp is in
-(0, 1], and the factor exp(-max) cancels between numerator and denominator.
-
-## 6. Cost arithmetic (whiteboard)
+## 3. Cost arithmetic (whiteboard)
 
 Reference numbers from a large MoE run: 500B total, 23.4B active parameters, 2,250 TFLOP/s dense BF16 peak per GPU.
 RL: 1,920 trainer GPUs and 8,576 inference GPUs, 110K concurrent rollouts. Dimensions marked illustrative are not
@@ -484,7 +456,7 @@ P, n = 7e9, 8                                           # dense 7B, 8 data-paral
 16384 * 131072 * 4, 1024 * 131072 * 4                   # 8.6 GB full fp32 logits vs 0.54 GB per chunk
 ```
 
-## 7. Talking points
+## 4. Talking points
 
 RL systems (existing strengths, keep each to two sentences):
 
