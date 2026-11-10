@@ -206,7 +206,7 @@ input, so training can run as matrix multiplications over chunks instead of one 
 | FlashAttention | linear, same cache | quadratic, same math | data movement only |
 | MLA | linear, ~55x smaller | quadratic | the memory constant |
 | DSA (on MHA or GQA) | linear, full-size cache | linear (N x 2,048) plus a cheap all-pairs indexer | the compute exponent |
-| MLA + DSA | linear, ~55x smaller | linear (N x 2,048) plus a cheap all-pairs indexer | both constants: memory (MLA) and compute (DSA) |
+| MLA + DSA | linear, ~55x smaller | linear (N x 2,048) plus a cheap all-pairs indexer | the memory constant (MLA) and the compute exponent (DSA) |
 | KDA | flat (d x d state) | linear | both, at the cost of exactness |
 
 DSA does not shrink the cache: any earlier token can be chosen later, so all of them stay. MLA does not reduce
