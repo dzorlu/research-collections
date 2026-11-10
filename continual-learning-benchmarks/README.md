@@ -1,10 +1,10 @@
 # Continual learning benchmarks for LLM agents
 
-Notes on how agents are tested on learning from experience. We read eight benchmarks and sort them into five buckets by what changes over time. Longer working notes are in `archive/`.
+Notes on how agents are tested on learning from experience. We read nine benchmarks and sort them into five buckets by what changes over time. Longer working notes are in `archive/`.
 
 | Bucket | What changes over time | Benchmarks |
 |---|---|---|
-| Sequential tasks | Nothing in the world changes. Later tasks reuse what earlier tasks taught. | ApprenticeBench, CLE, AgentCL |
+| Sequential tasks | Nothing in the world changes. Later tasks reuse what earlier tasks taught. | ApprenticeBench, CLE, AgentCL, CL-Bench |
 | Environment drift | The rules or state of the world change under the agent. | ServeLearnBench, ReScopeBench |
 | Preference change | The user's wishes change, and differ by context. | MemPABench |
 | Time and lifecycle | Days pass, sessions restart, the agent schedules its own actions. | SCLATE |
@@ -12,7 +12,7 @@ Notes on how agents are tested on learning from experience. We read eight benchm
 
 A sixth kind, memory recall, sits outside continual learning: find a fact in a long history, with no improvement over a stream expected (LongMemEval, LifeVal). SCLATE turns recall into the time bucket by cutting the history into sessions.
 
-Some benchmarks touch two buckets. ApprenticeBench has one rule change, so a little drift. MemPABench learns each preference over three sessions, so it is also sequential.
+Some benchmarks touch two buckets. ApprenticeBench has one rule change and CL-Bench has two drifting tasks, so both have a little drift. MemPABench learns each preference over three sessions, so it is also sequential.
 
 ## 1. What "learning" means here
 
@@ -85,6 +85,24 @@ Later tasks need what earlier tasks taught, and the world stays the same. This i
 **Results.** On the dependent stream, the best memory methods gain 18 to 40 points. On the conventional stream, every method is at or below no memory. On held-out tasks, every method is below no memory. Methods that learn fast tend to lose it on the second pass. The memory found the right earlier task even when it was 76 tasks back.
 
 **Catch.** The reuse is built in on purpose, so these gains are a best case.
+
+### CL-Bench (Berkeley and Snorkel, June 2026)
+
+**Mental model.** Six small worlds, each with a hidden pattern. A learner finds the pattern and gets faster or more accurate; a non-learner starts from scratch every time.
+
+**Setup.** Six tasks, 12 to 120 instances each:
+- Database: answer questions about an unfamiliar SQLite database with scrambled column names and prices stored in cents in one table and dollars in another. Fewer exploratory queries scores higher.
+- Codebase: fix 19 real GitHub issues across two repos. Fewer steps scores higher.
+- Poker: play heads-up against three opponents who each follow a fixed, beatable strategy.
+- Spectrum monitoring: map 13 radio transmitters from partial scans; some go silent for long stretches.
+- Cohort studies: estimate survival across five medical studies that each code their data differently.
+- Sales forecasting: predict five years of demand when you only see one store's data at a time.
+
+**How it runs.** Each system runs the same sequence twice: once keeping its memory (stateful), once starting fresh on every instance (stateless). Gain is the difference. Two tasks also drift: the database is migrated after question 20, and poker opponents rotate and come back.
+
+**Results.** Plain long context (keep the whole history in the prompt) beats every memory system: Mem0, ACE, a notepad, Claude Code, Codex. The best system, Sonnet 4.6 with plain context, recovers 25% of its possible headroom. ACE costs the most ($63 a run) and gains among the least. Learning shows up clearly in spectrum monitoring and sales forecasting, not at all in cohort studies, codebase, or poker. After the database migration, agents hold on to old beliefs and keep querying tables that no longer exist.
+
+**Catch.** Tens of instances per task, five runs, wide error bars. Codebase uses real GitHub issues the models may have seen in training. Memory is never graded.
 
 ## 4. Environment drift
 
