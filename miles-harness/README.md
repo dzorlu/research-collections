@@ -285,3 +285,22 @@ fold: {max_screenshots: 40, stride: 40}
 compaction: {trigger_tokens: 131072, summary_max_tokens: 4096}
 save_interval: 2
 ```
+
+## 9. Running tests on Modal
+
+[modal/miles_tests.py](modal/miles_tests.py) runs any command from a local miles checkout inside the miles dev
+image on Modal, the way CI does (checkout first on `PYTHONPATH`). Nothing on this machine needs the SGLang fork.
+
+```sh
+cd miles-harness/modal
+MILES_REPO=~/repos/miles-tito-session uvx modal run miles_tests.py \
+    --cmd "pytest tests/fast/rollout/session/test_token_space_images.py tests/fast/utils/test_media_refs.py"
+MILES_REPO=... MILES_GPU=L4 uvx modal run miles_tests.py --cmd "pytest tests/fast-gpu/test_torchtitan_routing_replay.py"
+```
+
+Settings are environment variables: `MILES_REPO` (the checkout; uploaded on each run without `.git`), `MILES_GPU`
+(unset for CPU; the fast tests need none), `MILES_IMAGE_TAG` (a `radixark/miles` tag; pinned in the script to the one
+GPU CI builds from), `MILES_TEST_TIMEOUT` (seconds, default 1800), `HF_TOKEN` (forwarded when set).
+
+Reused across runs: the image (Modal pulls the 24 GB `radixark/miles:dev-*` once, then caches it) and the
+`miles-hf-cache` volume at `/hf-cache` (`HF_HOME`), so a model's tokenizer and processor files download once.
