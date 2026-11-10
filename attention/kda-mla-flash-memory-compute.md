@@ -208,14 +208,18 @@ input, so training can run as matrix multiplications over chunks instead of one 
 | MLA + DSA | linear, compressed | linear (N x 2,048) plus a cheap all-pairs indexer | the compute exponent |
 | KDA | flat (d x d state) | linear | both, at the cost of exactness |
 
-**Table 3. Per head per layer, d = 128.**
+**Table 3. Per head per layer, d = 128; sparse with k = 2,048.**
 
-| N | Standard: cache numbers | Standard: comparisons | KDA: state | KDA: ops |
-|---|---|---|---|---|
-| 1,000 | 256,000 | 500,500 | 16,384 | 3,000 |
-| 12,000 | 3,072,000 | 72,006,000 | 16,384 | 36,000 |
-| 96,000 | 24,576,000 | 4,608,048,000 | 16,384 | 288,000 |
-| 1,000,000 | 256,000,000 | 500,000,500,000 | 16,384 | 3,000,000 |
+| N | Standard: cache numbers | Standard: comparisons | Sparse: attention comparisons | Sparse: indexer pairs | KDA: state | KDA: ops |
+|---|---|---|---|---|---|---|
+| 1,000 | 256,000 | 500,500 | 500,500 | 500,500 | 16,384 | 3,000 |
+| 12,000 | 3,072,000 | 72,006,000 | 22,479,872 | 72,006,000 | 16,384 | 36,000 |
+| 96,000 | 24,576,000 | 4,608,048,000 | 194,511,872 | 4,608,048,000 | 16,384 | 288,000 |
+| 1,000,000 | 256,000,000 | 500,000,500,000 | 2,045,903,872 | 500,000,500,000 | 16,384 | 3,000,000 |
+
+Sparse attention keeps the full cache (compressed if it uses MLA), so its cache column equals standard's. Below
+2,048 tokens it is the same as full attention. Above, the expensive attention grows linearly (about N x 2,048) while
+the indexer still scores every pair, but each indexer pair is cheap: a small dimension, no softmax, low precision.
 
 The cache exists only in generation; training has no cache, and its growing memory is activations. The compute
 laws apply to training and generation alike. Weights and optimizer state do not depend on context length, and
