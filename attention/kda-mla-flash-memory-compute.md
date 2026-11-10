@@ -205,8 +205,14 @@ input, so training can run as matrix multiplications over chunks instead of one 
 | Standard | linear (K, V per token) | quadratic (N²/2) | baseline |
 | FlashAttention | linear, same cache | quadratic, same math | data movement only |
 | MLA | linear, ~55x smaller | quadratic | the memory constant |
-| MLA + DSA | linear, compressed | linear (N x 2,048) plus a cheap all-pairs indexer | the compute exponent |
+| DSA (on MHA or GQA) | linear, full-size cache | linear (N x 2,048) plus a cheap all-pairs indexer | the compute exponent |
+| MLA + DSA | linear, ~55x smaller | linear (N x 2,048) plus a cheap all-pairs indexer | both constants: memory (MLA) and compute (DSA) |
 | KDA | flat (d x d state) | linear | both, at the cost of exactness |
+
+DSA does not shrink the cache: any earlier token can be chosen later, so all of them stay. MLA does not reduce
+compute: every query still meets every token. Paired, each fixes the other's cost. They also fit mechanically:
+the indexer picks one set of k tokens shared by all heads, and an MLA cache entry is one latent shared by all
+heads, so a decode step gathers k latent rows once for every head.
 
 **Table 3. Per head per layer, d = 128; sparse with k = 2,048.**
 
