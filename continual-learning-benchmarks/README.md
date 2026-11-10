@@ -1,6 +1,6 @@
 # Continual learning benchmarks for LLM agents
 
-Notes on how agents are tested on learning from experience. We read nine benchmarks and sort them into five buckets by what changes over time. Longer working notes are in `archive/`.
+Notes on how agents are tested on learning from experience. We read eight benchmarks and sort them into four buckets by what changes over time. Longer working notes are in `archive/`.
 
 | Bucket | What changes over time | Benchmarks |
 |---|---|---|
@@ -8,7 +8,6 @@ Notes on how agents are tested on learning from experience. We read nine benchma
 | Environment drift | The rules or state of the world change under the agent. | ServeLearnBench, ReScopeBench |
 | Preference change | The user's wishes change, and differ by context. | MemPABench |
 | Time and lifecycle | Days pass, sessions restart, the agent schedules its own actions. | SCLATE |
-| Self-modification | The agent rewrites its own harness. | EvoAudit |
 
 A sixth kind, memory recall, sits outside continual learning: find a fact in a long history, with no improvement over a stream expected (LongMemEval, LifeVal). SCLATE turns recall into the time bucket by cutting the history into sessions.
 
@@ -178,9 +177,9 @@ Still missing everywhere: in real life a lot happens between sessions. Emails ar
 
 **Catch.** Grades the final answer only. The training teacher saw the correct feedback, which flatters the result.
 
-## 7. Self-modification (adjacent)
+## Related: harness evolution
 
-Instead of writing notes, the agent can rewrite its own harness: prompts, skills, tools, code. This is next door to continual learning. One change affects every future task, so gains and losses are both bigger.
+Not a benchmark bucket. Here the learning method is different: instead of writing notes, the agent rewrites its own harness (prompts, skills, tools, code) and keeps a change only if it scores better. The papers run these methods on fixed benchmarks, so they say nothing about task shape. They belong here because they show the same failure the drift benchmarks show: learning breaks things that already worked. One change affects every future task, so gains and losses are both bigger.
 
 **A-Evolve** is a framework for this. It edits files in the agent's workspace, keeps a change only if it passes held-out tasks, and tags each kept change in git.
 
