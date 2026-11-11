@@ -1,6 +1,6 @@
 # Screenshots through the TITO session server: what we propose
 
-State on 2026-10-30. Branch heads and line numbers below were read from the branches on this date.
+State on 2026-11-11. Line numbers were read on 2026-10-30. Rockdu's #4240 and #4272 merged into `main` on 2026-11-10; our session-server change is [#4770](https://github.com/radixark/miles/pull/4770) against `main` (it replaces #4586, closed with its base branch).
 
 ## 1. The problem
 
@@ -30,7 +30,7 @@ The examples below use made-up token IDs:
 
 ## 3. Rockdu's design ("token space")
 
-Rockdu's stack: [radixark/miles#4240](https://github.com/radixark/miles/pull/4240) "[1/4] send media refs to SGLang" (branch `rockdu/vlm-01-media-refs`, base main) and [#4272](https://github.com/radixark/miles/pull/4272) "[2/4] build training inputs in token space" (branch `rockdu/vlm-02-token-space`, head `f9e7a9f645`, base #4240's branch). [#4434](https://github.com/radixark/miles/pull/4434) is [3/4]; [4/4] is not published. The SGLang half (the token-space processor, a Qwen VL strategy) is merged into `sglang-miles` (#46680 to #46769, 2026-10-29) behind `--enable-token-space-processor`. The miles flag is `--multimodal-token-space-processing`.
+Rockdu's stack: [radixark/miles#4240](https://github.com/radixark/miles/pull/4240) "[1/4] send media refs to SGLang" (branch `rockdu/vlm-01-media-refs`, base main) and [#4272](https://github.com/radixark/miles/pull/4272) "[2/4] build training inputs in token space" (branch `rockdu/vlm-02-token-space`, head `f9e7a9f645`, base #4240's branch). [#4610](https://github.com/radixark/miles/pull/4610) is [3/4] (Qwen3.5 multimodal under raw Megatron), [#4633](https://github.com/radixark/miles/pull/4633) is [4/4] (TimeLens video); [#4651](https://github.com/radixark/miles/pull/4651) reuses the engines' feature cache on the trainer. #4240 and #4272 merged on 2026-11-10. The SGLang half (the token-space processor, a Qwen VL strategy) is merged into `sglang-miles` (#46680 to #46769, 2026-10-29) behind `--enable-token-space-processor`. The miles flag is `--multimodal-token-space-processing`.
 
 The idea: the engine expands placeholders and returns the expanded token IDs. miles stores what the engine ran. The trainer rebuilds pixel values with the same SGLang processor code on the same image files.
 
@@ -67,9 +67,10 @@ The idea: the engine expands placeholders and returns the expanded token IDs. mi
       └─ #4272 [2/4] rockdu/vlm-02-token-space
           ├─ #4434 [3/4] rockdu/vlm-03-video-freeze
           ├─ [4/4] not published
-          └─ OURS, one PR (tito-session-token-space), two commits:
+          └─ OURS, #4770 (now against main), three commits:
                ├─ 1: session server on token space
-               └─ 2: R3 rows on the engine view
+               ├─ 2: R3 rows on the engine view
+               └─ 3: review fixes (v2 fold mask with media, part options refused on the turn, v1 state on a failed rewrite)
  SGLang, base sglang-miles:
    OURS 3: first-turn images on the chat endpoint     (#47402)
    OURS 4: GLM-5.3 token-space strategy               (#47674)
@@ -77,12 +78,12 @@ The idea: the engine expands placeholders and returns the expanded token IDs. mi
    OURS 5: forward mm_token_expansion_start_len on chat (#28)
 ```
 
-Table 1. The five proposed changes. Changes 1 and 2 are two commits in one draft PR, #4586: change 2 only matters once change 1 sends images through the session server.
+Table 1. The five proposed changes. Changes 1 and 2 are two commits in one PR, #4770: change 2 only matters once change 1 sends images through the session server. Its third commit fixes what review found (2026-11-10): v2 recorded each turn's span in the template view while samples are in the engine view, so a reply shared by two folded leaves trained twice; part options such as `max_pixels` passed the turn and failed at the samples op; a v1 retry could roll back and then fail.
 
 | # | Repo | Change | Branch, head | Size |
 |---|---|---|---|---|
-| 1 | miles | Session server on token space | [#4586](https://github.com/radixark/miles/pull/4586), commit `50c4ecbb0f` | 11 files, +278/-24; new `session/token_space.py` (143 lines) |
-| 2 | miles | R3 rows on the engine view | [#4586](https://github.com/radixark/miles/pull/4586), commit `dce628a206` (head) | 4 code files, about 25 lines; +185 test lines |
+| 1 | miles | Session server on token space | [#4770](https://github.com/radixark/miles/pull/4770), commit `1ddfa9fc6` | 11 files, +278/-24; new `session/token_space.py` (143 lines) |
+| 2 | miles | R3 rows on the engine view | [#4770](https://github.com/radixark/miles/pull/4770), commit `21b8a32a4`; fixes in `196b1a1f8` (head) | 4 code files, about 25 lines; +185 test lines |
 | 3 | SGLang | Keep first-turn images | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402), `pr4-qwen-vl-input-ids-v2` `008518e4fe` | one condition plus a test |
 | 4 | SGLang | GLM-5.3 strategy | [sglang#47674](https://github.com/sgl-project/sglang/pull/47674), `354d92b34f` | new `models/glm5_next.py`, a 2-line hook, tests |
 | 5 | router | Forward `mm_token_expansion_start_len` on the chat route | [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28), `deb98e1` | 3 files, +34 lines with tests |
@@ -162,7 +163,7 @@ A `glm5_next.py` strategy for the token-space processor: each `<|image|>` expand
 
 | Check | Result |
 |---|---|
-| Changes 1 and 2 on CPU, with SGLang's real Qwen token-space processor and the Qwen3.8 tokenizer, stub engine | 15 tests (change 1), 18 (with change 2): bytes sent per turn, sample tokens equal the engine prompt plus reply, trainer pixel values equal the engine's exactly |
+| Changes 1 and 2 on CPU, with SGLang's real Qwen token-space processor and the Qwen3.8 tokenizer, stub engine | 15 tests (change 1), 18 (with change 2), 21 with the fixes (a shared reply trains in one leaf, part options refused on the turn, v1 unchanged on a failed rewrite): 35 passed with `test_media_refs.py` in `radixark/miles:dev-202611101346` on Modal (2026-11-11, [../miles-harness/modal/](../miles-harness/modal/miles_tests.py)) |
 | Session and router suites vs #4272's head | base 1,909 passed; change 1 2,058; change 2 1,941; the same 13 environment failures on all three |
 | R3 tests | the 4 R3 tests fail with change 1 alone and pass with change 2 |
 | Change 3 | its test fails on sglang-miles and passes on #47402; CPU serving_chat and token-space tests 230 passed vs 229, the same 14 macOS video/audio failures |
@@ -175,9 +176,10 @@ GPU pass criteria: first-turn images reach the engine; `start_len` equals the st
 
 ## 6. Open questions for the token-space design
 
-1. What does [4/4] cover? If it includes the session server, we would fold our work into his.
-2. Should the session-server branch go into `rockdu/vlm-02-token-space`, or follow after #4272 merges?
-3. `TokenSpaceProcessor` processes every media item on every request, including images already in the expanded prefix: a 40-screenshot session reprocesses all 40 each turn. Is skipping or caching planned?
-4. Who cleans `--shared-media-dir`? Nothing deletes the files.
+1. Answered: [4/4] is TimeLens video (#4633); it does not touch the session server.
+2. Answered: #4272 merged first; #4770 follows against `main`.
+3. Partly answered: #4651 reuses the engines' disk feature cache on the trainer; the engine side still processes every item per request.
+4. Open: who cleans `--shared-media-dir`? Nothing deletes the files.
+5. Open: `main` accepts `--multimodal-token-space-processing` for the Megatron backend only (`arguments.py`), so GLM-5.3 on torchtitan needs #4588 and that check relaxed.
 
-Raised after the GPU runs passed (2026-10-31): changes 1 and 2 as [#4586](https://github.com/radixark/miles/pull/4586) (base his `rockdu/vlm-02-token-space`, so he can fold it into his stack), change 3 as [sglang#47402](https://github.com/sgl-project/sglang/pull/47402), change 4 as [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) (base `sglang-miles`), change 5 as [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28).
+Raised after the GPU runs passed (2026-10-31): changes 1 and 2 as #4586 on his branch, reopened as [#4770](https://github.com/radixark/miles/pull/4770) against `main` on 2026-11-10, change 3 as [sglang#47402](https://github.com/sgl-project/sglang/pull/47402), change 4 as [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) (base `sglang-miles`), change 5 as [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28).
