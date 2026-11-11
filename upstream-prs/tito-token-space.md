@@ -184,5 +184,4 @@ GPU pass criteria: first-turn images reach the engine; `start_len` equals the st
 ## 6. Open questions for the token-space design
 
 1. Who cleans `--shared-media-dir`? Nothing deletes the files.
-2. `main` accepts `--multimodal-token-space-processing` for the Megatron backend only (`arguments.py`), so GLM-5.3 on torchtitan needs #4588 and that check relaxed.
-3. The engine's `TokenSpaceProcessor` processes every media item on every request, including images already in the expanded prefix; #4651 caches on the trainer side only.
+2. The engine's `TokenSpaceProcessor` processes every media item on every request, including images already in the expanded prefix; #4651 caches on the trainer side only.
