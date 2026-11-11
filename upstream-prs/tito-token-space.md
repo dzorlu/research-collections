@@ -13,7 +13,7 @@ Table 0. The PRs, and which model each one is needed for. All are open. The firs
 | [miles#4588](https://github.com/radixark/miles/pull/4588) | vision tower in torchtitan; the flag accepts torchtitan | – | needed | – | – |
 | [miles#4520](https://github.com/radixark/miles/pull/4520) | R3 on torchtitan: the reference model replays the rollout's experts | – | needed | – | – |
 | SGLang token-space strategy | the model's placeholder expansion rule | in `sglang-miles` | #47674 | in `sglang-miles` | none: not covered |
-| Verified | | GPU, 3 steps | GPU, 3 steps | untested | – |
+| Verified | | GPU, 3 steps | GPU, 3 steps | CPU: 2 turns through the session server, trainer patches equal the engine's | – |
 
 ## 1. The problem
 
