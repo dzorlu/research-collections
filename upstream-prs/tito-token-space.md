@@ -1,6 +1,6 @@
 # Screenshots through the TITO session server: what we propose
 
-State on 2026-11-11. Line numbers were read on 2026-10-30.
+State on 2026-11-11.
 
 ## 1. The problem
 
