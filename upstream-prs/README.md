@@ -120,7 +120,7 @@ Training must use the same experts the engine picked.
 
 ## 4. GLM-5.3 on torchtitan
 
-- **[miles#4588](https://github.com/radixark/miles/pull/4588): vision tower in training.** Port of our closed #4022 onto main after upstream merged GLM-5.3 text training on torchtitan (#3989, #3995). Images go through the frozen vision tower; log-probs are computed on each CP rank's own tokens.
+- **[miles#4588](https://github.com/radixark/miles/pull/4588): vision tower in training** ([forward pass, with a diagram](glm-vision-titan.md)). Port of our closed #4022 onto main after upstream merged GLM-5.3 text training on torchtitan (#3989, #3995). Images go through the frozen vision tower; log-probs are computed on each CP rank's own tokens.
 - **[miles#4522](https://github.com/radixark/miles/pull/4522).** Parameters that never train (GLM's attention indexer) had no saved optimizer state, so a resume failed. They now start fresh. The other resume bug, a silent restart from the base model, no longer happens on main.
 
 ## 5. Long colocated runs
