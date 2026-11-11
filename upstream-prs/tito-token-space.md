@@ -2,6 +2,19 @@
 
 State on 2026-11-11.
 
+Table 0. The PRs, and which model each one is needed for. All are open. The first three are one feature in three repos and go in together: without #4770 the session server refuses images, without #47402 SGLang drops the first turn's image, without #28 the router strips the offset field.
+
+| PR | What it does | Qwen3.8 VL (Megatron) | GLM-5.3 (torchtitan) | Inkling (Megatron) | Muse Spark, Kimi-VL, MiMo-VL |
+|---|---|---|---|---|---|
+| [miles#4770](https://github.com/radixark/miles/pull/4770) | session server on token space; R3 rows on the engine view | needed | needed | needed | needed |
+| [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | first-turn images on the chat endpoint | needed | needed | needed | needed |
+| [router#28](https://github.com/radixark/sgl-router-for-miles/pull/28) | forward `mm_token_expansion_start_len` on chat | needed | needed | needed | needed |
+| [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) | GLM-5.3 token-space strategy | – | needed | – | – |
+| [miles#4588](https://github.com/radixark/miles/pull/4588) | vision tower in torchtitan; the flag accepts torchtitan | – | needed | – | – |
+| [miles#4520](https://github.com/radixark/miles/pull/4520) | R3 on torchtitan: the reference model replays the rollout's experts | – | needed | – | – |
+| SGLang token-space strategy | the model's placeholder expansion rule | in `sglang-miles` | #47674 | in `sglang-miles` | none: not covered |
+| Verified | | GPU, 3 steps | GPU, 3 steps | untested | – |
+
 ## 1. The problem
 
 **TITO** ("token in, token out") means the trainer scores the exact token IDs the engine ran, never a re-tokenization of text. In our agent runs the **session server** (`miles/rollout/session/`) enforces it. An outside harness (our environment harness, Claude Code style agents) drives the episode over the OpenAI chat API and resends the whole conversation as text every turn. The session server maps that text back onto the token IDs it stored for earlier turns.
