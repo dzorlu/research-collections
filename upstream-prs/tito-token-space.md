@@ -1,4 +1,4 @@
-# Screenshots through the TITO session server: what we propose
+# Screenshots through the TITO session server
 
 State on 2026-11-11.
 
@@ -48,29 +48,28 @@ Rockdu's design is on `main`: [#4240](https://github.com/radixark/miles/pull/424
 The idea: the engine expands placeholders and returns the expanded token IDs. miles stores what the engine ran. The trainer rebuilds pixel values with the same SGLang processor code on the same image files.
 
 ```
- miles: sglang_rollout.generate()                       sglang_rollout.py:153
-   token_space = has_media(...) and --multimodal-token-space-processing   :171
-   images -> /media/<sha256>.png, written once          media_refs.py:73, :142
+ miles: sglang_rollout.generate()
+   token_space = has_media(...) and --multimodal-token-space-processing
+   images -> /media/<sha256>.png, written once          media_refs.py
    payload += mm_token_expansion_start_len, return_prompt_token_ids
-                                                        generate_endpoint_utils.py:65-69, used at :240
+                                                        generate_endpoint_utils.token_space_request_fields
 
  TURN 1  input_ids [10, 99, 11]   media [A]   start_len 0  ──►  SGLang: keep the first 0 ids,
                                                                 expand 99 -> 501 502
          ◄── prompt_token_ids [10, 501, 502, 11] + reply [20, 21]
          adopt_expanded_prompt_ids(): sample.tokens = [10,501,502,11,20,21]
-                                                        generate_endpoint_utils.py:72, called at :245
  TURN 2  input_ids [10,501,502,11,20,21 | 12, 99, 13]   media [A, B]   start_len 6
                                                          ──►  keep the first 6, expand the new 99
          ◄── prompt_token_ids [10,501,502,11,20,21,12,601,602,13] + reply [22]
 
- TRAINER rollout.py:76 -> compute_multimodal_train_inputs()   token_space_media_process.py:59
-         -> _trainer_processor(): strategy_for(hf_config) (Qwen VL only), SGLang's
-            TokenSpaceProcessor on A.png, B.png -> pixel values  :95-129
+ TRAINER rollout.py -> compute_multimodal_train_inputs()      token_space_media_process.py
+         -> build_trainer_processor(): strategy_for(hf_config) (Qwen VL, Inkling; GLM-5.3 with #47674),
+            SGLang's TokenSpaceProcessor on A.png, B.png -> pixel values
 ```
 
 `start_len` tells SGLang which tokens are already expanded, so earlier turns are never re-expanded or re-tokenized.
 
-**What it does not cover.** #4272 changes no file under `miles/rollout/session/`, and its description does not mention the session server. With the flag on, a screenshot sent through the session server reaches the engine as a bare placeholder with no image. There is no GLM-5.3 strategy and no R3 support.
+**What it does not cover.** `main`'s token-space path is the generate path; nothing under `miles/rollout/session/` carries media. With the flag on, a screenshot sent through the session server reaches the engine as a bare placeholder with no image. `sglang-miles` has no GLM-5.3 strategy, and the session server's R3 rows do not count expanded images.
 
 ## 4. What we add
 
@@ -87,13 +86,13 @@ The idea: the engine expands placeholders and returns the expanded token IDs. mi
 
 Table 1. The five changes. Changes 1 and 2 are one PR, #4770: change 2 only matters once change 1 sends images through the session server.
 
-| # | Repo | Change | Branch, head | Size |
+| # | Repo | Change | PR | Files |
 |---|---|---|---|---|
-| 1 | miles | Session server on token space | [#4770](https://github.com/radixark/miles/pull/4770) | 11 files, +278/-24; new `session/token_space.py` (143 lines) |
-| 2 | miles | R3 rows on the engine view | [#4770](https://github.com/radixark/miles/pull/4770), head `196b1a1f8` | 4 code files, about 25 lines; +185 test lines |
-| 3 | SGLang | Keep first-turn images | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402), `pr4-qwen-vl-input-ids-v2` `008518e4fe` | one condition plus a test |
-| 4 | SGLang | GLM-5.3 strategy | [sglang#47674](https://github.com/sgl-project/sglang/pull/47674), `354d92b34f` | new `models/glm5_next.py`, a 2-line hook, tests |
-| 5 | router | Forward `mm_token_expansion_start_len` on the chat route | [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28), `deb98e1` | 3 files, +34 lines with tests |
+| 1 | miles | Session server on token space | [#4770](https://github.com/radixark/miles/pull/4770) | new `session/token_space.py`; `session/core.py`, `v2/core.py`, `v2/session_state.py`, `utils/media_refs.py`, tests |
+| 2 | miles | R3 rows on the engine view | [#4770](https://github.com/radixark/miles/pull/4770) | `session/core.py`, `v2/core.py`, `samples/merge.py`, tests |
+| 3 | SGLang | Keep first-turn images | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | `serving_chat.py`, `processors/base_processor.py`, `processors/qwen_vl.py`, tests |
+| 4 | SGLang | GLM-5.3 strategy | [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) | new `token_space_mm_process/models/glm5_next.py`, tests |
+| 5 | router | Forward `mm_token_expansion_start_len` on the chat route | [sgl-router-for-miles#28](https://github.com/radixark/sgl-router-for-miles/pull/28) | `src/protocols/chat.rs`, tests |
 
 ### 4.1 The session server on token space
 
@@ -101,7 +100,7 @@ Figure 1 shows one turn through the session server. Blue boxes are our change; g
 
 ![Figure 1](session-server-token-space.svg)
 
-*Figure 1. One chat turn with screenshots through the session server. File and line references are on the dzorlu/miles branch `tito-session-token-space`.*
+*Figure 1. One chat turn with screenshots through the session server. File references are on the dzorlu/miles branch `tito-session-token-space-main`.*
 
 Table 2 follows the made-up token IDs from section 1 through two turns. Step numbers refer to Figure 1.
 
@@ -130,7 +129,7 @@ Figure 2 shows where this happens in the code. Steps 2 and 7 are our change; the
 
 ![Figure 2](r3-code-path.svg)
 
-*Figure 2. The R3 code path: every turn (steps 1 to 6) and the end of the episode (step 7). File and line references are on the dzorlu/miles branch `tito-session-token-space`.*
+*Figure 2. The R3 code path: every turn (steps 1 to 6) and the end of the episode (step 7). File references are on the dzorlu/miles branch `tito-session-token-space-main`.*
 
 Figure 3 shows a three-turn episode: screenshot A on turn 1, screenshot B on turn 2, text only on turn 3. Each image expands to 2 tokens here.
 
@@ -148,11 +147,11 @@ Figure 3 shows a three-turn episode: screenshot A on turn 1, screenshot B on tur
 
 With change 2 the sample has 14 tokens and 13 rows, and row *k* comes from position *k* for every *k*. Without it, each offset falls short by one per earlier image, rows overlap, and the turn-1 record expects 4 rows but holds 5. The session server then refuses the sample with HTTP 422 (`cannot reshape array of size 20 into shape (4,2,2)`); the two-turn episode is refused the same way. Every shape we ran was refused rather than silently misaligned. A shape whose sizes happen to divide evenly could pass the reshape; we have not seen one.
 
-Change 2 computes the offset on the engine view, after the request is built (`engine_token_ids`, `token_space.py:55`, called at `core.py:442` and `v2/core.py:231`). `merge_samples_with_addition_r3` and `adopt_session_records` end each turn's rows at `len(engine_prompt_ids(record)) + outputs - 1` (`samples/merge.py:280`, `:239`).
+Change 2 computes the offset on the engine view, after the request is built (`token_space.engine_token_ids`, called from `core.py` and `v2/core.py`). `merge_samples_with_addition_r3` and `adopt_session_records` (`samples/merge.py`) end each turn's rows at `len(engine_prompt_ids(record)) + outputs - 1`.
 
 ### 4.3 First-turn images (#47402)
 
-On `sglang-miles` (`a5701d958b`), `serving_chat.py:1484-1495`: when a chat request carries `input_ids`, media are collected from the messages only if `mm_token_expansion_start_len` is non-zero. On the first turn of a session it is 0, so the images are dropped. Rockdu's generate path does not hit this because it posts to `/generate` with the images passed explicitly; the session server uses the chat endpoint.
+On `sglang-miles`, `serving_chat.py`: when a chat request carries `input_ids`, media are collected from the messages only if `mm_token_expansion_start_len` is non-zero. On the first turn of a session it is 0, so the images are dropped. Rockdu's generate path does not hit this because it posts to `/generate` with the images passed explicitly; the session server uses the chat endpoint.
 
 ```
  TURN 1 chat request: input_ids [10, 99, 11], messages [user + imgA], start_len 0
@@ -160,21 +159,20 @@ On `sglang-miles` (`a5701d958b`), `serving_chat.py:1484-1495`: when a chat reque
    #47402: model is multimodal -> collect imgA     -> 99 expands to 501 502
 ```
 
-#47402 (`serving_chat.py:1494-1498`) collects media when the model is multimodal or the offset is set.
+#47402 collects media when the model is multimodal or the offset is set, and passes the client's IDs to the Qwen processor's media loader so the prompt runs ID for ID.
 
 ### 4.4 GLM-5.3 strategy
 
-A `glm5_next.py` strategy for the token-space processor: each `<|image|>` expands to `grid.prod() // merge_size**2` copies between `<|begin_of_image|>` and `<|end_of_image|>`; rotary positions via `get_rope_index_glm4v`; a 2-line hook lets a strategy turn on RGB conversion (without it, an RGBA image gives different pixel values than SGLang's existing GLM processor). It needs transformers 5.19.0 or newer, which ships the GLM-5.3 processor. GLM video is not supported on this path.
+A `glm5_next.py` strategy for the token-space processor: each `<|image|>` expands to `grid.prod() // merge_size**2` copies between `<|begin_of_image|>` and `<|end_of_image|>`; rotary positions via `get_rope_index_glm4v`; `rgb_conversion = "smart"`, as SGLang's existing GLM processor (otherwise an RGBA image gives different pixel values). It needs transformers 5.19.0 or newer, which ships the GLM-5.3 processor. GLM video is not supported on this path.
 
 ## 5. Evidence
 
 | Check | Result |
 |---|---|
-| Changes 1 and 2 on CPU, with SGLang's real Qwen token-space processor and the Qwen3.8 tokenizer, stub engine | 21 tests: bytes sent per turn, sample tokens equal the engine prompt plus reply, trainer pixel values equal the engine's exactly, a reply shared by two folded leaves trains in one of them, a part option is refused on the turn, a v1 retry that fails leaves the session unchanged. 35 passed with `test_media_refs.py` in `radixark/miles:dev-202611101346` ([../miles-harness/modal/](../miles-harness/modal/miles_tests.py)) |
-| Session and router suites vs #4272's head | base 1,909 passed; change 1 2,058; change 2 1,941; the same 13 environment failures on all three |
+| Changes 1 and 2 on CPU, with SGLang's real Qwen and Inkling token-space processors, stub engine | 23 tests: bytes sent per turn, sample tokens equal the engine prompt plus reply, trainer pixel values equal the engine's exactly, a reply shared by two folded leaves trains in one of them, a part option is refused on the turn, a v1 retry that fails leaves the session unchanged. 37 passed with `test_media_refs.py` in `radixark/miles:dev-202611101346` ([../miles-harness/modal/](../miles-harness/modal/miles_tests.py)) |
 | R3 tests | the 4 R3 tests fail with change 1 alone and pass with change 2 |
-| Change 3 | its test fails on sglang-miles and passes on #47402; CPU serving_chat and token-space tests 230 passed vs 229, the same 14 macOS video/audio failures |
-| Change 4 parity vs SGLang's existing GLM processor | bitwise equal input_ids, mm_token_type_ids, pixel_values, image_grid_thw and rotary positions, for 1 and 3 images and a 2-turn chat with `start_len` |
+| Change 3 | its test fails on sglang-miles and passes on #47402; `test_serving_chat.py` and `test_load_mm_data_by_ids.py` 186 passed in the CI image |
+| Change 4 parity vs SGLang's existing GLM processor | bitwise equal input_ids, mm_token_type_ids, pixel_values, image_grid_thw and rotary positions, for 1 and 3 images (one RGBA) and a 2-turn chat with `start_len`; 36 passed with 32 subtests in the CI image |
 | GPU, Qwen3.8-VL (Megatron, 4 nodes of 8x B300), computer-use episodes up to 256 turns with screenshot folding, 3 train steps | 32/32 and 128/128 episodes graded; TITO mismatch rate 0.0; 0 prompt-ID mismatches over 124 samples; 0 HTTP 400; train/rollout KL 8.9e-4 to 9.1e-4 and mean abs log-prob diff about 0.014 per step; 3 checkpoints |
 | GPU, GLM-5.3 (torchtitan, 6 nodes, R3 on), same episodes, 3 train steps then a resume for a 4th | 0 prompt-ID mismatches; train/rollout KL 2.45e-3 / 3.06e-3 / 1.69e-3; KL to the reference exactly 0 at step 0; resume continued at rollout 3 and saved its checkpoint |
 | GPU, R3 alignment (GLM) | share of tokens whose top-8 experts share none with the replay: image tokens 0.659% vs 0.638% on the non-token-space path, text 0.0445% vs 0.0460%: the same, so the offsets are aligned |
