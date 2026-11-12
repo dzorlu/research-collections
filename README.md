@@ -12,6 +12,9 @@ notebook.
   learning half: methods by where the update lands (context, text memory, harness state, fast weights,
   adapters and full weights), the Sep to Nov 2026 parametric literature with numbers, the delta rule and
   the two forgetting fixes worked in Python, the gating pattern, and where Core Automation sits.
+  [REPRODUCIBLE.md](continual-learning-benchmarks/REPRODUCIBLE.md) lists the ten benchmarks that can be run
+  today, by bucket, with the smallest open model each was run on.
+  [PAPERS.md](continual-learning-benchmarks/PAPERS.md) is the fast-weight reading list.
 - [ttt-discover/](ttt-discover/): TTT-Discover (test-time RL on one problem, arXiv 2601.16175) worked through:
   the select, roll out, score, sharpen, backprop loop; the reuse ladder; the entropic objective on a kernel
   example; why β is chosen per group so KL = ln 2 ("about half the batch"); PUCT on a toy archive; the

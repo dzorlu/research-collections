@@ -1,6 +1,6 @@
 # Continual learning benchmarks for LLM agents
 
-Notes on how agents are tested on learning from experience. We read eight benchmarks and sort them into four buckets by what changes over time. Longer working notes are in `archive/`.
+Notes on how agents are tested on learning from experience. We read eight benchmarks and sort them into four buckets by what changes over time. Longer working notes are in `archive/`. Which of these can be run today, and which fit a weight-update experiment, is in [REPRODUCIBLE.md](REPRODUCIBLE.md). The fast-weight reading list is in [PAPERS.md](PAPERS.md).
 
 | Bucket | What changes over time | Benchmarks |
 |---|---|---|
@@ -73,7 +73,7 @@ Later tasks need what earlier tasks taught, and the world stays the same. This i
 
 **Results.** Best agent (Opus 5 in Claude Code) clears 48% of levels and finishes all five on 23% of tasks. Feedback plus a retry adds a median 5 points. The harness matters: on the same models, Hermes beats OpenClaw by about 6 points.
 
-**Catch.** No run without memory, so you cannot separate learning from just getting a second try. The authors say so. Only 20 of the 120 tasks are released, and only after approval. The released tasks are files and folders; the mock apps are in the gated package.
+**Catch.** No run without memory, so you cannot separate learning from just getting a second try. The authors say so. Only 20 of the 120 tasks are released. Their task cards and input files are open; the rubrics and the runnable packages need approval.
 
 ### AgentCL (Ohio State, Sept 2026)
 
