@@ -2,7 +2,7 @@
 
 State on 2026-11-12.
 
-This page is a map of how language-model agents learn from a stream of experience. It has three parts: the benchmarks that can be run today, the approaches people use, and the papers behind each approach. Each paper gets one or two lines, a year and a link. Longer notes are in `archive/`.
+This page is a map of how language-model agents learn from a stream of experience. It has three parts: the benchmarks that can be run today, the approaches people use, and the papers behind each approach. Each paper gets one or two lines, a year and a link.
 
 Two words used throughout:
 
@@ -252,5 +252,3 @@ Ordinary training, run while the agent is in use: fine-tuning, reinforcement lea
 - **Stored is not the same as usable.** ACE shows a fact can be in the weights and still not be used. Facts in weights also do not chain.
 - **The time and lifecycle bucket has no runnable benchmark.** No agent benchmark with a real clock can be run today.
 - **No agent paper measures general ability after a long stream of weight updates.** Retention is checked on earlier agent tasks only.
-
-Older files are in [`archive/`](archive/): the benchmark study guide, the methods survey, the full-read paper notes, the reproducibility notes and working notes.

@@ -7,8 +7,7 @@ notebook.
 - [continual-learning-benchmarks/](continual-learning-benchmarks/): one page on how LLM agents learn from a
   stream of experience. The ten benchmarks that can be run today, by what changes over time; the approaches
   (context, text memory, harness rewriting, fast weights, self-written weights, outside editing, adapters);
-  and the papers behind each, with year, link and a short summary. The longer study guide, methods survey
-  and full-read paper notes are in its `archive/`.
+  and the papers behind each, with year, link and a short summary.
 - [ttt-discover/](ttt-discover/): TTT-Discover (test-time RL on one problem, arXiv 2601.16175) worked through:
   the select, roll out, score, sharpen, backprop loop; the reuse ladder; the entropic objective on a kernel
   example; why β is chosen per group so KL = ln 2 ("about half the batch"); PUCT on a toy archive; the
