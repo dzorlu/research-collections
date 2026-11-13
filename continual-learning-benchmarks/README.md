@@ -59,25 +59,6 @@ The second kind is harder at both ends: finding the lesson, and using it. A meth
 
 Four of the ten have been run on a model of 8B or smaller with programmatic scoring: AgentOdyssey, studying-cl, OAKS and ComposeCL. AgentOdyssey is the only one with weight-update, long-context and RAG arms in one harness at 4B.
 
-### Left out, and why
-
-Reproducible, but not continual as shipped:
-
-- **SE-Bench** ([2602.04811](https://arxiv.org/abs/2602.04811)). Train once, then test. No stream.
-- **WitnessBench** ([2609.32208](https://arxiv.org/abs/2609.32208)). Each game is an independent episode. The test set is private.
-- **MemoryBench** ([2510.17281](https://arxiv.org/abs/2510.17281)). Main results feed pre-generated feedback in batches.
-
-Continual, but not reproducible:
-
-- **ApprenticeBench** (NeoCognition, Sept 2026). A new accounts clerk's first hundred bills. Private.
-- **AgentCL** ([2606.02461](https://arxiv.org/abs/2606.02461), Ohio State). Dataset only, no harness.
-- **SCLATE** ([2609.32391](https://arxiv.org/abs/2609.32391), Apple). A way to run benchmarks with a real clock. No release.
-- **ASCENT** ([2610.05303](https://arxiv.org/abs/2610.05303)). The repo holds only a license file.
-- **SCoL SQuAD-100** ([2605.07076](https://arxiv.org/abs/2605.07076)), **ForgetBench** ([2607.26455](https://arxiv.org/abs/2607.26455)), **"Can a Language Model Learn Facts Continually in Its Weights?"** ([2607.11020](https://arxiv.org/abs/2607.11020)). No code.
-- **StudyBench** (textbooks not released), **Chronos** ([2604.05096](https://arxiv.org/abs/2604.05096), dataset download not confirmed).
-
-Memory recall benchmarks (LongMemEval, LifeVal) are a different thing: find a fact in a long history, with no improvement over a stream expected.
-
 ## 2. Approaches and their papers
 
 An agent is a model plus the things around it: a prompt, a memory store, tools. Learning can land in any of them. The groups below go from the most reversible place (the prompt) to the most permanent (the weights).
@@ -119,8 +100,8 @@ A slow network decides what to store. A second set of weights, which starts empt
 
 - **"Fast weight programming and linear transformers: from machine learning to neurobiology"** (Irie, 2025, [2508.08435](https://arxiv.org/abs/2508.08435)). The primer to read first. Recent models differ only in the write rule: plain add, add after shrinking, or the delta rule.
 - **"Linear Transformers Are Secretly Fast Weight Programmers"** (Schlag, 2021, [2102.11174](https://arxiv.org/abs/2102.11174)). Attention without softmax is a matrix that each token adds to. Adding "Rome" leaves Paris and Rome mixed. The delta rule fixes this: look up what the matrix returns for Alice, then write the difference.
-- **"Using Fast Weights to Deblur Old Memories"** (Hinton, 1987, no link on file). Every connection gets a slow weight and a fast weight that decays. Rehearsing 10 of 100 old pairs restores the other 90.
-- **"Learning to Control Fast-Weight Memories"** (Schmidhuber, 1992, no link on file). A slow network outputs changes to a fast network's weights. Two toy tasks.
+- **"Using Fast Weights to Deblur Old Memories"** (Hinton, 1987). Every connection gets a slow weight and a fast weight that decays. Rehearsing 10 of 100 old pairs restores the other 90.
+- **"Learning to Control Fast-Weight Memories"** (Schmidhuber, 1992). A slow network outputs changes to a fast network's weights. Two toy tasks.
 - **"Using Fast Weights to Attend to the Recent Past"** (Ba, 2016, [1610.06258](https://arxiv.org/abs/1610.06258)). A second matrix on an RNN that decays and adds at every step. The rule is fixed by hand.
 - **"HyperNetworks"** (Ha, 2016, [1609.09106](https://arxiv.org/abs/1609.09106)). A small network outputs a larger one's weights, rescaling them at every step. Nothing accumulates, so it is not a memory.
 
@@ -192,7 +173,7 @@ Three levels of work per write: a closed formula (In-Place TTT, TTCD), a backwar
 - **"DPPM: Dual-Path Parametric Memory for Personalized Language Models"** (Chen, USTC and iFLYTEK, 2026, [2610.11776](https://arxiv.org/abs/2610.11776), [code](https://github.com/isyuhaochen/DPPM)). A key-value matrix per user, updated by the delta rule across sessions and turned into an adapter. PersonaMem-v2 on Qwen3-4B: 54.22 against 45.73 for its predecessor. Retention is measured on internal states, not answers.
 - **ProTTT** (Park, Seoul National, 2026, [2609.32564](https://arxiv.org/abs/2609.32564)). A per-user adapter updated by one gradient step per chunk of history. Qwen3-0.6B. General ability drops (MMLU .474 to .432).
 - **P-TTT** (Wang, Zhejiang and NUS, 2026, [2609.35109](https://arxiv.org/abs/2609.35109)). In-Place TTT with one write per whole response, kept per user. 74.48% on a preference task where In-Place TTT is at chance. 1B models only.
-- **δ-mem: "Efficient Online Memory for Large Language Models"** (2026, [2605.12357](https://arxiv.org/abs/2605.12357)). The baseline LSTMem and DPPM compare against. Not read in full.
+- **δ-mem: "Efficient Online Memory for Large Language Models"** (2026, [2605.12357](https://arxiv.org/abs/2605.12357)). The baseline LSTMem and DPPM compare against.
 - **"All Memory Is Local: Measuring the Horizon of Persistent Test-Time Training"** (ICLR 2027 submission, [OpenReview](https://openreview.net/forum?id=gXFgHs8TiZ), abstract only). Removes the reset from drop-in TTT on Qwen3 0.6B to 4B. The gain tied to a session falls by about four fifths within five sessions and is gone by fifteen. Resetting keeps 60% of the benefit.
 - **"Learning Whether to Learn"** (ICLR 2027 submission, [OpenReview](https://openreview.net/forum?id=XYI4FitZL2), abstract only). A second model decides whether each write happens, and only writes that keep proving useful become permanent.
 - **"Beyond Update Counts: A Control Map for Evaluating Test-Time Model Updates"** (Zhao, Meta, 2026, [2610.36109](https://arxiv.org/abs/2610.36109)). An evaluation method: score learning, later recall and side damage separately. LoRA edits pass learning in 6 of 6 settings and retention in 0 of 6.
@@ -205,7 +186,7 @@ Three levels of work per write: a closed formula (In-Place TTT, TTCD), a backwar
 
 **A network changes the weights that compute the change.** No frozen part. No paper trains one of these as a language model. The primer gives the reason: merging the slow and fast networks loses parallel training.
 
-- **"A 'Self-Referential' Weight Matrix"** (Schmidhuber, 1993, no link on file). A network with extra units that read and edit any of its own connections. No experiments.
+- **"A 'Self-Referential' Weight Matrix"** (Schmidhuber, 1993). A network with extra units that read and edit any of its own connections. No experiments.
 - **"A Modern Self-Referential Weight Matrix That Learns to Modify Itself"** (Irie, 2022, [2202.05780](https://arxiv.org/abs/2202.05780)). One matrix produces its output and also the key, target and step size for a delta-rule edit of itself. At most 3.6M parameters, images and games, no language.
 - **"Metalearning Continual Learning Algorithms"** (Irie, 2023, [2312.00276](https://arxiv.org/abs/2312.00276)). Trains that matrix with "still do task A after learning task B" in the loss. First-task accuracy after the second task goes from 22.9% to 98.2%. Small image tasks.
 - **Hope: "Nested Learning: The Illusion of Deep Learning Architectures"** (Behrouz, 2025, [2512.24695](https://arxiv.org/abs/2512.24695)). Small MLPs produce the keys, targets and step sizes for updates to themselves. Trained as a 1.3B language model. Its continual-learning results are figures without numbers.
@@ -222,18 +203,18 @@ Something other than the model changes its weights: a formula, a trained editor,
 **By formula or trained editor**
 
 - **MEND: "Fast Model Editing at Scale"** (Mitchell, 2021, [2110.11309](https://arxiv.org/abs/2110.11309)). The gradient from one example is the product of two vectors. A small network adjusts those two vectors so the edit fixes the fact and leaves other answers alone.
-- **ROME: "Locating and Editing Factual Associations in GPT"** (Meng, 2022, [2202.05262](https://arxiv.org/abs/2202.05262)). Finds the MLP layer that stores a fact and overwrites it with a closed formula. Not read in full.
-- **MEMIT: "Mass-Editing Memory in a Transformer"** (Meng, 2022, [2210.07229](https://arxiv.org/abs/2210.07229)). ROME for thousands of facts at once. Not read in full.
+- **ROME: "Locating and Editing Factual Associations in GPT"** (Meng, 2022, [2202.05262](https://arxiv.org/abs/2202.05262)). Finds the MLP layer that stores a fact and overwrites it with a closed formula.
+- **MEMIT: "Mass-Editing Memory in a Transformer"** (Meng, 2022, [2210.07229](https://arxiv.org/abs/2210.07229)). ROME for thousands of facts at once.
 
 **Weights as readable programs**
 
-- **RASP: "Thinking Like Transformers"** (Weiss, 2021, [2106.06981](https://arxiv.org/abs/2106.06981)). A small programming language whose operations match what a transformer layer can do. Not read in full.
+- **RASP: "Thinking Like Transformers"** (Weiss, 2021, [2106.06981](https://arxiv.org/abs/2106.06981)). A small programming language whose operations match what a transformer layer can do.
 - **"Tracr: Compiled Transformers as a Laboratory for Interpretability"** (Lindner, 2023, [2301.05062](https://arxiv.org/abs/2301.05062)). A compiler turns a RASP program into exact transformer weights. Nothing is trained.
-- **"Equivariant Architectures for Learning in Deep Weight Spaces"** (Navon, 2023, [2301.12780](https://arxiv.org/abs/2301.12780)) and **"Permutation Equivariant Neural Functionals"** (Zhou, 2023, [2302.14040](https://arxiv.org/abs/2302.14040)). Networks that take another network's weights as input and predict its properties. They read but do not write. Not read in full.
+- **"Equivariant Architectures for Learning in Deep Weight Spaces"** (Navon, 2023, [2301.12780](https://arxiv.org/abs/2301.12780)) and **"Permutation Equivariant Neural Functionals"** (Zhou, 2023, [2302.14040](https://arxiv.org/abs/2302.14040)). Networks that take another network's weights as input and predict its properties. They read but do not write.
 
 **A language model as reader and editor**
 
-- **MAIA: "A Multimodal Automated Interpretability Agent"** (MIT, 2024, [2404.14394](https://arxiv.org/abs/2404.14394)). A language model inspects another model and runs experiments on it. It reads but does not write. Not read in full.
+- **MAIA: "A Multimodal Automated Interpretability Agent"** (MIT, 2024, [2404.14394](https://arxiv.org/abs/2404.14394)). A language model inspects another model and runs experiments on it. It reads but does not write.
 - **"Sparks of Weight-Space Programming"** (Takehi, 2026, [MIT CSAIL post](https://rikiyat.github.io/blog/weight-space-programming/)). An off-the-shelf frontier model gets a network's weights as text and replies with a diagnosis or with new numbers. No training is involved. An independent rerun found reading holds up and writing gains are smaller than reported.
 - **"Exploring Weight-Space Programming: Capabilities, Generalization, and Limitations"** (Hu, Shanghai AI Lab, 2026, [2611.09382](https://arxiv.org/abs/2611.09382), [code](https://github.com/WSP-Scope/WSP-Scope-Project)). GPT-6 Astra edits Qwen3.5-0.8B with 50 forward passes and no gradients: math goes from 8.35 to 37.80. The 9B edit is discarded, and 6 of 16 searches keep the original weights.
 
@@ -242,7 +223,7 @@ Something other than the model changes its weights: a formula, a trained editor,
 A trained network reads a text and outputs an adapter (a small set of added weights) in one forward pass. The write is fast and needs no gradient steps at use time. It holds one fact well and loses it once other facts share the adapter.
 
 - **"Text-to-LoRA: Instant Transformer Adaption"** (Charakorn, 2025, [2506.06105](https://arxiv.org/abs/2506.06105)). Reads a task description and outputs an adapter. 67.7 on unseen benchmarks against 55.8 for the base model.
-- **"Doc-to-LoRA: Learning to Instantly Internalize Contexts"** (2026, [2602.15902](https://arxiv.org/abs/2602.15902)) and **SHINE** (2026, [2602.06358](https://arxiv.org/abs/2602.06358)). The same idea for documents. The baselines the fall papers compare against. Not read in full.
+- **"Doc-to-LoRA: Learning to Instantly Internalize Contexts"** (2026, [2602.15902](https://arxiv.org/abs/2602.15902)) and **SHINE** (2026, [2602.06358](https://arxiv.org/abs/2602.06358)). The same idea for documents. The baselines the fall papers compare against.
 - **"Cache2LoRA: Understanding and Improving Context Internalization"** (Fang, Virginia Tech and Stanford, 2026, [2610.24107](https://arxiv.org/abs/2610.24107)). Builds the adapter from the document and the question together. Doc-to-LoRA recalls one fact at 0.982 alone and 0.184 once other facts are added.
 - **CLIK: "Encode Once, Answer Many"** (Zhong, 2026, [2610.38356](https://arxiv.org/abs/2610.38356), [code](https://github.com/Cypher-Bruce/CLIK)). A 1B generator emits an adapter for Qwen3-4B. SQuAD F1 46.3 against 71.1 with the text in the prompt. Building each new adapter from the previous one fails: 25.2.
 - **"HyperThink: Text-to-Parameter Hypernetworks for Efficient Reasoning"** (Kim, 2026, [2610.03039](https://arxiv.org/abs/2610.03039)). Shifts about 90K bias values per question so the model answers as if it had reasoned first. GSM8K 74.81 to 84.75 on a 3B model. Not a memory.
@@ -271,9 +252,5 @@ Ordinary training, run while the agent is in use: fine-tuning, reinforcement lea
 - **Stored is not the same as usable.** ACE shows a fact can be in the weights and still not be used. Facts in weights also do not chain.
 - **The time and lifecycle bucket has no runnable benchmark.** No agent benchmark with a real clock can be run today.
 - **No agent paper measures general ability after a long stream of weight updates.** Retention is checked on earlier agent tasks only.
-
-## How much was read
-
-The 34 papers of the earlier reading list (most of 2.4 to 2.8, plus MEND, Tracr, Text-to-LoRA, the MIT post and "Learning, Fast and Slow") were read in full by one reader each, from text and captions, not figures. The 16 fall 2026 papers were read for method and main results. Entries marked "abstract only" or "not read in full" are leads. The rest of 2.1 to 2.3 and 2.11 comes from a September to November 2026 survey.
 
 Older files are in [`archive/`](archive/): the benchmark study guide, the methods survey, the full-read paper notes, the reproducibility notes and working notes.
