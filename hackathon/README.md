@@ -2,7 +2,7 @@
 
 State on 2026-11-12. Nothing here has been built or run.
 
-For the AI Research Hackathon in San Francisco, 14 to 15 November 2026. Track: Recursive Self-Improvement.
+For the [AI Research Hackathon](https://luma.com/sht6n8du) in San Francisco, 14 to 15 November 2026. Track: Recursive Self-Improvement.
 
 Background reading is in [continual-learning-benchmarks/README.md](../continual-learning-benchmarks/README.md), sections 2.8 (models that learn to write their own weights) and 2.9 (editing weights from outside).
 
