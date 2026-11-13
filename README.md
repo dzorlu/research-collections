@@ -4,18 +4,11 @@ Personal collection of worked-through research notes. Each topic gets a
 directory with a human-readable writeup and, where useful, a runnable
 notebook.
 
-- [continual-learning-benchmarks/](continual-learning-benchmarks/): how agents are evaluated on learning
-  from experience, from the benchmark side. Eight benchmarks read in full (ApprenticeBench, CLE,
-  ServeLearnBench, ReScopeBench, MemPABench, SCLATE, EvoAudit, AgentCL): a dimension matrix, one card each,
-  how the environments are built, every metric worked in Python, nine findings, open problems, and a
-  one-row-each catalog of everything else. [METHODS.md](continual-learning-benchmarks/METHODS.md) is the
-  learning half: methods by where the update lands (context, text memory, harness state, fast weights,
-  adapters and full weights), the Sep to Nov 2026 parametric literature with numbers, the delta rule and
-  the two forgetting fixes worked in Python, the gating pattern, and where Core Automation sits.
-  [REPRODUCIBLE.md](continual-learning-benchmarks/REPRODUCIBLE.md) lists the ten benchmarks that can be run
-  today, by bucket, with the smallest open model each was run on.
-  [PAPERS.md](continual-learning-benchmarks/PAPERS.md) is the fast-weight reading list, with a full-read
-  entry per paper in [PAPER-NOTES.md](continual-learning-benchmarks/PAPER-NOTES.md).
+- [continual-learning-benchmarks/](continual-learning-benchmarks/): one page on how LLM agents learn from a
+  stream of experience. The ten benchmarks that can be run today, by what changes over time; the approaches
+  (context, text memory, harness rewriting, fast weights, self-written weights, outside editing, adapters);
+  and the papers behind each, with year, link and a short summary. The longer study guide, methods survey
+  and full-read paper notes are in its `archive/`.
 - [ttt-discover/](ttt-discover/): TTT-Discover (test-time RL on one problem, arXiv 2601.16175) worked through:
   the select, roll out, score, sharpen, backprop loop; the reuse ladder; the entropic objective on a kernel
   example; why β is chosen per group so KL = ln 2 ("about half the batch"); PUCT on a toy archive; the

@@ -1,6 +1,6 @@
 # Continual learning methods for LLM agents
 
-The learning half of this directory. `README.md` is the evaluation half: how benchmarks score an agent that learns from a stream. This file covers the update itself, organized by where it lands. Literature window is September to November 2026, with earlier papers named only as anchors. Everything is an arXiv preprint unless a venue is given; "ICLR 2027 submission" means under review on OpenReview. Raw notes with URLs for every number are in `~/repos/research_notes/Test time learning weight updates/` and the longer report in `~/repos/reports/Test time learning weight updates.md`.
+The learning half of this directory. `study-guide.md` is the evaluation half: how benchmarks score an agent that learns from a stream. This file covers the update itself, organized by where it lands. Literature window is September to November 2026, with earlier papers named only as anchors. Everything is an arXiv preprint unless a venue is given; "ICLR 2027 submission" means under review on OpenReview. Raw notes with URLs for every number are in `~/repos/research_notes/Test time learning weight updates/` and the longer report in `~/repos/reports/Test time learning weight updates.md`.
 
 ## 1. Where an update can land
 
@@ -185,7 +185,7 @@ Lined up, the successes and failures sort by one variable.
 | Fast weights | uniform write strength per chunk (In-Place TTT hurts Qwen3-4B); retain updates from own generations (2610.05076) | query-relevance weighted writes (Select-TTT); settle only after a held-out real-text check |
 | Weights | surprise-triggered LoRA (84 to 93% of lies absorbed); EMA self-teacher (collapse after 3 stages); SFT on own attempts (below base) | verifier-accepted episodes distilled from a frozen teacher (ASCENT); KL anchor to base (iSDFT); update projected off the dominant subspace (SST); expert loss only on states where every rollout failed (TSRL) |
 
-The reading of the window: context and KV representations are the acquisition substrate (fast, reversible, compositional, 10 to 29 points ahead of parametric injection on document QA). Weights are the consolidation substrate (slow, cheap at inference, able to hold arbitrary bindings that in-context learning cannot amortize). What survives the negative results is periodic gated consolidation, not weights that learn on every token. The frozen-weight benchmarks in `README.md` and the parametric methods here fail the stability test in different places, and no paper measures a system that combines the two routes against both pure routes at matched compute on one long stream.
+The reading of the window: context and KV representations are the acquisition substrate (fast, reversible, compositional, 10 to 29 points ahead of parametric injection on document QA). Weights are the consolidation substrate (slow, cheap at inference, able to hold arbitrary bindings that in-context learning cannot amortize). What survives the negative results is periodic gated consolidation, not weights that learn on every token. The frozen-weight benchmarks in `study-guide.md` and the parametric methods here fail the stability test in different places, and no paper measures a system that combines the two routes against both pure routes at matched compute on one long stream.
 
 ## 8. Where Core Automation sits
 

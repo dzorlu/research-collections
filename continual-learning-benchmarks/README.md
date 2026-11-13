@@ -1,192 +1,279 @@
-# Continual learning benchmarks for LLM agents
+# Continual learning for LLM agents: benchmarks, approaches, papers
 
-Notes on how agents are tested on learning from experience. We read eight benchmarks and sort them into four buckets by what changes over time. Longer working notes are in `archive/`. Which of these can be run today, and which fit a weight-update experiment, is in [REPRODUCIBLE.md](REPRODUCIBLE.md). The fast-weight reading list is in [PAPERS.md](PAPERS.md).
+State on 2026-11-12.
 
-| Bucket | What changes over time | Benchmarks |
-|---|---|---|
-| Sequential tasks | Nothing in the world changes. Later tasks reuse what earlier tasks taught. | ApprenticeBench, CLE, AgentCL, CL-Bench |
-| Environment drift | The rules or state of the world change under the agent. | ServeLearnBench, ReScopeBench |
-| Preference change | The user's wishes change, and differ by context. | MemPABench |
-| Time and lifecycle | Days pass, sessions restart, the agent schedules its own actions. | SCLATE |
+This page is a map of how language-model agents learn from a stream of experience. It has three parts: the benchmarks that can be run today, the approaches people use, and the papers behind each approach. Each paper gets one or two lines, a year and a link. Longer notes are in `archive/`.
 
-A sixth kind, memory recall, sits outside continual learning: find a fact in a long history, with no improvement over a stream expected (LongMemEval, LifeVal). SCLATE turns recall into the time bucket by cutting the history into sessions.
+Two words used throughout:
 
-Some benchmarks touch two buckets. ApprenticeBench has one rule change and CL-Bench has two drifting tasks, so both have a little drift. MemPABench learns each preference over three sessions, so it is also sequential.
+- **Stream.** A sequence of tasks or texts given in order, where what happens early affects what is scored later.
+- **Fast weights.** Parameters that change while the model is being used, as opposed to slow weights, which change only in training.
 
-## 1. What "learning" means here
+One running example: the model reads "Alice lives in Paris", later reads "Alice moved to Rome", and is then asked where Alice lives.
 
-There is no parametric learning in these benchmarks. The model's weights never change (one exception: SCLATE trains a small 4B model). What changes is the stuff around the model: a memory file, a retrieval store, skill files, the prompt, the harness code.
+## 1. Benchmarks
 
-Three words come from classic continual learning:
+A benchmark is listed if it passes two tests. It is **reproducible**: code and data are public, or gated with approval that can be requested. It is **continual**: there is a stream, and early items affect later scores. Nothing here has been installed or run. "Reproducible" means the repo and data pages were opened and checked.
 
-- **Plasticity**: learning new information.
-- **Stability**: keeping what you learned.
-- **Generalization**: using what you learned on a related task.
+The buckets sort by what changes over time.
 
-With frozen weights, "plasticity" is really retrieval. The model did not get better. A useful example was put in front of it. AgentCL shows this: handing the agent the right earlier solution directly scores 60; the best memory system scores 67. So these benchmarks measure the whole system (model plus memory plus retrieval), not the model.
+### Sequential tasks
 
-AgentCL measures the three words like this. B is the score with no memory. F is the first pass, with memory being written. S is a second pass over the same tasks with memory frozen. H is a held-out task from somewhere else.
+Nothing in the world changes. Later tasks reuse what earlier tasks taught.
 
-```python
-B, F, S, H = 45, 67, 65, 71    # held-out task scores 72 with no memory
-plasticity     = F - B         # +22  earlier tasks helped
-stability      = S - F         # -2   the agent could not get its own notes back later
-generalization = H - 72        # -1   memory did not help elsewhere
-```
+- **[AgentOdyssey](https://github.com/agentodyssey/agentodyssey)** ([2606.24893](https://arxiv.org/abs/2606.24893), May 2026). A 500-step text game where the agent must learn world rules it cannot know in advance. Smallest open model run: Qwen3-4B. LoRA fine-tuning, long context and RAG are all implemented in one harness.
+- **[CL-Bench](https://github.com/pgasawa/continual-learning-bench)** (June 2026). About 300 sequential tasks across domains, two of which drift. Frontier models only, at $7.6 to $62.8 per run. A local model needs an adapter.
+- **[CLE-Lite](https://huggingface.co/Continual-Learning-Exam)** ([2610.33956](https://arxiv.org/abs/2610.33956), Oct 2026). 20 office jobs of five connected levels each. Each level builds on the last deliverable. Task cards and input files are open; rubrics and runnable packages need approval. The runner drives Codex or Claude Code only. No open model reported.
+- **[ComposeCL](https://github.com/cozheyuanzhangde/compose-cl)** ([2609.06986](https://arxiv.org/abs/2609.06986), Sep 2026). 100 batches of facts written into weights one after another, then tested on how many are retained. Qwen3-4B. Plain sequential fine-tuning retains 1.2%; the best method 34.9%.
+- **[MedKIT](https://github.com/bethgelab/MedKIT)** ([2609.38543](https://arxiv.org/abs/2609.38543), Sep 2026). 48 weekly batches of new oncology evidence, tested on recall and on reasoning with it. 4B models. Training on the stream gains 49 points on recall and about zero on questions that combine facts.
 
-## 2. Two things to check in any benchmark
+### Environment drift
 
-**Was reuse built into the stream?** A stream is a sequence of tasks. AgentCL splits them in two:
+The rules or state of the world change under the agent, and nobody says so.
 
-- **Dependent**: later tasks need what earlier tasks taught. ApprenticeBench (bill 60 needs the cost code learned on bill 12), CLE, ServeLearnBench, ReScopeBench, MemPABench.
-- **Conventional**: tasks only share a topic. Most "stream an existing dataset" benchmarks (AgentStream, Evo-Memory, MMLU-Pro).
+- **[ServeLearnBench](https://github.com/Infini-AI-Lab/ServeLearnBench)** (Oct 2026). Customer-service and banking jobs where hidden rules switch on and off. The agent only sees its score. Told the rule, agents score 95.4; with no memory, 14.1. No model under 35B has been run.
+- **[ReScopeBench](https://github.com/JoeYing1019/ReScopeBench)** (Nov 2026). Tool-use streams in 18 fake business apps with 26 silent changes, under a lookup budget. Smallest open model: Qwen3.5-9B, which scores 5.76 against 60.19 for the best model. The memory score reads a text memory, so it cannot grade a memory held in weights. The task score can.
+- **[OAKS](https://github.com/kaistAI/OAKS)** ([2603.07392](https://arxiv.org/abs/2603.07392), Mar 2026). A long text arrives in about 65 chunks and the same questions are asked again as their answers change. Qwen3-4B scores 26.4% against 66.3% for the best model. No weight-update method has been tried on it. The data license is noncommercial.
+- **[studying-cl](https://github.com/anneharrington/studying-cl)** ([2607.07847](https://arxiv.org/abs/2607.07847), Jul 2026). Streams where Wikipedia facts are overwritten across time slices, plus a domain-shift stream for forgetting. Qwen3-8B, with In-Place TTT and five other weight methods already run.
 
-This decides everything. On dependent streams, memory methods gain 14 to 40 points. On conventional streams and held-out tasks, every memory method is at or below no memory. So when a paper says "memory does not beat plain context," first ask whether the stream had anything to reuse.
+### Preference change
 
-**Is the result graded, or the memory?** Almost every benchmark grades only the final result: was the bill right, did the order end in the right state. They never open the memory file.
+The user's wishes change, and differ by context.
 
-ReScopeBench is the exception. The authors wrote an answer key for what should be in memory after each task, and an LLM judge checks the memory against it. That is how they can say "the agent finished the task but left the wrong answer in its notes." Example: the agent found a moved folder and finished the job, but its notes still pointed to the old folder.
+- **[MemPABench](https://github.com/mempabench/mempabench)** ([2610.30485](https://arxiv.org/abs/2610.30485), Oct 2026). A personal agent works with four simulated users over 99 sessions and must infer preferences they never state. No memory 49.6%, file memory 59.2%, told the answer 99.0%. Smallest open model: Qwen3.8-27B. The code calls OpenRouter only.
 
-## 3. Sequential tasks
+### Time and lifecycle
 
-Later tasks need what earlier tasks taught, and the world stays the same. This is the plainest form of continual learning: acquire, then reuse.
+Days pass, sessions restart, and the agent schedules its own actions. This bucket is empty. SCLATE is the only benchmark of this kind and it has no code release.
 
-### ApprenticeBench (NeoCognition, Sept 2026)
+### Two kinds of stream
 
-**Mental model.** A new accounts-payable clerk's first hundred bills.
+The buckets say what changes in the world. They do not say what the model has to pick up.
 
-**Setup.** A simulated construction company running real Odoo accounting software. The agent joins in May. It gets six months of old bills, the company handbook, and a tutorial. Then it processes 100 new bills in order, with no reset. In the first month a mentor corrects every bill. After that, feedback only comes at month end.
+- **Knowledge streams** (OAKS, studying-cl, MedKIT, ComposeCL). The fact is stated in the text, and the test is a question. In OAKS the text says a character moved, and the model is asked where they live now.
+- **Agent task streams** (AgentOdyssey, CL-Bench, CLE-Lite, ServeLearnBench, ReScopeBench, MemPABench). Nobody states the lesson. In ReScopeBench each task has failed provider calls to restore under a lookup budget. The same providers come back in later tasks, so the agent has to remember what each one needed instead of paying to look it up again.
 
-**What has to be learned.** Company habits you can only pick up on the job: which cost code each item goes to, which vendor always bills in the wrong units, that the tax line must be 9.125% and not zero, that a safety certificate expired, that a sign-off limit changed in October.
+The second kind is harder at both ends: finding the lesson, and using it. A method can do well on OAKS and fail on ReScopeBench, though both are drift benchmarks.
 
-**How the agent learns.** It writes Markdown notes through a normal Claude Code or Codex setup. No special memory system.
+### Where to start
 
-**Results.** Best model 72%, best human tester 51%, second human 40%. One model tested with parts removed: 11% with nothing, 31% with old bills only, 35% with mentor feedback only, 43% with both. The agents slowed down as their notes grew to hundreds of thousands of words; the humans sped up. One model was corrected 17 times on the same mistake and never changed.
+Four of the ten have been run on a model of 8B or smaller with programmatic scoring: AgentOdyssey, studying-cl, OAKS and ComposeCL. AgentOdyssey is the only one with weight-update, long-context and RAG arms in one harness at 4B.
 
-**Catch.** Private. One run per model. Only two humans. Almost no drift (one rule change). The company that built it sells the agent.
+### Left out, and why
 
-### CLE, Continual Learning Exam (UCL, Oct 2026)
+Reproducible, but not continual as shipped:
 
-**Setup.** 120 job tasks written by 50+ domain experts across 89 roles: equity analyst, bioinformatician, load forecaster, music engraver. Each task is a ladder of five levels. Each level is an email from a manager asking for a deliverable (a spreadsheet, a report, a patch). Later levels build on earlier work and earlier files. Real public data, often thousands of files per task.
+- **SE-Bench** ([2602.04811](https://arxiv.org/abs/2602.04811)). Train once, then test. No stream.
+- **WitnessBench** ([2609.32208](https://arxiv.org/abs/2609.32208)). Each game is an independent episode. The test set is private.
+- **MemoryBench** ([2510.17281](https://arxiv.org/abs/2510.17281)). Main results feed pre-generated feedback in batches.
 
-**How it runs.** All 120 tasks in one fixed order. The agent keeps its memory across tasks. A level passes only if every item on a hidden checklist passes, and passing unlocks the next level. Two settings: one try per level, or one try plus feedback naming what failed and a second try.
+Continual, but not reproducible:
 
-**Results.** Best agent (Opus 5 in Claude Code) clears 48% of levels and finishes all five on 23% of tasks. Feedback plus a retry adds a median 5 points. The harness matters: on the same models, Hermes beats OpenClaw by about 6 points.
+- **ApprenticeBench** (NeoCognition, Sept 2026). A new accounts clerk's first hundred bills. Private.
+- **AgentCL** ([2606.02461](https://arxiv.org/abs/2606.02461), Ohio State). Dataset only, no harness.
+- **SCLATE** ([2609.32391](https://arxiv.org/abs/2609.32391), Apple). A way to run benchmarks with a real clock. No release.
+- **ASCENT** ([2610.05303](https://arxiv.org/abs/2610.05303)). The repo holds only a license file.
+- **SCoL SQuAD-100** ([2605.07076](https://arxiv.org/abs/2605.07076)), **ForgetBench** ([2607.26455](https://arxiv.org/abs/2607.26455)), **"Can a Language Model Learn Facts Continually in Its Weights?"** ([2607.11020](https://arxiv.org/abs/2607.11020)). No code.
+- **StudyBench** (textbooks not released), **Chronos** ([2604.05096](https://arxiv.org/abs/2604.05096), dataset download not confirmed).
 
-**Catch.** No run without memory, so you cannot separate learning from just getting a second try. The authors say so. Only 20 of the 120 tasks are released. Their task cards and input files are open; the rubrics and the runnable packages need approval.
+Memory recall benchmarks (LongMemEval, LifeVal) are a different thing: find a fact in a long history, with no improvement over a stream expected.
 
-### AgentCL (Ohio State, Sept 2026)
+## 2. Approaches and their papers
 
-**Setup.** Builds two kinds of task stream from the same tasks. In the dependent stream, a simpler subtask comes earlier and its solution is needed later. In the conventional stream, the subtasks are left out. Coding and web research tasks, plus a held-out set from a different source.
+An agent is a model plus the things around it: a prompt, a memory store, tools. Learning can land in any of them. The groups below go from the most reversible place (the prompt) to the most permanent (the weights).
 
-**How it runs.** Every task is run three ways: with no memory, with memory being written (first pass), and again with memory frozen (second pass). That gives plasticity, stability, and generalization (Section 1).
+One pattern holds in every group. An update applied on every token or every episode makes the system worse. An update that must first pass a check from outside the learner (a verifier, a frozen copy of the model, a held-out test) is what works.
 
-**Results.** On the dependent stream, the best memory methods gain 18 to 40 points. On the conventional stream, every method is at or below no memory. On held-out tasks, every method is below no memory. Methods that learn fast tend to lose it on the second pass. The memory found the right earlier task even when it was 76 tasks back.
+### 2.1 Context: the baseline
 
-**Catch.** The reuse is built in on purpose, so these gains are a best case.
+Keep the whole history in the prompt. This is not a learning method, but every other method has to beat it, and on picking up new facts it usually wins. It stops working when the history no longer fits. What is unproven is whether anything else matches it on facts that must be combined.
 
-### CL-Bench (Berkeley and Snorkel, June 2026)
+- **Cartridges comparison** (Amazon, 2026, [2609.17346](https://arxiv.org/abs/2609.17346)). To teach one document, LoRA needed about 40,000 synthetic examples to reach 64.5 accuracy. The document in the prompt gives 73.6.
+- **ImplicitHop** (2026, [2610.41169](https://arxiv.org/abs/2610.41169)). Two facts stored in weights chain together 37 to 64% of the time across 15 models. The same facts in the prompt chain 100% of the time.
+- **Hypernetwork two-hop study** (2026, [2610.15677](https://arxiv.org/abs/2610.15677)). A network that writes an adapter from a fact gets 0.25% on two-hop questions, against 83% with the fact in the prompt.
 
-**Mental model.** Six small worlds, each with a hidden pattern. A learner finds the pattern and gets faster or more accurate; a non-learner starts from scratch every time.
+### 2.2 Text memory and notes
 
-**Setup.** Six tasks, 12 to 120 instances each:
-- Database: answer questions about an unfamiliar SQLite database with scrambled column names and prices stored in cents in one table and dollars in another. Fewer exploratory queries scores higher.
-- Codebase: fix 19 real GitHub issues across two repos. Fewer steps scores higher.
-- Poker: play heads-up against three opponents who each follow a fixed, beatable strategy.
-- Spectrum monitoring: map 13 radio transmitters from partial scans; some go silent for long stretches.
-- Cohort studies: estimate survival across five medical studies that each code their data differently.
-- Sales forecasting: predict five years of demand when you only see one store's data at a time.
+Write a note when a task ends. Fetch the most relevant notes when the next task starts. Every agent benchmark above tests this family (RAG, Mem0, MemOS, file memory, ReasoningBank). It helps only when later tasks reuse earlier ones. The weak step is fetching the right note at the right moment, not storing it.
 
-**How it runs.** Each system runs the same sequence twice: once keeping its memory (stateful), once starting fresh on every instance (stateless). Gain is the difference. Two tasks also drift: the database is migrated after question 20, and poker opponents rotate and come back.
+- **AgentCL** (Ohio State, 2026, [2606.02461](https://arxiv.org/abs/2606.02461)). On a stream where later tasks need earlier solutions, memory methods gain 13.5 to 21.9 points. On a stream that only shares a topic, the same methods lose 0.3 to 9.4.
+- **MemPABench** (NYU Abu Dhabi, 2026, [2610.30485](https://arxiv.org/abs/2610.30485)). All four memory stores held the user's objection. Retrieval put the right preference in front of the agent in 7 of 334 probes.
+- **TTME** (2026, [2610.32046](https://arxiv.org/abs/2610.32046)). Evolves a text memory with frozen weights and beats weight-updating methods on five math-discovery tasks with 83 to 85% less compute.
+- **NoteBank** (2026, [2610.15715](https://arxiv.org/abs/2610.15715)). A small text memory added to a 1.3B fast-weight model lifts recall at 1M tokens from 1.7% to 70.3%.
+
+### 2.3 Harness self-rewriting
+
+The harness is everything around the model: prompts, skills, tools, code. Here the agent edits its own harness and keeps a change if it scores better. One change touches every later task, so gains and losses are both larger. Audits find that much of the reported gain does not hold up.
+
+- **GEPA** (2025, [2507.19457](https://arxiv.org/abs/2507.19457)) and **ReasoningBank** (2025, [2509.25140](https://arxiv.org/abs/2509.25140)). Rewrite the prompt or a bank of lessons from past attempts.
+- **SkillOpt** (2026, [2605.23904](https://arxiv.org/abs/2605.23904)) and **PolicyBank** (2026, [2604.15505](https://arxiv.org/abs/2604.15505)). Grow a library of reusable skills.
+- **Continual Harness** (2026, [2605.09998](https://arxiv.org/abs/2605.09998)). A second agent revises prompt, memories, skills and helpers on a schedule. The acting agent never sees scores.
+- **Harness-Delta Attribution** (2026, [2610.22466](https://arxiv.org/abs/2610.22466)). 54% of reported gain is fitting to the search set and 14% is extra compute.
+- **CODA** (2026, [2610.20845](https://arxiv.org/abs/2610.20845)). Drift in the skill bank erases 52 to 93% of the gain.
+- **EvoAudit** (USTC, 2026, [2611.07624](https://arxiv.org/abs/2611.07624)). All 16 evolved agents gain some tasks and lose others. Gains are 2 to 7 points, inside run-to-run noise for many.
+- **"Learning, Fast and Slow: Towards LLMs That Adapt Continually"** (Tiwari, 2026, [2605.12484](https://arxiv.org/abs/2605.12484)). Not a fast-weight paper, despite the title. The fast part is a set of system prompts rewritten by another model. On its task stream, forgetting did not separate the methods; whether the model could still learn the next task did.
+
+### 2.4 Fast weights: the roots
+
+A slow network decides what to store. A second set of weights, which starts empty, is rewritten as inputs arrive. All later work in 2.5 to 2.8 is one loop: form a key, form a target, check what the memory returns, nudge the memory, read.
+
+- **"Fast weight programming and linear transformers: from machine learning to neurobiology"** (Irie, 2025, [2508.08435](https://arxiv.org/abs/2508.08435)). The primer to read first. Recent models differ only in the write rule: plain add, add after shrinking, or the delta rule.
+- **"Linear Transformers Are Secretly Fast Weight Programmers"** (Schlag, 2021, [2102.11174](https://arxiv.org/abs/2102.11174)). Attention without softmax is a matrix that each token adds to. Adding "Rome" leaves Paris and Rome mixed. The delta rule fixes this: look up what the matrix returns for Alice, then write the difference.
+- **"Using Fast Weights to Deblur Old Memories"** (Hinton, 1987, no link on file). Every connection gets a slow weight and a fast weight that decays. Rehearsing 10 of 100 old pairs restores the other 90.
+- **"Learning to Control Fast-Weight Memories"** (Schmidhuber, 1992, no link on file). A slow network outputs changes to a fast network's weights. Two toy tasks.
+- **"Using Fast Weights to Attend to the Recent Past"** (Ba, 2016, [1610.06258](https://arxiv.org/abs/1610.06258)). A second matrix on an RNN that decays and adds at every step. The rule is fixed by hand.
+- **"HyperNetworks"** (Ha, 2016, [1609.09106](https://arxiv.org/abs/1609.09106)). A small network outputs a larger one's weights, rescaling them at every step. Nothing accumulates, so it is not a memory.
 
-**Results.** Plain long context (keep the whole history in the prompt) beats every memory system: Mem0, ACE, a notepad, Claude Code, Codex. The best system, Sonnet 4.6 with plain context, recovers 25% of its possible headroom. ACE costs the most ($63 a run) and gains among the least. Learning shows up clearly in spectrum monitoring and sales forecasting, not at all in cohort studies, codebase, or poker. After the database migration, agents hold on to old beliefs and keep querying tables that no longer exist.
+### 2.5 Better write rules
 
-**Catch.** Tens of instances per task, five runs, wide error bars. Codebase uses real GitHub issues the models may have seen in training. Memory is never graded.
+Here the memory replaces attention. The state is one matrix per head, wiped at the start of each sequence. This line is in production models because it makes long context cheap. It says nothing about learning across sessions, and recall still trails full attention.
 
-## 4. Environment drift
+- **DeltaNet: "Parallelizing Linear Transformers with the Delta Rule over Sequence Length"** (Yang, 2024, [2406.06484](https://arxiv.org/abs/2406.06484)). The delta rule computed in chunks of 64 tokens so it trains at scale. At 1.3B it matches a Transformer on perplexity and trails on retrieval (49.5 against 66.6).
+- **"Gated Delta Networks: Improving Mamba2 with Delta Rule"** (Yang, 2024, [2412.06464](https://arxiv.org/abs/2412.06464)). Shrinks the whole matrix before each write, so the model can wipe memory when the topic changes. Finding a number in a 4K-token essay goes from 18.6 to 92.2.
+- **"Kimi Linear: An Expressive, Efficient Attention Architecture"** (Kimi Team, 2025, [2510.26692](https://arxiv.org/abs/2510.26692)). One shrink factor per row, so some rows last and some fade. In a 48B production model, with up to 75% less cache.
+- **"Unlocking State-Tracking in Linear RNNs Through Negative Eigenvalues"** (Grazzi, 2024, [2411.12537](https://arxiv.org/abs/2411.12537)). Letting the write strength reach 2 flips the sign of what is stored. Parity accuracy goes from 0.017 to 1.000.
+- **"DeltaProduct: Improving State-Tracking in Linear RNNs via Householder Products"** (Siems, 2025, [2502.10297](https://arxiv.org/abs/2502.10297)). Several delta writes per token. Two flips make a rotation.
+- **"Complex KDA"** (Siems, OpenEuroLLM, 2026, [2609.24797](https://arxiv.org/abs/2609.24797), [code](https://github.com/OpenEuroLLM/ComplexKDA)). Lets Kimi's per-row factor go negative, so one write makes a rotation. On par with Kimi's rule on language (perplexity 15.78 against 15.73).
+- **"Longhorn: State Space Models are Amortized Online Learners"** (Liu, 2024, [2407.14207](https://arxiv.org/abs/2407.14207)). Derives the write as "the closest memory that also returns the new value". The trained model uses a shortcut that does not subtract what the memory returns.
+- **"MesaNet: Sequence Modeling by Locally Optimal Test-Time Training"** (von Oswald, 2025, [2506.05233](https://arxiv.org/abs/2506.05233)). Reads as if the memory were the best fit to every pair so far. The best fit of "Paris" and "Rome" is their average, so overwriting depends on the forget gate (our inference).
+- **KronLSTM** (Hochreiter lab, 2026, [2610.26834](https://arxiv.org/abs/2610.26834)). At 1.5B it beats Gated DeltaNet on perplexity but scores 11.6 against 99.2 on finding one fact at 16K tokens.
+- **MemT-1.0** (MemTensor, 2026, [2610.26825](https://arxiv.org/abs/2610.26825)). The largest deployment: a 288B model with delta-rule memory blocks whose state lasts across the turns of one task. It averages 50.6 on 11 memory benchmarks, against 65.0 for full context.
 
-In drift benchmarks the environment changes under the agent, and nobody says so. A rule that was true is now false.
+### 2.6 Why it works
 
-- **ServeLearnBench**: hidden rules switch on and off between windows. Example: "block exchange of audio items" is off, then on, then off, then on again. The agent only sees its score drop.
-- **ReScopeBench**: 26 silent changes. A file moved, a policy changed. The agent finds out when a call fails.
+Theory that ties attention, fast weights and gradient descent together. Mostly toy settings.
 
-What they find: keeping old facts is easy, updating them is hard. ReScopeBench agents keep 91% of facts that stayed true but record only 65% of facts that changed, four tasks after the change. ServeLearnBench agents drop a withdrawn rule as slowly as they learned it.
+- **"Transformers learn in-context by gradient descent"** (von Oswald, 2022, [2212.07677](https://arxiv.org/abs/2212.07677)). One attention layer without softmax can output what one gradient step on linear regression would. Training finds those weights.
+- **"Transformers learn to implement preconditioned gradient descent for in-context learning"** (Ahn, 2023, [2306.00297](https://arxiv.org/abs/2306.00297)). Proves the best single layer is that gradient step with a trained rescaling.
+- **"Test-time regression: a unifying framework for designing sequence models with associative memory"** (Wang, 2025, [2501.12352](https://arxiv.org/abs/2501.12352)). Each layer fits a function from keys to values. DeltaNet is one gradient step per token; Gated DeltaNet adds weight decay.
+- **Miras: "It's All Connected"** (Behrouz, 2025, [2504.13173](https://arxiv.org/abs/2504.13173)). Makes the loss and the forgetting penalty design choices. A capped loss stops one garbled token from wrecking the memory.
+- **"Test-Time Training with KV Binding Is Secretly Linear Attention"** (Liu, 2026, [2602.21204](https://arxiv.org/abs/2602.21204)). On two models, more inner steps hurt and gradient ascent works as well as descent. Tested only where the inner loss is a dot product.
+- **TTT checkpoint ablation** (2026, [2610.16268](https://arxiv.org/abs/2610.16268)). Removing the prediction-error part of the gradient costs 2.8 to 2.9% perplexity. Freezing the fast weights costs 4.2 to 4.5 times. The fast weights help; the error-correction story explains little of why.
+- **"Test-time Memory From The Online Learning Perspective"** (ICLR 2027 submission, [OpenReview](https://openreview.net/forum?id=hIYLpBqjZL), abstract only). Recursive least squares has a provably small error; a constant-step delta rule can be much worse.
 
-ServeLearnBench also probes forgetting in two ways. Can the agent drop a rule when it goes away? And does learning break tasks it already did right? (It does. Every method loses accuracy on tasks the manual fully covers.)
+### 2.7 Writing into the model's own weights
 
-### ServeLearnBench (CMU and Amazon, Oct 2026)
+This is the group that bears on continual learning. The update lands in one of the model's own MLP layers or blocks, not in a side matrix. Until fall 2026 every paper reset the weights at the end of each document. Several add-ons to pretrained models now keep them across sessions. What is unproven: nobody has measured forgetting across sessions for a model built this way from scratch.
 
-**Setup.** Three jobs: retail support (cancel, return, exchange orders), bank case review (approve or deny transactions), and writing short sales pitches. The agent has a manual. Hidden rules override the manual and change over time.
+Three levels of work per write: a closed formula (In-Place TTT, TTCD), a backward pass through a small inner model (TTT layers, Titans, ATLAS, LaCT), and a backward pass through real blocks (TTT-E2E).
 
-**How the rules change.** Time is split into windows. Between windows a rule can switch on, switch off, narrow, or come back. Example: "block exchange of audio items" is off, then on, then off, then on again. In banking it is a number: the approval limit for electronics is $650, then $460, then $650. In sales the hidden buyer type changes.
+**Built from scratch, reset per sequence**
 
-**How it runs.** Each window has practice tasks with a score, then test tasks with no feedback. The agent only ever sees a score. Never the rule, never a correction. Some tasks need the hidden rule; others are fully covered by the manual, which lets them check whether learning breaks things that already worked.
+- **TTT layers: "Learning to (Learn at Test Time): RNNs with Expressive Hidden States"** (Sun, 2024, [2407.04620](https://arxiv.org/abs/2407.04620)). The state is a small model. Reading 16 tokens means one training step on it. Keeps improving to 32K context where Mamba levels off at 16K.
+- **"Titans: Learning to Memorize at Test Time"** (Behrouz, 2025, [2501.00663](https://arxiv.org/abs/2501.00663)). An MLP memory beside attention, written harder when the input is surprising, with a forget gate. Removing the forget gate hurts most.
+- **"ATLAS: Learning to Optimally Memorize the Context at Test Time"** (Behrouz, 2025, [2505.23735](https://arxiv.org/abs/2505.23735)). Each update fits the last few tokens together, so a stale pair can be down-weighted.
+- **LaCT: "Test-Time Training Done Right"** (Zhang, 2025, [2505.23884](https://arxiv.org/abs/2505.23884)). One update per chunk of 2,048 tokens or more. Needle retrieval at 32K: 48.0 against 91.2 for full attention.
+- **TTT-E2E: "End-to-End Test-Time Training for Long Context"** (Tandon, 2025, [2512.23675](https://arxiv.org/abs/2512.23675)). Every 1K tokens, one gradient step on next-token loss through the last quarter of blocks. Needle retrieval at 128K: 0.06 against 0.99.
+- **ParaTTT** (MIT CSAIL and Liquid AI, 2026, [2610.38255](https://arxiv.org/abs/2610.38255)). A two-layer MLP memory trained 4.9 times faster than TTT-MLP. Recall falls from 53.8 at 4K to 14.7 at 32K.
+- **DeltaTTT** (Tsinghua, 2026, [2610.08553](https://arxiv.org/abs/2610.08553)). Two matrices, each updated by its own delta rule. Single-needle 50.47 against 72.42 for full attention.
+- **uTTT** (UW-Madison and Adobe, 2026, [2610.05484](https://arxiv.org/abs/2610.05484)). One fast-weight set shared by all layers. RULER average 27.85 against 34.16 for a Transformer.
+- **GradLev** (UT Austin, 2026, [2609.34174](https://arxiv.org/abs/2609.34174)). Gradient steps on the true next-token loss in the final MLP. Gains are inside the error bars.
+- **"Fast Weights in Fast Weights"** (ICLR 2027 submission, [OpenReview](https://openreview.net/forum?id=bZXUddyKmp), abstract only). First MLP layer updated per chunk, output layer per token. Claims 8.5 long-context points over LaCT.
+- **"Delayed Supervision for Test-Time Language Models"** (Kim, 2026, [2609.32312](https://arxiv.org/abs/2609.32312)). Trains with questions asked at least 4,096 tokens after the evidence, so a fact must survive later writes. LaCT on BABILong goes from 25.60 to 31.08. One seed.
 
-**Results.** Told the rule, agents score 95. With no memory, 14. Best learning system, 62. On the hardest retail level the typical setup scores 22. Every learning system got worse on tasks the manual already covered. Learning costs 4 to 100 times more than being told. Dropping a rule that went away is as slow as learning it. The more different answers a system tries when it keeps failing, the better it learns, and this depends on the harness, not the model. Training a 14B or 32B model on this was tried and abandoned: too few successes to learn from.
+**Added to a pretrained model, reset per sequence**
 
-**Catch.** One run each. The five learning systems are built very differently, so the comparison is between whole systems.
+- **"In-Place Test-Time Training"** (Feng, 2026, [2604.06169](https://arxiv.org/abs/2604.06169)). Adds to an MLP matrix the model already has, by a closed formula, in every sixth layer. Qwen3-4B gains 2 to 4 points on RULER.
+- **TTCD: "Learning What to Remember: Test-Time Training via Context Distillation"** (Wang, 2026, [2608.01672](https://arxiv.org/abs/2608.01672)). A teacher sees a long window and a student half of it. The difference is written into the same MLP slot. Gains under one point on 8B models.
+- **Titan-Llama** (2026, [2610.19210](https://arxiv.org/abs/2610.19210)). A 17M-parameter MLP memory in the first four layers of Llama-3.2-1B. QuALITY goes from 23.9 to 40.5, against 43.3 for full attention.
+- **Select-TTT** (USTC and Huawei, 2026, [2610.36794](https://arxiv.org/abs/2610.36794)). Writes harder on text relevant to the question. LongMemEval-S goes from 33.4 to 37.4, where writing everything equally gives 33.6.
+- **Dynamic evaluation study** (2026, [2610.33025](https://arxiv.org/abs/2610.33025)). One gradient step per 128 tokens on untrained Qwen3 models lowers next-token loss 5 to 8% and recovers no retrieval accuracy. The model picks up style, not facts.
+- **ACE: "Encoding Context into LLM Weights: What Makes It Context?"** (Wang, Melbourne and RIKEN, 2026, [2610.17686](https://arxiv.org/abs/2610.17686)). Writes each chunk under a random tag, then names the tag in the question. Recall of a short fact on a 27B model goes from 1.5% to 75.6%. So the fact was stored all along, and the failure is access.
+- **Anchor** (William, Arizona, 2026, [2611.04327](https://arxiv.org/abs/2611.04327)). Recall through the memory lives in a few layers, so the state is written only there. Cuts state on Llama-3.1-8B from 201 MB to 38 MB.
+- **Self-generated text study** (2026, [2610.05076](https://arxiv.org/abs/2610.05076)). Keeping updates computed on the model's own output makes it worse on human text. A check on held-out real text removes over 98% of the damage.
+- **"Test-Time Training for Pretrained LLMs: An Empirical Study of Limited Fast-Weight Utilization"** (ICLR 2027 submission, [OpenReview](https://openreview.net/forum?id=x7actWdqhZ), abstract only). Claims most of In-Place TTT's gain comes from how the base model was trained, not from the writes at inference.
+- **"Dynamic Writes, Simple Schedules: An Oracle Study of In-Place TTT"** (ICLR 2027 submission, [OpenReview](https://openreview.net/forum?id=t2exYd8L0y), abstract only). A perfect choice of where and when to write lifts RULER-16K from 78.38 to 79.77.
 
-### ReScopeBench (HKUST and Huawei, Nov 2026)
+**Kept across sessions**
 
-**Setup.** 18 fake business apps modeled on real ones (SAP, Kubernetes, ticketing, clinical records), with made-up names so the model cannot know them in advance. Streams of 16 to 32 tasks per app. 26 silent changes: a folder moves, a policy changes, a permission is revoked.
+- **"Cortex: Consolidating Context into Parametric Memory"** (Zhang, Zhejiang and ByteDance, 2026, [2610.20399](https://arxiv.org/abs/2610.20399), [code planned](https://github.com/zjunlp/cortex)). The model writes questions a text will matter for, answers them with the text in view, then trains a few new parameters to give the same answers without it. Earlier writes are frozen. After 50 edits in a row on a 14B model it keeps 88.9% of the benefit of having the text in the prompt; the best baseline keeps 28.5%. Each write is a small training run.
+- **"LSTMem: Hierarchical Long Short-Term Online Memory for LLMs"** (Shi, USTC, 2026, [2609.33268](https://arxiv.org/abs/2609.33268)). Two small gated matrices per layer on a frozen model, carried across the sessions of one conversation. MemoryAgentBench on Qwen3-4B goes from 29.54 to 45.08. Replacing an old fact, the Alice case, only moves from 14.37 to 18.00.
+- **"Delta N-gram"** (Wu, Illinois Tech, 2026, [2610.31125](https://arxiv.org/abs/2610.31125), [code](https://github.com/af-74413592/delta-ngram)). Delta-rule writes, forward passes only, into a lookup table one production model already has. After 35,000 writes earlier tasks lose 0.26 points. Little is forgotten because little is learned: 0.44 F1 on questions about written text, against 56.79 with the text in the prompt.
+- **"DPPM: Dual-Path Parametric Memory for Personalized Language Models"** (Chen, USTC and iFLYTEK, 2026, [2610.11776](https://arxiv.org/abs/2610.11776), [code](https://github.com/isyuhaochen/DPPM)). A key-value matrix per user, updated by the delta rule across sessions and turned into an adapter. PersonaMem-v2 on Qwen3-4B: 54.22 against 45.73 for its predecessor. Retention is measured on internal states, not answers.
+- **ProTTT** (Park, Seoul National, 2026, [2609.32564](https://arxiv.org/abs/2609.32564)). A per-user adapter updated by one gradient step per chunk of history. Qwen3-0.6B. General ability drops (MMLU .474 to .432).
+- **P-TTT** (Wang, Zhejiang and NUS, 2026, [2609.35109](https://arxiv.org/abs/2609.35109)). In-Place TTT with one write per whole response, kept per user. 74.48% on a preference task where In-Place TTT is at chance. 1B models only.
+- **δ-mem: "Efficient Online Memory for Large Language Models"** (2026, [2605.12357](https://arxiv.org/abs/2605.12357)). The baseline LSTMem and DPPM compare against. Not read in full.
+- **"All Memory Is Local: Measuring the Horizon of Persistent Test-Time Training"** (ICLR 2027 submission, [OpenReview](https://openreview.net/forum?id=gXFgHs8TiZ), abstract only). Removes the reset from drop-in TTT on Qwen3 0.6B to 4B. The gain tied to a session falls by about four fifths within five sessions and is gone by fifteen. Resetting keeps 60% of the benefit.
+- **"Learning Whether to Learn"** (ICLR 2027 submission, [OpenReview](https://openreview.net/forum?id=XYI4FitZL2), abstract only). A second model decides whether each write happens, and only writes that keep proving useful become permanent.
+- **"Beyond Update Counts: A Control Map for Evaluating Test-Time Model Updates"** (Zhao, Meta, 2026, [2610.36109](https://arxiv.org/abs/2610.36109)). An evaluation method: score learning, later recall and side damage separately. LoRA edits pass learning in 6 of 6 settings and retention in 0 of 6.
 
-**How it was built.** Backwards. The authors first picked the facts an agent should learn, wrote an answer key for each, then wrote tasks that need those facts, then scheduled changes that break specific facts.
+### 2.8 Models that learn to write their own weights
 
-**How it runs.** Each lookup costs budget, so rereading everything every time is not affordable. Each model runs twice: once keeping its memory between tasks, once wiping it. After each task, a judge reads the agent's memory and checks it against the answer key.
+"Writes its own weights" has three meanings, from weakest to strictest.
 
-**Results.** Best model goes from 26 without memory to 81 with it. Weak models barely move. After a change, agents keep 91% of facts that are still true but record only 65% of the new ones four tasks later, and 38% on the first task. Most models write down where things are more completely than the rules for using them.
+**A network writes a separate memory.** This is everything in 2.5 and 2.7. A frozen network decides what to write, and a fixed rule writes it.
 
-**Catch.** One run each. The memory judge was checked against another AI, not humans. Extra junk in memory is not penalized.
+**A network changes the weights that compute the change.** No frozen part. No paper trains one of these as a language model. The primer gives the reason: merging the slow and fast networks loses parallel training.
 
-## 5. Preference change
+- **"A 'Self-Referential' Weight Matrix"** (Schmidhuber, 1993, no link on file). A network with extra units that read and edit any of its own connections. No experiments.
+- **"A Modern Self-Referential Weight Matrix That Learns to Modify Itself"** (Irie, 2022, [2202.05780](https://arxiv.org/abs/2202.05780)). One matrix produces its output and also the key, target and step size for a delta-rule edit of itself. At most 3.6M parameters, images and games, no language.
+- **"Metalearning Continual Learning Algorithms"** (Irie, 2023, [2312.00276](https://arxiv.org/abs/2312.00276)). Trains that matrix with "still do task A after learning task B" in the loss. First-task accuracy after the second task goes from 22.9% to 98.2%. Small image tasks.
+- **Hope: "Nested Learning: The Illusion of Deep Learning Architectures"** (Behrouz, 2025, [2512.24695](https://arxiv.org/abs/2512.24695)). Small MLPs produce the keys, targets and step sizes for updates to themselves. Trained as a 1.3B language model. Its continual-learning results are figures without numbers.
 
-**Interaction preferences** are how the user wants the agent to act, not what the agent should know. How long to talk, whether to explain, whether to ask first, whether to message the user unprompted.
+**The model produces its own update and an optimizer applies it.**
 
-**Autonomy** is the key axis. For some things the user wants the agent to just do it. For others the agent must ask first. The right answer can differ at work and at home.
+- **SEAL: "Self-Adapting Language Models"** (Zweiger, 2025, [2506.10943](https://arxiv.org/abs/2506.10943)). The model writes study notes from a passage and a fine-tuning step trains on them. Notes that help are reinforced. Accuracy without the passage on Qwen2.5-7B goes from 33.5% to 47.0%. Earlier passages are forgotten as edits pile up.
+- **"PAPER2LLM++: Continual Self-Evolution of LLMs from Research Papers"** (Pu, 2026, [2610.02793](https://arxiv.org/abs/2610.02793)). For each paper describing a failure, generate training data, try a temporary adapter, and keep it only if nothing earlier gets worse. Retention 83.7% over 30 steps on Llama-3.1-8B. The data is written by a different, larger model.
 
-MemPABench is the one benchmark built on this.
+### 2.9 Editing weights from outside
 
-### MemPABench (NYU Abu Dhabi, Oct 2026)
+Something other than the model changes its weights: a formula, a trained editor, a compiler, or a second language model. The newest version has a large model read a small model's weights as text and write new numbers. It works on a 0.8B model and not yet on a 9B one. Nobody has had a model read and rewrite its own weights this way.
 
-**Mental model.** A course and its exams. The exams are thrown away.
+**By formula or trained editor**
 
-**Setup.** Four simulated users, based on sitcom characters with the names changed. Each user has 28 hidden preferences: 14 behaviors (how long to talk, whether to explain, whether to act without asking, whether to message unprompted) times work and home. Each lives in a four-month world with calendars, messages, and files.
+- **MEND: "Fast Model Editing at Scale"** (Mitchell, 2021, [2110.11309](https://arxiv.org/abs/2110.11309)). The gradient from one example is the product of two vectors. A small network adjusts those two vectors so the edit fixes the fact and leaves other answers alone.
+- **ROME: "Locating and Editing Factual Associations in GPT"** (Meng, 2022, [2202.05262](https://arxiv.org/abs/2202.05262)). Finds the MLP layer that stores a fact and overwrites it with a closed formula. Not read in full.
+- **MEMIT: "Mass-Editing Memory in a Transformer"** (Meng, 2022, [2210.07229](https://arxiv.org/abs/2210.07229)). ROME for thousands of facts at once. Not read in full.
 
-**How it runs.** 99 sessions. Each one is a normal task built so the agent has to make one behavior choice, and the user reacts but never says the rule. Five times, something goes wrong and the user changes a preference. At the end, the agent is tested on copies of its memory, and the copies are deleted so the tests never teach anything.
+**Weights as readable programs**
 
-**Results.** Fact-oriented memory systems (Mem0, MemOS, RAG) score the same as no memory, about 50% against 45% chance. They stored the user's complaints but did not bring them back at the right moment. Putting all memory in the prompt scores 59%. Keeping work and home apart, and following a changed preference, both sit at 10 to 25%. Preferences about actions (asking first, messaging unprompted) are the hardest. Even when told the right preference, models fall back to their habits 40% of the time on the hard ones.
+- **RASP: "Thinking Like Transformers"** (Weiss, 2021, [2106.06981](https://arxiv.org/abs/2106.06981)). A small programming language whose operations match what a transformer layer can do. Not read in full.
+- **"Tracr: Compiled Transformers as a Laboratory for Interpretability"** (Lindner, 2023, [2301.05062](https://arxiv.org/abs/2301.05062)). A compiler turns a RASP program into exact transformer weights. Nothing is trained.
+- **"Equivariant Architectures for Learning in Deep Weight Spaces"** (Navon, 2023, [2301.12780](https://arxiv.org/abs/2301.12780)) and **"Permutation Equivariant Neural Functionals"** (Zhou, 2023, [2302.14040](https://arxiv.org/abs/2302.14040)). Networks that take another network's weights as input and predict its properties. They read but do not write. Not read in full.
 
-**Catch.** Never checks whether the task got done. Asking first is always free. Nothing happens between sessions.
+**A language model as reader and editor**
 
-## 6. Time and lifecycle
+- **MAIA: "A Multimodal Automated Interpretability Agent"** (MIT, 2024, [2404.14394](https://arxiv.org/abs/2404.14394)). A language model inspects another model and runs experiments on it. It reads but does not write. Not read in full.
+- **"Sparks of Weight-Space Programming"** (Takehi, 2026, [MIT CSAIL post](https://rikiyat.github.io/blog/weight-space-programming/)). An off-the-shelf frontier model gets a network's weights as text and replies with a diagnosis or with new numbers. No training is involved. An independent rerun found reading holds up and writing gains are smaller than reported.
+- **"Exploring Weight-Space Programming: Capabilities, Generalization, and Limitations"** (Hu, Shanghai AI Lab, 2026, [2611.09382](https://arxiv.org/abs/2611.09382), [code](https://github.com/WSP-Scope/WSP-Scope-Project)). GPT-6 Astra edits Qwen3.5-0.8B with 50 forward passes and no gradients: math goes from 8.35 to 37.80. The 9B edit is discarded, and 6 of 16 searches keep the original weights.
 
-SCLATE adds two things personal agents need:
+### 2.10 Document-to-adapter networks
 
-1. **Time passes.** The clock runs while the agent works and jumps over idle gaps, so 40 days run in 6 hours. Facts written on day 3 must survive restarts and be found on day 28. This tests memory the way real use does, instead of dumping everything into one long prompt.
-2. **The agent can schedule things.** It can set a nightly memory clean-up or a reminder, and the clock will fire it. A personal agent is idle most of the time and sometimes acts on its own; turn-based benchmarks cannot represent that.
+A trained network reads a text and outputs an adapter (a small set of added weights) in one forward pass. The write is fast and needs no gradient steps at use time. It holds one fact well and loses it once other facts share the adapter.
 
-Still missing everywhere: in real life a lot happens between sessions. Emails arrive, plans change. In these benchmarks nothing happens between sessions, so memory only ever holds useful material.
+- **"Text-to-LoRA: Instant Transformer Adaption"** (Charakorn, 2025, [2506.06105](https://arxiv.org/abs/2506.06105)). Reads a task description and outputs an adapter. 67.7 on unseen benchmarks against 55.8 for the base model.
+- **"Doc-to-LoRA: Learning to Instantly Internalize Contexts"** (2026, [2602.15902](https://arxiv.org/abs/2602.15902)) and **SHINE** (2026, [2602.06358](https://arxiv.org/abs/2602.06358)). The same idea for documents. The baselines the fall papers compare against. Not read in full.
+- **"Cache2LoRA: Understanding and Improving Context Internalization"** (Fang, Virginia Tech and Stanford, 2026, [2610.24107](https://arxiv.org/abs/2610.24107)). Builds the adapter from the document and the question together. Doc-to-LoRA recalls one fact at 0.982 alone and 0.184 once other facts are added.
+- **CLIK: "Encode Once, Answer Many"** (Zhong, 2026, [2610.38356](https://arxiv.org/abs/2610.38356), [code](https://github.com/Cypher-Bruce/CLIK)). A 1B generator emits an adapter for Qwen3-4B. SQuAD F1 46.3 against 71.1 with the text in the prompt. Building each new adapter from the previous one fails: 25.2.
+- **"HyperThink: Text-to-Parameter Hypernetworks for Efficient Reasoning"** (Kim, 2026, [2610.03039](https://arxiv.org/abs/2610.03039)). Shifts about 90K bias values per question so the model answers as if it had reasoned first. GSM8K 74.81 to 84.75 on a 3B model. Not a memory.
 
-### SCLATE (Apple, Sept 2026)
+### 2.11 Fine-tuning and adapters during deployment
 
-**What it is.** Not a benchmark. A way to run benchmarks with real time in them.
+Ordinary training, run while the agent is in use: fine-tuning, reinforcement learning, or distilling from a copy of the model that can see more. Slow and permanent. Plain fine-tuning forgets. The versions that work tie the update to something that does not move, such as a frozen copy of the base model.
 
-**Two ideas.** Time passes: the clock runs while the agent works and jumps over idle gaps, so 40 days of work runs in about 6 hours. The agent can schedule things: a nightly memory clean-up or a reminder fires at the right simulated time. It runs real harnesses (Claude Code, Codex, Hermes) unchanged.
+- **ASCENT** (UNSW, 2026, [2610.05303](https://arxiv.org/abs/2610.05303)). Keeps one adapter across a task stream. After each episode a verifier accepts, it distills from a frozen copy that sees the verified attempt. ALFWorld on Qwen3.5-4B: 46.4 frozen, 63.6 best memory method, 69.5.
+- **Subspace Tuning** (2026, [2610.22293](https://arxiv.org/abs/2610.22293)). Keeps each weight matrix's main directions untouched. On Qwen3-8B, plain fine-tuning drops earlier ability from 81.0 to 55.5; with the projection it holds 80.0.
+- **Adam epsilon fix** (2026, [2610.09835](https://arxiv.org/abs/2610.09835)). Tokens absent from the new data get tiny gradients that Adam scales up to full steps. Raising one constant on the output layer removes 39 to 68% of forgetting.
+- **Time-incremental pretraining** (Öncel, 2026, [2609.23916](https://arxiv.org/abs/2609.23916)). Continued pretraining on 6B tokens of newer text. Forgetting is about 0.60 times what is learned.
+- **iSDFT** (Imperial and UCL, 2026, [2609.24646](https://arxiv.org/abs/2609.24646)). Distills from a copy that sees the answer in context, tied to the base model. Median change over 16 benchmarks is −0.05.
+- **OPDArena** (Microsoft, 2026, [2610.25651](https://arxiv.org/abs/2610.25651)). Reinforcement learning gains 5 to 14 points in domain with about zero loss elsewhere. Supervised fine-tuning loses 2 to 4.5 elsewhere.
+- **ReTTT** (Shanghai AI Lab and Fudan, 2026, [2610.23942](https://arxiv.org/abs/2610.23942)). Trains a per-episode adapter on the agent's own reflections. ALFWorld on Qwen3.5-9B goes from 47.1 to 63.6, at about three times the run time.
+- **TTT-Consolidate** (EPFL, 2026, [2611.02104](https://arxiv.org/abs/2611.02104)). Encodes eight reasoning attempts into an adapter, then answers once. 35.4 where majority vote gets 22.2 to 22.7 at equal compute. Reset per problem.
+- **Surprise-gated updates** (2026, [2610.39840](https://arxiv.org/abs/2610.39840)). Updating whenever the text is surprising makes Qwen2.5-1.5B absorb 84 to 93% of planted false claims.
+- **One-step LoRA study** (2026, [2607.00368](https://arxiv.org/abs/2607.00368)). One LoRA step on Qwen3 1.7B to 8B lowers loss and gives 0% recall when the model has to generate the answer.
 
-**Results.** On a 30-workday office benchmark, every memory setup beat no memory, but no setup was best for every model. On a recall test split into daily sessions, Claude Code's memory scored 85 to 91 and Hermes's 51 to 66, because Hermes's memory fills up and drops facts. It also trains weights: a 4B model trained this way gains 8 to 12 points on later days and learns to write more useful notes.
+## 3. Open gaps
 
-**Catch.** Grades the final answer only. The training teacher saw the correct feedback, which flatters the result.
+- **Forgetting across sessions for a model built around fast weights.** Measured for add-ons to pretrained models, never for TTT layers, Titans or Hope.
+- **Removing the reset may not help.** The one direct test ("All Memory Is Local", abstract only) finds the gain gone within fifteen sessions.
+- **No self-referential matrix trained as a language model.** The closest attempt, building each adapter from the last one (CLIK), fails.
+- **Nobody reads and rewrites their own weights as text.** Weight-space programming uses a large model to edit a small one, and the one 9B edit was discarded.
+- **Stored is not the same as usable.** ACE shows a fact can be in the weights and still not be used. Facts in weights also do not chain.
+- **The time and lifecycle bucket has no runnable benchmark.** No agent benchmark with a real clock can be run today.
+- **No agent paper measures general ability after a long stream of weight updates.** Retention is checked on earlier agent tasks only.
 
-## Related: harness evolution
+## How much was read
 
-Not a benchmark bucket. Here the learning method is different: instead of writing notes, the agent rewrites its own harness (prompts, skills, tools, code) and keeps a change only if it scores better. The papers run these methods on fixed benchmarks, so they say nothing about task shape. They belong here because they show the same failure the drift benchmarks show: learning breaks things that already worked. One change affects every future task, so gains and losses are both bigger.
+The 34 papers of the earlier reading list (most of 2.4 to 2.8, plus MEND, Tracr, Text-to-LoRA, the MIT post and "Learning, Fast and Slow") were read in full by one reader each, from text and captions, not figures. The 16 fall 2026 papers were read for method and main results. Entries marked "abstract only" or "not read in full" are leads. The rest of 2.1 to 2.3 and 2.11 comes from a September to November 2026 survey.
 
-**A-Evolve** is a framework for this. It edits files in the agent's workspace, keeps a change only if it passes held-out tasks, and tags each kept change in git.
-
-### EvoAudit, "Beneath the Surface" (USTC and others, Nov 2026)
-
-**Setup.** Tests four methods that let an agent rewrite its own harness, on a banking benchmark and a coding benchmark, with two harnesses. Each original and evolved agent runs eight times, so they can see which tasks were gained and which were lost.
-
-**Results.** Every evolved agent gained some tasks and lost others. Gains were 2 to 7 points, inside the run-to-run noise for many. Picking the best-scoring version to improve further was worse than picking at random on banking. A stricter rule for keeping changes threw away the best version in 9 of 15 cases. Their improved method beats the weakest of the four by 4 to 10 points and the strongest by 1 to 2.
-
-**Catch.** One model, one random seed.
+Older files are in [`archive/`](archive/): the benchmark study guide, the methods survey, the full-read paper notes, the reproducibility notes and working notes.

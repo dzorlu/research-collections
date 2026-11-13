@@ -1,6 +1,6 @@
 # Continual learning benchmarks that can be reproduced
 
-State on 2026-11-11. `README.md` covers how the benchmarks work. This file answers a narrower question: which ones have code and data that can be run today, and which of those fit an experiment where a small open model updates its own weights across a stream.
+State on 2026-11-11. `study-guide.md` covers how the benchmarks work. This file answers a narrower question: which ones have code and data that can be run today, and which of those fit an experiment where a small open model updates its own weights across a stream.
 
 A benchmark is listed if it passes two tests:
 
@@ -11,7 +11,7 @@ Nothing here has been installed or run. "Reproducible" means the repo and data p
 
 ## The shortlist, by bucket
 
-The buckets are the four from `README.md`, sorted by what changes over time.
+The buckets are the four from `study-guide.md`, sorted by what changes over time.
 
 ### Sequential tasks
 
