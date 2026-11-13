@@ -4,6 +4,8 @@ Personal collection of worked-through research notes. Each topic gets a
 directory with a human-readable writeup and, where useful, a runnable
 notebook.
 
+- [hackathon/](hackathon/): proposal for a two-day project in which an open-weight model (Muse Glimmer-30B)
+  inspects and edits its own weights with no gradients, restricted to a rank-1 LoRA.
 - [continual-learning-benchmarks/](continual-learning-benchmarks/): one page on how LLM agents learn from a
   stream of experience. The ten benchmarks that can be run today, by what changes over time; the approaches
   (context, text memory, harness rewriting, fast weights, self-written weights, outside editing, adapters);
