@@ -1,6 +1,6 @@
 # Proposal: a model that edits its own weights
 
-State on 2026-11-12. Nothing here has been built or run.
+State on 2026-11-12.
 
 For the [AI Research Hackathon](https://luma.com/sht6n8du) in San Francisco, 14 to 15 November 2026. Track: Recursive Self-Improvement.
 
