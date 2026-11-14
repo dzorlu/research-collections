@@ -110,9 +110,3 @@ Choices:
 ## Budget
 
 Three people: $750 Modal, $300 Tinker. About $2 per rollout (estimate), so about 300 rollouts: 12 to 19 RL steps.
-
-## Risks
-
-- Twelve to nineteen updates may be too few to see a change.
-- The reward is noisy: 256 answers, and the original model alone moves by a point on 1,000.
-- Inkling may learn the one fix for Qwen's looping and nothing more general.
