@@ -65,9 +65,7 @@ Neither has a looping failure. Their mistakes are mostly completed wrong answers
 
 ## Goal for the weekend
 
-Train Inkling 2 Small with reinforcement learning to be a better weight editor, and show the improvement.
-
-The test: run the untrained and the trained Inkling several times each as editors of Qwen3.5-0.8B, and compare the average held-out gain and how often a search finds any gain. Our one untrained run so far gave +13.6 on MATH-500.
+Train Inkling 2 Small with RL to be a better weight editor of Qwen3.5-0.8B, and show it: trained against untrained, by average held-out gain. One untrained run so far gave +13.6 on MATH-500.
 
 ## The RL loop
 
@@ -97,47 +95,24 @@ The test: run the untrained and the trained Inkling several times each as editor
      └────────────────────┘     └──────────────────────────────┘
 ```
 
-Three loops, from the outside in:
-
-- **RL step.** Collect a batch of rollouts with the current Inkling checkpoint, score them, train Inkling on Tinker, save the new checkpoint.
-- **Rollout.** One editing search: Inkling and the harness trade messages until Inkling submits an edit. About 160 turns. Each rollout starts from a fresh copy of Qwen.
-- **Tool call.** One Python run in the sandbox, or one forward request to the target (a batch of generated answers, or texts read with activations returned).
+- **RL step:** collect rollouts, score them, train Inkling on Tinker, save a checkpoint.
+- **Rollout:** one editing search on a fresh copy of Qwen, about 160 turns, ending in a submitted edit.
+- **Tool call:** one Python run, or one forward request to the target.
 
 Choices:
 
-- **Reward.** Accuracy with the submitted edit minus accuracy of the original weights, on a fixed set of 256 answers the editor never sees. Submitting no edit gives 0.
-- **Groups.** Each group is one task for the same Qwen, with its own practice problems and reward set: MATH, IFEval, SciBench. A rollout's advantage is its reward minus its group's average.
-- **Batch.** 2 or 3 tasks, 8 rollouts each.
-- **Training.** Tinker's RL loop, policy gradient. Our harness is written as a Tinker environment whose step runs the tool call on Modal.
-- **Budget per rollout.** 32 forward passes, 300 Python calls.
-- **Throughput.** The original model's answers are generated once and reused. Several rollouts share each GPU, and a pool of GPUs serves the batch.
-
-Build order:
-
-1. The harness as a Tinker environment, with the cached original answers and the fixed reward sets.
-2. The target service that packs several rollouts on a GPU.
-3. Graders for IFEval and SciBench.
-4. A smoke test: 4 rollouts, 2 RL steps.
-5. The full run, then the trained-against-untrained comparison.
+- **Reward:** accuracy with the edit minus accuracy without, on 256 fixed answers the editor never sees.
+- **Groups:** one per task (MATH, IFEval, SciBench), 8 rollouts each. Advantage is reward minus the group's average.
+- **Training:** Tinker's RL loop, with our harness as its environment.
+- **Per rollout:** 32 forward passes.
+- **Throughput:** original answers generated once and reused; several rollouts per GPU.
 
 ## Budget
 
-Three people: $750 of Modal credit and $300 of Tinker credit.
+Three people: $750 Modal, $300 Tinker. About $2 per rollout (estimate), so about 300 rollouts: 12 to 19 RL steps.
 
-One rollout is estimated at about $2: $1.40 of Modal for the Qwen GPU and $0.63 of Tinker for sampling and training. Holding back a third for baselines and the final comparison leaves about 300 rollouts: about 19 RL steps at 16 rollouts, or 12 at 24.
+## Risks
 
-Measured so far, on one rollout at a time: an Inkling search took 97 minutes and made Qwen generate 19 million tokens; an L40S generates about 5,300 tokens per second for this model. The savings from caching and from sharing GPUs are not yet measured.
-
-## What could go wrong
-
-- Too few RL steps to see a change. Twelve to nineteen updates is small.
-- The reward is noisy. The original model's own score moves by about a point between evaluations of 1,000 answers, and the reward uses 256.
-- Results vary a lot between searches by the same editor. The paper's three searches on MATH gave +29, +5 and +27.
-- A gain on practice problems can shrink on the test set. Inkling's did: about +21 on practice, +13.6 held out.
-- The gains so far come from fixing one obvious failure, Qwen's looping. Inkling may learn that one fix and nothing more general.
-
-## Later
-
-- Other editors on the same target, for comparison: Opus 5.5 and Glimmer-30B are done once each.
-- Inkling with and without the methods section in its prompt.
-- A model editing its own weights. Glimmer-30B and Inkling 2 Small have no failure as clean as Qwen's, and Inkling needs about 500 GB of GPU memory to host.
+- Twelve to nineteen updates may be too few to see a change.
+- The reward is noisy: 256 answers, and the original model alone moves by a point on 1,000.
+- Inkling may learn the one fix for Qwen's looping and nothing more general.
