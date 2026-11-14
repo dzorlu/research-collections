@@ -42,7 +42,7 @@ Held-out MATH-500, 1,000 answers per arm:
 | Muse Glimmer-30B, first search | 7.1% | 6.0% | -1.1 |
 | Muse Glimmer-30B, second search | 6.1% | submitted no edit | |
 | Claude Opus 5.5 | 7.6% | 34.8% | +27.2 |
-| Inkling 2 Small, with Opus's methods in its prompt | running | | |
+| Inkling 2 Small, with Opus's methods in its prompt | 6.6% | 20.2% | +13.6 |
 
 The published edit works in our harness, so the harness is sound.
 
@@ -50,9 +50,18 @@ Glimmer-30B found nothing in two searches. It saw the looping, but it picked whi
 
 Opus 5.5 found an edit. It asked which unit contributes most to the score of the token "Wait" at the moment just before the model writes it, and the answer was one unit in layer 16. Flipping the sign of that unit's output, plus a second change that makes the model close its reasoning, took practice accuracy from about 6% to about 34% on 768 fresh answers, and held-out MATH-500 from 7.6% to 34.8%: 274 answers went from wrong to right and 2 from right to wrong. That is a larger gain than the published edit gets in our harness. The same unit shows up in two edits in 2611.09382.
 
-The original model's own score came out at 7.1%, 6.1% and 7.6% in three evaluations, so a one-point change means nothing.
+Inkling 2 Small, given a description of Opus's methods, also found an edit: it strengthens the same end-of-reasoning signal in the last four layers' MLPs. It stopped on its own after 25 of its 50 forward passes. Held-out MATH-500 went from 6.6% to 20.2%, about half of Opus's gain. It did not find the "Wait" unit, and Opus's own tests showed that the two changes together do much better than either alone. Its practice numbers (+20 to +23) were higher than the held-out result.
 
-We also measured Glimmer-30B as a possible target: MATH-500 92.7%, MMLU-Pro 83.2%, SciBench 64.0%, MedXpertQA 38.8%. It almost never runs out of tokens, so it has no looping to fix. Glimmer editing itself has not been tried.
+The original model's own score came out at 7.1%, 6.1%, 7.6% and 6.6% in four evaluations, so a one-point change means nothing.
+
+We also measured the two open models as possible targets for editing themselves, on the same questions:
+
+| | MATH-500 | MMLU-Pro | SciBench | MedXpertQA |
+|---|---|---|---|---|
+| Muse Glimmer-30B | 92.7% | 83.2% | 64.0% | 38.8% |
+| Inkling 2 Small | 96.7% | 86.0% | 79.6% | 59.2% |
+
+Neither has a looping failure. Their mistakes are mostly completed wrong answers, which is where published edits gave nothing. The one clean behaviour found is Glimmer on SciBench: told to put only the number in the box, it does so in 33% of answers (Inkling: 90%). No model has edited itself yet.
 
 ## Plan for the weekend
 
@@ -70,7 +79,7 @@ Estimates from run times and list prices.
 - Glimmer-30B search: about 2 hours on an H100, about $13.
 - Opus 5.5 search: about 3 hours, about $14 ($7.50 of API, the rest GPU for the target).
 - Held-out evaluation: about 50 minutes on an L40S, about $2.
-- Inkling 2 Small runs on Tinker at $0.30 in, $1.00 out per million tokens. Hosting it ourselves needs about 500 GB of GPU memory.
+- Inkling 2 Small search: about 1.6 hours, about $6 ($2.31 of API on Tinker, the rest GPU for the target). Hosting Inkling ourselves, which editing its own weights would need, takes about 500 GB of GPU memory.
 
 ## What could go wrong
 
