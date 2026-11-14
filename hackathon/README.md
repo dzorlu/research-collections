@@ -109,4 +109,15 @@ Choices:
 
 ## Budget
 
-Three people: $750 Modal, $300 Tinker. About $2 per rollout (estimate), so about 300 rollouts: 12 to 19 RL steps.
+Three people. Per-rollout costs are estimates.
+
+| | Modal | Tinker |
+|---|---|---|
+| Credit | $750 | $300 |
+| Cost per rollout | $1.40 | $0.63 |
+| Rollouts, keeping a third in reserve | about 360 | about 320 |
+
+| Rollouts per RL step | RL steps |
+|---|---|
+| 16 (2 tasks × 8) | about 19 |
+| 24 (3 tasks × 8) | about 12 |
