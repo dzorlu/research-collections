@@ -41,16 +41,16 @@ Held-out MATH-500, 1,000 answers per arm:
 | The paper's published edit, applied by us as a check | 7.1% | 28.9% | +21.8 |
 | Muse Glimmer-30B, first search | 7.1% | 6.0% | -1.1 |
 | Muse Glimmer-30B, second search | 6.1% | submitted no edit | |
-| Claude Opus 5.5 | running | | about +28 on practice |
+| Claude Opus 5.5 | 7.6% | 34.8% | +27.2 |
 | Inkling 2 Small, with Opus's methods in its prompt | running | | |
 
 The published edit works in our harness, so the harness is sound.
 
 Glimmer-30B found nothing in two searches. It saw the looping, but it picked which unit to edit by comparing average activations between two texts, only ever tried setting one column to zero, and tested on 50 answers at a time, which is too few to tell a gain from chance.
 
-Opus 5.5 found an edit. It asked which unit contributes most to the score of the token "Wait" at the moment just before the model writes it, and the answer was one unit in layer 16. Flipping the sign of that unit's output, plus a second change that makes the model close its reasoning, took practice accuracy from about 6% to about 34% on 768 fresh answers. The same unit shows up in two edits in 2611.09382.
+Opus 5.5 found an edit. It asked which unit contributes most to the score of the token "Wait" at the moment just before the model writes it, and the answer was one unit in layer 16. Flipping the sign of that unit's output, plus a second change that makes the model close its reasoning, took practice accuracy from about 6% to about 34% on 768 fresh answers, and held-out MATH-500 from 7.6% to 34.8%: 274 answers went from wrong to right and 2 from right to wrong. That is a larger gain than the published edit gets in our harness. The same unit shows up in two edits in 2611.09382.
 
-The original model's own score moved from 7.1% to 6.1% between two evaluations, so a one-point change means nothing.
+The original model's own score came out at 7.1%, 6.1% and 7.6% in three evaluations, so a one-point change means nothing.
 
 We also measured Glimmer-30B as a possible target: MATH-500 92.7%, MMLU-Pro 83.2%, SciBench 64.0%, MedXpertQA 38.8%. It almost never runs out of tokens, so it has no looping to fix. Glimmer editing itself has not been tried.
 
