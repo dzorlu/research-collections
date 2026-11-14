@@ -1,4 +1,4 @@
-# Can a model edit weights directly, and eventually its own?
+# Training a model to edit another model's weights
 
 State on 2026-11-13.
 
@@ -63,27 +63,81 @@ We also measured the two open models as possible targets for editing themselves,
 
 Neither has a looping failure. Their mistakes are mostly completed wrong answers, which is where published edits gave nothing. The one clean behaviour found is Glimmer on SciBench: told to put only the number in the box, it does so in 33% of answers (Inkling: 90%). No model has edited itself yet.
 
-## Plan for the weekend
+## Goal for the weekend
 
-1. Compare editors on the same target: Glimmer-30B, Opus 5.5, Inkling 2 Small. Everything else held fixed.
-2. Give a weaker editor the stronger editor's methods and see if that closes the gap. Inkling's prompt describes the procedures Opus used, without naming the token, layer or unit Opus found. The comparison is Inkling with and without that section.
-3. Run each editor several times. One search is not enough: the paper's three searches on this task gave +29, +5 and +27.
-4. Take the best open editor that we can also afford to host, and have it edit itself.
+Train Inkling 2 Small with reinforcement learning to be a better weight editor, and show the improvement.
 
-If there is time: treat the held-out gain as a reward and train the editor on it. We found no one who has done this with a language model. The closest paper ([2606.13461](https://arxiv.org/abs/2606.13461)) trains a small policy to edit one layer of an MNIST classifier.
+The test: run the untrained and the trained Inkling several times each as editors of Qwen3.5-0.8B, and compare the average held-out gain and how often a search finds any gain. Our one untrained run so far gave +13.6 on MATH-500.
 
-## Cost
+## The RL loop
 
-Estimates from run times and list prices.
+```
+                              TINKER
+        ┌──────────────────────────────────────────────┐
+        │  Inkling 2 Small, the editor being trained   │
+        │    sample a reply  ·  train  ·  checkpoints  │
+        └──────▲───────────────────────────┬───────────┘
+               │ sample                    │ train on scored rollouts,
+               │                           │ once per RL step
+ ═════════════ │ ═════════ MODAL ═════════ │ ══════════════════════════
+               │                           │
+        ┌──────┴───────────────────────────▼───────────┐
+        │  HARNESS (CPU)                               │
+        │    runs many rollouts at once                │
+        │    passes each tool call on, scores the edit │
+        └──────┬───────────────────────────┬───────────┘
+               │ python tool               │ forward tool
+               ▼                           ▼
+     ┌────────────────────┐     ┌──────────────────────────────┐
+     │ SANDBOX (CPU)      │     │ TARGET SERVICE (L40S pool)   │
+     │ one per rollout    │     │  Qwen3.5-0.8B                │
+     │  read weights      │────▶│  original weights, shared    │
+     │  analyse           │edit │  one edited copy per rollout │
+     │  save an edit      │     │  generate · read text        │
+     └────────────────────┘     └──────────────────────────────┘
+```
 
-- Glimmer-30B search: about 2 hours on an H100, about $13.
-- Opus 5.5 search: about 3 hours, about $14 ($7.50 of API, the rest GPU for the target).
-- Held-out evaluation: about 50 minutes on an L40S, about $2.
-- Inkling 2 Small search: about 1.6 hours, about $6 ($2.31 of API on Tinker, the rest GPU for the target). Hosting Inkling ourselves, which editing its own weights would need, takes about 500 GB of GPU memory.
+Three loops, from the outside in:
+
+- **RL step.** Collect a batch of rollouts with the current Inkling checkpoint, score them, train Inkling on Tinker, save the new checkpoint.
+- **Rollout.** One editing search: Inkling and the harness trade messages until Inkling submits an edit. About 160 turns. Each rollout starts from a fresh copy of Qwen.
+- **Tool call.** One Python run in the sandbox, or one forward request to the target (a batch of generated answers, or texts read with activations returned).
+
+Choices:
+
+- **Reward.** Accuracy with the submitted edit minus accuracy of the original weights, on a fixed set of 256 answers the editor never sees. Submitting no edit gives 0.
+- **Groups.** Each group is one task for the same Qwen, with its own practice problems and reward set: MATH, IFEval, SciBench. A rollout's advantage is its reward minus its group's average.
+- **Batch.** 2 or 3 tasks, 8 rollouts each.
+- **Training.** Tinker's RL loop, policy gradient. Our harness is written as a Tinker environment whose step runs the tool call on Modal.
+- **Budget per rollout.** 32 forward passes, 300 Python calls.
+- **Throughput.** The original model's answers are generated once and reused. Several rollouts share each GPU, and a pool of GPUs serves the batch.
+
+Build order:
+
+1. The harness as a Tinker environment, with the cached original answers and the fixed reward sets.
+2. The target service that packs several rollouts on a GPU.
+3. Graders for IFEval and SciBench.
+4. A smoke test: 4 rollouts, 2 RL steps.
+5. The full run, then the trained-against-untrained comparison.
+
+## Budget
+
+Three people: $750 of Modal credit and $300 of Tinker credit.
+
+One rollout is estimated at about $2: $1.40 of Modal for the Qwen GPU and $0.63 of Tinker for sampling and training. Holding back a third for baselines and the final comparison leaves about 300 rollouts: about 19 RL steps at 16 rollouts, or 12 at 24.
+
+Measured so far, on one rollout at a time: an Inkling search took 97 minutes and made Qwen generate 19 million tokens; an L40S generates about 5,300 tokens per second for this model. The savings from caching and from sharing GPUs are not yet measured.
 
 ## What could go wrong
 
-- The gains come from fixing one obvious failure. A model without such a failure may have nothing to fix. This is the main risk for self-editing.
-- Results vary a lot between searches by the same editor.
-- A gain on practice problems can vanish on the test set. It happened in 2611.09382.
-- The model good enough to edit may be too big to host as a target.
+- Too few RL steps to see a change. Twelve to nineteen updates is small.
+- The reward is noisy. The original model's own score moves by about a point between evaluations of 1,000 answers, and the reward uses 256.
+- Results vary a lot between searches by the same editor. The paper's three searches on MATH gave +29, +5 and +27.
+- A gain on practice problems can shrink on the test set. Inkling's did: about +21 on practice, +13.6 held out.
+- The gains so far come from fixing one obvious failure, Qwen's looping. Inkling may learn that one fix and nothing more general.
+
+## Later
+
+- Other editors on the same target, for comparison: Opus 5.5 and Glimmer-30B are done once each.
+- Inkling with and without the methods section in its prompt.
+- A model editing its own weights. Glimmer-30B and Inkling 2 Small have no failure as clean as Qwen's, and Inkling needs about 500 GB of GPU memory to host.
