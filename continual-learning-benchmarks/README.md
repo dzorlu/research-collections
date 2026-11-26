@@ -1,6 +1,6 @@
 # Continual learning for LLM agents: benchmarks, approaches, papers
 
-State on 2026-11-12.
+State on 2026-11-25.
 
 This page is a map of how language-model agents learn from a stream of experience. It has three parts: the benchmarks that can be run today, the approaches people use, and the papers behind each approach. Each paper gets one or two lines, a year and a link.
 
@@ -243,7 +243,74 @@ Ordinary training, run while the agent is in use: fine-tuning, reinforcement lea
 - **Surprise-gated updates** (2026, [2610.39840](https://arxiv.org/abs/2610.39840)). Updating whenever the text is surprising makes Qwen2.5-1.5B absorb 84 to 93% of planted false claims.
 - **One-step LoRA study** (2026, [2607.00368](https://arxiv.org/abs/2607.00368)). One LoRA step on Qwen3 1.7B to 8B lowers loss and gives 0% recall when the model has to generate the answer.
 
-## 3. Open gaps
+## 3. What the NeurIPS 2026 TTCL workshop adds
+
+The Workshop on Towards Test-Time Continual Learning Agents (NeurIPS 2026) accepted 85 papers. We read 40 of them in full: AgentCL (section 1), 18 other benchmark and evaluation papers, and the 21 parametric papers. Ethos is the one exception: we read only its abstract. The other 45 papers (memory, skills, harness, other) are not read yet. Ids are OpenReview ids unless an arXiv id is given. We also add three papers from outside the workshop where they fit.
+
+### 3.1 New benchmarks, by bucket
+
+- **Sequential tasks.**
+  - **"Are Self-Evolving Agents Continual Learners?"** ([2610.25858](https://arxiv.org/abs/2610.25858)). The authors run GEPA, ReasoningBank and Meta-Harness on drifting streams. Methods that learn new blocks well lose more on old blocks: plasticity and stability correlate at r = -0.72. GEPA has the highest plasticity (+6.2) and the worst stability (-4.3).
+  - **"Is One Score Enough?"** ([2605.15384](https://arxiv.org/abs/2605.15384)). An evaluation protocol for memory that changes over a stream of existing datasets. On final hold-out accuracy, 197 of 292 method pairs (67%) cannot be told apart.
+  - **"Useful Memories Become Faulty When Continuously Updated by LLMs"** ([2605.12978](https://arxiv.org/abs/2605.12978)). On 19 ARC-AGI problems that GPT-5.4 solves without memory, rewriting the memory every round drops accuracy from 100% to 52.6% by round 10. In the 400-step ARC-AGI Stream, keeping raw trajectories instead scores 76.6, against 38.6 with no memory, and does not degrade.
+- **Environment drift.** **BEAST** (VpjnFuTNT4). A moderation classifier on a stream sorted so that later posts are less familiar. Retraining every 5 steps adds about 0.03 PR-AUC for about 42% more compute. The models are classifiers, not agents.
+- **Preference change.**
+  - **Replay A-B-A** (ThseoldG1J). Preferences switch from A to B and back to A. When the readout cannot represent B, replaying all past data does not help: LoRe scores 28.8% agreement on B with full replay and 28.7% with recent data only, while a readout that can represent B scores 53.1%.
+  - **MemoryVCD** (ZMKKh7HEKB). Vision-language personalization, scored at snapshots as memory grows. The model gets no feedback.
+- **Time and lifecycle.** **ReLiveGym** ([2610.00710](https://arxiv.org/abs/2610.00710)). Weeks of replayed real events with deadlines. Seed-to-seed variation is the largest share of variance on every task (52 to 95%). Only 2 of its 8 tasks give feedback the agent can learn from.
+- **Recall, not continual learning.** MEME ([2605.12477](https://arxiv.org/abs/2605.12477)), DolphinBench ([2609.24971](https://arxiv.org/abs/2609.24971); built by Mem0, whose product tops two of its three harness groups), EndlessMemory, and RoboMME-Interference ([2606.22338](https://arxiv.org/abs/2606.22338)). In each, the agent answers over a finished history and is never expected to improve.
+
+### 3.2 Audits of the evaluation
+
+- **Null-Policy Audit** (zmPrKIqrXn). On AgentOdyssey, a random policy scores higher action diversity than 29 of 48 published agent set-ups (60%). A diversity metric needs a random-policy baseline before it counts as evidence of exploration.
+- **What Self-Evolution Leaves Behind** (N6ouy2iqMu). In Gomoku, Reflexion memory raises a pressure-test score from 8/22 to at most 11/22, yet the agent wins 0 of 60 normal games. Endpoint scores hide what the agent did or did not learn.
+- **When Correction Memory Fails** (d7EYjlyvpg). A pairwise judge with a correction memory gains nothing on held-out records (GPT-5.4: 0.712 with and without memory). Its one apparent gain came from retrieving the same MT-Bench question.
+- **Cross-phase Knowledge Incorporation** (CzHArWQqRu). A position paper. It proposes two metrics for whether a later training phase keeps earlier knowledge, but runs no experiments.
+
+### 3.3 Learning in the harness, with the optimizer's own memory
+
+- **SIM** (Google, [2611.18856](https://arxiv.org/abs/2611.18856), outside the workshop). The harness optimizer keeps a record of each harness problem, the edits it tried, and their predicted and observed outcomes. It carries this record across a change of benchmark or model. With the record, continuation ends higher than harness-only continuation in all 10 settings (6 dataset changes, 4 Opus-to-Gemini changes). Each of these settings is one run. Only the coding study is repeated: SIM adds 2.36 points over 10 paired runs (p = 0.003).
+
+### 3.4 Harness gains distilled into weights
+
+- **Self-Improving Memory** (Meta, [blog](https://facebookresearch.github.io/RAM/blogs/self_improving_memory/), outside the workshop). Kimi-K2.6 rewrites its own memory prompts on three CL-Bench tasks (Database, Codebase, Spectrum). It then runs with the best prompts. The authors swap those prompts back to generic ones in the recorded runs and fine-tune the model (LoRA) on the result. At test time the model gets only generic prompts. The recorded runs show the model naming memory files, recording facts and running tests before edits. The authors call it an untested hypothesis that the gain comes partly from better memory use.
+
+| Setting | CL-Bench score |
+|---|---|
+| Generic prompts, no fine-tuning | 36.1 |
+| Best hand-written prompts | 44.6 |
+| Prompts found by search | 56.0 |
+| Fine-tuned on generic-prompt runs | 37.6 |
+| Fine-tuned on improved-prompt runs, generic prompts at test | 43.1 |
+
+The hand-written and searched prompts are the best observed per task, picked by score.
+
+- **Offline distillation.** UniSD, PINT, RSD and Projected Distillation train with a teacher that sees information the student does not (gold answers, skills, or later turns). RAD ([2610.14572](https://arxiv.org/abs/2610.14572)) instead distills from a larger teacher that sees the same input. All five train offline. Only Projected Distillation reports forgetting metrics, and only within one training task.
+
+### 3.5 Weights updated during deployment
+
+- **TAHI** ([2609.04141](https://arxiv.org/abs/2609.04141)). The authors train a LoRA with DPO after each of 20 user sessions. Forgetting is not measured.
+- **LLS** (6Qyl17csOg). Test-time adaptation of an image classifier on an unlabeled stream. Forgetting is not measured.
+- **Hierarchical TTT** ([2610.06269](https://arxiv.org/abs/2610.06269)). RL updates a LoRA on a guidance model (Qwen3 8B or 14B) within one problem, using the verifier's reward on a frozen executor's output. Nothing carries across problems.
+- **Cell-TR** (MqMNumTovo). Continual fine-tuning of a quantized model, where only the integer codes that change are shipped. On a 5-task stream the patch is 3.71 MB, against 52.01 MB for plain sequential fine-tuning.
+- **OLGA** (Upwork, [2611.03496](https://arxiv.org/abs/2611.03496), outside the workshop). OLGA keeps a memory of 5 synthetic text examples. At each step it fine-tunes phi-1.5 from the base weights on that memory. On text classification it beats the best selection baseline by 6.6 stream-AUC points. The paper does not say the stream drifts, and it does not measure forgetting.
+
+### 3.6 Context compiled into a trained cache or an adapter
+
+- **Accordion** (FTlwDpcS0s). At each compaction, Accordion trains a new KV cache on the frozen model's answers to its own study questions, and freezes the earlier caches. On CL-Bench's spectrum task it scores 0.358 IoU against 0.220 for full in-context learning (Qwen3.5-9B).
+- **DyPRAG** ([2503.23895](https://arxiv.org/abs/2503.23895)) and **AdapterBench** (J6lPOxI7V5). A hypernetwork turns a document or task description into a one-off adapter. Nothing accumulates across inputs.
+
+### 3.7 Fast weights
+
+- **"Position: Lifelong In-Context Learning with Transformers Requires Parametric Forms of Attention"** ([2606.25342](https://arxiv.org/abs/2606.25342)). The authors argue that a stream with no end needs attention with a fixed-size state that is updated online, as in linear attention and TTT layers. The paper runs no experiments.
+
+### 3.8 Training procedures, not agent continual learning
+
+- G-Zero, SynCo, Fixed Task Generator, Beam Search as Self-Distillation and Adapter Reuse each train or decode on one fixed distribution. None has a stream of tasks that the model must keep up with.
+- Relearning Savings and Metric-Topological Factorization do run task streams and measure forgetting. Their models are a 1.5B LM on synthetic facts and small image classifiers, not agents.
+
+## 4. Open gaps
+
 
 - **Forgetting across sessions for a model built around fast weights.** Measured for add-ons to pretrained models, never for TTT layers, Titans or Hope.
 - **Removing the reset may not help.** The one direct test ("All Memory Is Local", abstract only) finds the gain gone within fifteen sessions.
