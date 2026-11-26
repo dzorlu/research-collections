@@ -10,7 +10,7 @@ State on 2026-11-25. We train vision models with RL on computer-use episodes: [m
 | [sglang#47402](https://github.com/sgl-project/sglang/pull/47402) | yes | yes | needs review (Rockdu) |
 | [miles#4770](https://github.com/radixark/miles/pull/4770) | yes | yes | needs review |
 | [miles#4521](https://github.com/radixark/miles/pull/4521) | yes | yes | needs review |
-| [miles#4516](https://github.com/radixark/miles/pull/4516) | yes (parsers) | yes (parsers) | needs review |
+| [miles#4516](https://github.com/radixark/miles/pull/4516) | yes (parsers) | no (the bug shows only on Qwen) | conflicts with main; needs review |
 | [sglang#47674](https://github.com/sgl-project/sglang/pull/47674) | | yes | approved, waits for Rockdu to merge |
 | [miles#4588](https://github.com/radixark/miles/pull/4588) | | yes | needs review |
 | [miles#4520](https://github.com/radixark/miles/pull/4520) | | yes | needs review |
